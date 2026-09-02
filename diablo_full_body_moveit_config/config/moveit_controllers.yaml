@@ -1,0 +1,33 @@
+trajectory_execution:
+  allowed_execution_duration_scaling: 1.2
+  allowed_goal_duration_margin: 0.5
+  allowed_start_tolerance: 0.02
+  trajectory_duration_monitoring: true
+
+moveit_controller_manager: moveit_simple_controller_manager/MoveItSimpleControllerManager
+
+moveit_simple_controller_manager:
+  controller_names:
+    - diablo_full_body_controller
+
+  diablo_full_body_controller:
+    type: FollowJointTrajectory
+    action_ns: follow_joint_trajectory
+    default: true
+    joints:
+      - left_fake_hip_joint
+      - left_fake_knee_joint
+      - left_wheel_joint
+      - right_fake_hip_joint
+      - right_fake_knee_joint
+      - right_wheel_joint
+      - upper_left_shoulder_pitch_joint
+      - upper_left_shoulder_roll_joint
+      - upper_left_elbow_joint
+      - upper_left_wrist_joint
+      - upper_left_thumb_base
+      - upper_right_shoulder_pitch_joint
+      - upper_right_shoulder_roll_joint
+      - upper_right_elbow_joint
+      - upper_right_wrist_joint
+      - upper_right_thumb_base

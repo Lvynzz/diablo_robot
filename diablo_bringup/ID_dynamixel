@@ -1,0 +1,37 @@
+Dynamixel Protocol 2.0, BaudRate: 1000000 bps
+
+ID1: 
+Lokasi: bahu kanan, 
+Resting position value: 0.0
+Orientasi Positif: Depan robot
+
+ID2: 
+Lokasi: lengan atas kanan, 
+Resting position value: 264.3
+Orientasi Positif: kedalam robot
+
+ID3: 
+Lokasi: sikut kanan, 
+Resting position value: 177.8
+Orientasi Positif: Depan robot
+
+ID6: 
+Lokasi: bahu kiri, 
+Resting position value: 184.7
+Orientasi Positif: belakang robot
+
+ID7: 
+Lokasi: lengan atas kiri , 
+Resting position value: 179.6
+Orientasi Positif: keluar robot
+
+ID8: 
+Lokasi: sikut kiri, 
+Resting position value: 172.7
+Orientasi Positif: belakang robot
+
+ID11: 
+Lokasi: leher, 
+Resting position value: -44.2
+Orientasi Positif: kiri robot / ccw
+

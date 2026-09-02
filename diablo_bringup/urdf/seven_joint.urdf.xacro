@@ -1,0 +1,107 @@
+<?xml version="1.0"?>
+<robot name="diablo" xmlns:xacro="http://www.ros.org/wiki/xacro">
+
+  <!-- Link base untuk menempelkan semua joint -->
+  <link name="base_link"/>
+  
+  <!-- Macro xacro untuk mempermudah pembuatan joint dummy -->
+  <xacro:macro name="dummy_link_joint" params="name">
+    <link name="${name}_link"/>
+    <joint name="${name}" type="revolute">
+      <parent link="base_link"/>
+      <child link="${name}_link"/>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <axis xyz="0 0 1"/>
+      <limit lower="-3.14" upper="3.14" effort="1.0" velocity="1.0"/>
+    </joint>
+  </xacro:macro>
+
+  <!-- Deklarasi 7 joint sesuai dengan ID dynamixel -->
+  <!-- ID1: bahu kanan -->
+  <xacro:dummy_link_joint name="joint1"/>
+  <!-- ID2: lengan atas kanan -->
+  <xacro:dummy_link_joint name="joint2"/>
+  <!-- ID3: sikut kanan -->
+  <xacro:dummy_link_joint name="joint3"/>
+  <!-- ID6: bahu kiri -->
+  <xacro:dummy_link_joint name="joint6"/>
+  <!-- ID7: lengan atas kiri -->
+  <xacro:dummy_link_joint name="joint7"/>
+  <!-- ID8: sikut kiri -->
+  <xacro:dummy_link_joint name="joint8"/>
+  <!-- ID11: leher -->
+  <xacro:dummy_link_joint name="joint11"/>
+
+  <!-- Setup ROS2 Control -->
+  <ros2_control name="diablo_system" type="system">
+    <hardware>
+      <!-- Plugin untuk berkomunikasi dengan dynamixel -->
+      <plugin>dynamixel_hardware_interface/DynamixelHardware</plugin>
+      <param name="port_name">/dev/ttyUSB0</param>
+      <param name="baud_rate">1000000</param>
+      <param name="number_of_joints">7</param>
+      <param name="error_timeout_ms">1000</param>
+      <param name="dynamixel_model_folder">/param/dxl_model</param>
+      <param name="number_of_transmissions">7</param>
+      <!-- Matriks ini menghubungkan antara transmisi dan joint (identity matrix 7x7) -->
+      <param name="transmission_to_joint_matrix">
+        1, 0, 0, 0, 0, 0, 0,
+        0, 1, 0, 0, 0, 0, 0,
+        0, 0, 1, 0, 0, 0, 0,
+        0, 0, 0, 1, 0, 0, 0,
+        0, 0, 0, 0, 1, 0, 0,
+        0, 0, 0, 0, 0, 1, 0,
+        0, 0, 0, 0, 0, 0, 1
+      </param>
+      <param name="joint_to_transmission_matrix">
+        1, 0, 0, 0, 0, 0, 0,
+        0, 1, 0, 0, 0, 0, 0,
+        0, 0, 1, 0, 0, 0, 0,
+        0, 0, 0, 1, 0, 0, 0,
+        0, 0, 0, 0, 1, 0, 0,
+        0, 0, 0, 0, 0, 1, 0,
+        0, 0, 0, 0, 0, 0, 1
+      </param>
+    </hardware>
+
+    <!-- Mendefinisikan interface yang digunakan setiap joint -->
+    <!-- Setiap joint bisa dikontrol posisinya (command) dan dibaca posisinya (state) -->
+    <xacro:macro name="joint_control" params="name">
+      <joint name="${name}">
+        <command_interface name="position"/>
+        <state_interface name="position"/>
+      </joint>
+    </xacro:macro>
+
+    <xacro:joint_control name="joint1"/>
+    <xacro:joint_control name="joint2"/>
+    <xacro:joint_control name="joint3"/>
+    <xacro:joint_control name="joint6"/>
+    <xacro:joint_control name="joint7"/>
+    <xacro:joint_control name="joint8"/>
+    <xacro:joint_control name="joint11"/>
+
+    <!-- Mapping GPIO ID dynamixel -->
+    <xacro:macro name="dxl_gpio" params="name id">
+      <gpio name="${name}">
+        <param name="type">dxl</param>
+        <param name="ID">${id}</param>
+        <command_interface name="Goal Position"/>
+        <state_interface name="Present Position"/>
+        <param name="Operating Mode">3</param>
+        <param name="Position P Gain">800</param>
+        <param name="Position I Gain">100</param>
+        <param name="Position D Gain">100</param>
+      </gpio>
+    </xacro:macro>
+
+    <xacro:dxl_gpio name="dxl1" id="1"/>
+    <xacro:dxl_gpio name="dxl2" id="2"/>
+    <xacro:dxl_gpio name="dxl3" id="3"/>
+    <xacro:dxl_gpio name="dxl6" id="6"/>
+    <xacro:dxl_gpio name="dxl7" id="7"/>
+    <xacro:dxl_gpio name="dxl8" id="8"/>
+    <xacro:dxl_gpio name="dxl11" id="11"/>
+
+  </ros2_control>
+</robot>

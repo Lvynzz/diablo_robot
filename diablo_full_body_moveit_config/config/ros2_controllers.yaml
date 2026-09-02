@@ -1,0 +1,38 @@
+# Fake ros2_control controllers used only by the full-body simulation.
+controller_manager:
+  ros__parameters:
+    update_rate: 100
+
+    joint_state_broadcaster:
+      type: joint_state_broadcaster/JointStateBroadcaster
+
+    diablo_full_body_controller:
+      type: joint_trajectory_controller/JointTrajectoryController
+
+diablo_full_body_controller:
+  ros__parameters:
+    joints:
+      - left_fake_hip_joint
+      - left_fake_knee_joint
+      - left_wheel_joint
+      - right_fake_hip_joint
+      - right_fake_knee_joint
+      - right_wheel_joint
+      - upper_left_shoulder_pitch_joint
+      - upper_left_shoulder_roll_joint
+      - upper_left_elbow_joint
+      - upper_left_wrist_joint
+      - upper_left_thumb_base
+      - upper_right_shoulder_pitch_joint
+      - upper_right_shoulder_roll_joint
+      - upper_right_elbow_joint
+      - upper_right_wrist_joint
+      - upper_right_thumb_base
+    command_interfaces:
+      - position
+    state_interfaces:
+      - position
+      - velocity
+    allow_partial_joints_goal: true
+    state_publish_rate: 50.0
+    action_monitor_rate: 20.0

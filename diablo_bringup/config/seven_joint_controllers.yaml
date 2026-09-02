@@ -1,0 +1,31 @@
+controller_manager:
+  ros__parameters:
+    update_rate: 30  # Frekuensi update controller (Hz)
+
+    # Controller untuk menyebarkan state (posisi/kecepatan) joint saat ini ke ROS
+    joint_state_broadcaster:
+      type: joint_state_broadcaster/JointStateBroadcaster
+
+    # Controller trajectory yang akan kita gunakan
+    seven_joint_trajectory_controller:
+      type: joint_trajectory_controller/JointTrajectoryController
+
+# Konfigurasi khusus untuk trajectory controller
+seven_joint_trajectory_controller:
+  ros__parameters:
+    # Daftar joint yang dikendalikan oleh controller ini
+    joints:
+      - joint1  # ID 1
+      - joint2  # ID 2
+      - joint3  # ID 3
+      - joint6  # ID 6
+      - joint7  # ID 7
+      - joint8  # ID 8
+      - joint11 # ID 11
+    
+    # Interface yang dikirimkan ke hardware (posisi)
+    command_interfaces:
+      - position
+    # Interface yang dibaca dari hardware (posisi)
+    state_interfaces:
+      - position

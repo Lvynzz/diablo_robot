@@ -1,0 +1,10 @@
+moveit_setup_assistant_config:
+  URDF:
+    package: diablo_full_body_description
+    relative_path: description/urdf/diablo_full_body.urdf.xacro
+  SRDF:
+    relative_path: config/diablo_full_body.srdf
+  CONFIG:
+    author_name: alvin
+    author_email: alvin@todo.todo
+    generated_timestamp: 0

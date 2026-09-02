@@ -1,0 +1,234 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <meta name="theme-color" content="#e8f0f6">
+  <title>Diablo Robot // Industrial Interface</title>
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand-lockup-preview">
+      <div class="brand-mark-preview">D</div>
+      <div>
+        <div class="eyebrow">INDUSTRIAL INTERFACE</div>
+        <h1>DIABLO ROBOT</h1>
+      </div>
+    </div>
+    <div class="top-status">
+      <div class="status-chip"><i id="connection-dot"></i><span id="connection-text">DISCONNECTED</span></div>
+      <div class="status-chip"><i id="nav2-dot"></i><span id="nav2-text">NAV2 OFFLINE</span></div>
+      <div class="mode-chip" id="mode-text">MANUAL</div>
+      <button class="danger-button" id="emergency-stop" type="button">STOP</button>
+    </div>
+  </header>
+
+  <main class="dashboard">
+    <aside class="preview-sidebar" aria-label="Control panels">
+      <div class="preview-sidebar-top"><div class="preview-sidebar-title">OPERATIONS</div><button id="preview-sidebar-toggle" type="button" aria-label="Collapse panel menu" title="Collapse panel menu">‹</button></div>
+      <button class="tab active" data-tab="teleop" type="button"><span class="preview-sidebar-icon">◈</span><span><b>DRIVE CONTROL</b><small>Manual motion</small></span></button>
+      <button class="tab" data-tab="navigation" type="button"><span class="preview-sidebar-icon">⌖</span><span><b>NAVIGATION</b><small>Map + goal control</small></span></button>
+      <button class="tab" data-tab="topics" type="button"><span class="preview-sidebar-icon">▤</span><span><b>ROS TOPICS</b><small>Live topic echo</small></span></button>
+      <div class="preview-sidebar-spacer"></div>
+      <div class="preview-sidebar-title">SYSTEM</div>
+      <button class="tab" data-tab="settings" type="button"><span class="preview-sidebar-icon">⚙</span><span><b>SETTINGS</b><small>Connection + frames</small></span></button>
+      <div class="preview-sidebar-version">DIABLO HMI <b>v0.1</b></div>
+    </aside>
+    <section class="workspace panel">
+      <nav class="tabs legacy-tabs" aria-label="Control panels">
+        <button class="tab active" data-tab="teleop" type="button">TELEOP</button>
+        <button class="tab" data-tab="navigation" type="button">NAVIGATION</button>
+        <button class="tab" data-tab="topics" type="button">ROS TOPIC ECHO</button>
+        <button class="tab" data-tab="settings" type="button">SETTINGS</button>
+      </nav>
+
+      <div class="tab-panel active" id="tab-teleop">
+        <div class="panel-heading">
+          <div>
+            <div class="eyebrow">MANUAL MOTION</div>
+            <h2>Teleoperasi Diablo</h2>
+          </div>
+          <span class="hint">Tahan tombol / keyboard untuk bergerak</span>
+        </div>
+        <div class="position-summary-preview">
+          <div class="preview-stat tone-green"><span>X POSITION</span><strong id="preview-x-position">0.00</strong><small>METERS · WHEEL ODOM</small></div>
+          <div class="preview-stat tone-blue"><span>Y POSITION</span><strong id="preview-y-position">0.00</strong><small>METERS · WHEEL ODOM</small></div>
+          <div class="preview-stat tone-orange"><span>HEADING θ</span><strong id="preview-heading">0.0</strong><small>DEGREES · WHEEL ODOM</small></div>
+          <div class="preview-quick-actions"><span>QUICK ACTIONS</span><button id="reset-odom" type="button">RESET ODOM</button><button id="reset-encoder" type="button">RESET ENCODER</button><button id="start-lidar" type="button">START LIDAR</button></div>
+        </div>
+        <div class="teleop-grid">
+          <div class="control-card keyboard-card">
+            <div class="card-title">MOTION CONTROL</div>
+            <div class="keypad" aria-label="Keyboard teleoperation">
+              <button class="key" data-key="w" type="button">W</button>
+              <button class="key empty" tabindex="-1" type="button"></button>
+              <button class="key" data-key="q" type="button">Q <small>ROLL −</small></button>
+              <button class="key" data-key="a" type="button">A</button>
+              <button class="key" data-key="s" type="button">S</button>
+              <button class="key" data-key="d" type="button">D</button>
+              <button class="key" data-key="e" type="button">E <small>ROLL +</small></button>
+            </div>
+            <div class="key-help">W/S maju–mundur · A/D putar · Q/E roll</div>
+          </div>
+          <div class="control-card joystick-card">
+            <div class="card-title">VIRTUAL JOYSTICK</div>
+            <label class="range-row"><span>FORWARD</span><output id="forward-output">0.00</output>
+              <input id="forward-input" type="range" min="-1" max="1" value="0" step="0.01"></label>
+            <label class="range-row"><span>TURN / LEFT</span><output id="turn-output">0.00</output>
+              <input id="turn-input" type="range" min="-1" max="1" value="0" step="0.01"></label>
+            <div class="axis-readout"><span>FORWARD</span><b id="forward-value">0.00</b><span>TURN</span><b id="turn-value">0.00</b></div>
+            <button class="secondary-button" id="release-joystick" type="button">RELEASE / ZERO</button>
+          </div>
+        </div>
+        <div class="control-card trim-card">
+          <div class="card-title">BODY COMMANDS</div>
+          <div class="trim-grid">
+            <label class="range-row"><span>BODY HEIGHT <em>(0…1)</em></span><output id="height-output">1.00</output>
+              <input id="height-input" type="range" min="0" max="1" value="1" step="0.01"></label>
+            <label class="range-row"><span>PITCH <em>(rad)</em></span><output id="pitch-output">0.00</output>
+              <input id="pitch-input" type="range" min="-0.3" max="0.3" value="0" step="0.01"></label>
+            <label class="range-row"><span>ROLL <em>(rad)</em></span><output id="roll-output">0.00</output>
+              <input id="roll-input" type="range" min="-0.2" max="0.2" value="0" step="0.01"></label>
+          </div>
+          <div class="button-row">
+            <button class="action-button" id="stand-up" type="button">STAND UP</button>
+            <button class="action-button muted" id="stand-down" type="button">STAND DOWN</button>
+          </div>
+          <p class="safety-note">Perintah normal menggunakan <code>mode_mark=false</code>. Stand/jump tidak dipicu otomatis dari keyboard.</p>
+        </div>
+        <div class="control-card keybind-preview">
+          <div class="card-title">KEYBIND LEGEND · CLICK KEY TO REMAP</div>
+          <div class="keybind-preview-grid">
+            <span><kbd>W</kbd> FORWARD</span><span><kbd>S</kbd> REVERSE</span><span><kbd>A</kbd> TURN LEFT</span><span><kbd>D</kbd> TURN RIGHT</span>
+            <span><kbd>Q</kbd> ROLL LEFT</span><span><kbd>E</kbd> ROLL RIGHT</span><span><kbd>Z</kbd> STANDING MODE</span><span><kbd>X</kbd> CRAWLING MODE</span>
+            <span><kbd>H</kbd> HEIGHT LOW</span><span><kbd>K</kbd> HEIGHT MID</span><span><kbd>J</kbd> HEIGHT HIGH</span><span><kbd>U/I/O</kbd> LOOK</span>
+          </div>
+        </div>
+        <div class="preview-drive-lower">
+          <div class="control-card">
+            <div class="card-title">WHEEL ENCODER TELEMETRY</div>
+            <div class="wheel-preview-table"><div><span>CHANNEL</span><span>POSITION</span><span>REV</span><span>VELOCITY</span></div><div><b>LEFT WHEEL</b><strong>0.00</strong><strong>0.00</strong><strong>0.00 rad/s</strong></div><div><b>RIGHT WHEEL</b><strong>0.00</strong><strong>0.00</strong><strong>0.00 rad/s</strong></div></div>
+            <div class="wheel-preview-foot"><span>LEG LENGTH</span><b>— / — m</b></div>
+          </div>
+          <div class="control-card trajectory-preview">
+            <div class="card-title">TRAJECTORY MAP <small>WHEEL ODOMETRY // /ODOM</small></div>
+            <svg viewBox="0 0 420 150" role="img" aria-label="Wheel odometry trajectory preview"><defs><pattern id="preview-grid" width="21" height="21" patternUnits="userSpaceOnUse"><path d="M 21 0 L 0 0 0 21" fill="none" stroke="#b8c9d6" stroke-width=".6" /></pattern></defs><rect width="420" height="150" fill="url(#preview-grid)"/><line x1="210" y1="0" x2="210" y2="150" stroke="#91a8b9" stroke-dasharray="3 4"/><line x1="0" y1="75" x2="420" y2="75" stroke="#91a8b9" stroke-dasharray="3 4"/><polyline points="90,111 105,106 118,108 130,100 143,96 154,88 165,90 177,78 190,73 204,75" fill="none" stroke="#2f78ae" stroke-width="2.2"/><circle cx="204" cy="75" r="5" fill="#4f925c" stroke="#fff" stroke-width="2"/></svg>
+            <small class="trajectory-preview-source">SOURCE: WAITING FOR /ODOM</small>
+          </div>
+        </div>
+      </div>
+
+      <div class="tab-panel" id="tab-navigation">
+        <div class="panel-heading">
+          <div>
+            <div class="eyebrow">NAV2 // PGM OCCUPANCY GRID</div>
+            <h2>Navigation</h2>
+          </div>
+          <span class="hint">Pilih panel, kemudian klik map untuk koordinat</span>
+        </div>
+        <section class="control-card preview-collapsible nav-map-card">
+          <div class="preview-card-heading"><div><div class="card-title">NAVIGATION MAP</div><small>PGM / OCCUPANCY GRID · LIVE COSTMAP OVERLAY</small></div><div class="nav-map-toolbar"><label>CHOOSE MAP <select id="map-select"><option value="empty.yaml">empty.yaml</option></select></label><button class="preview-collapse" type="button" aria-label="Collapse navigation map">−</button></div></div>
+          <div class="navigation-grid preview-collapsible-body">
+            <div class="map-wrap"><canvas id="nav-canvas" role="img" aria-label="Nav2 occupancy map"></canvas><div class="map-overlay" id="map-overlay">Menunggu /map…</div></div>
+            <div class="nav-map-readouts"><div class="preview-stat tone-green"><span>ROBOT X</span><strong id="nav-robot-x">—</strong><small>METERS · MAP POSE</small></div><div class="preview-stat tone-blue"><span>ROBOT Y</span><strong id="nav-robot-y">—</strong><small>METERS · MAP POSE</small></div><div class="preview-stat tone-orange"><span>HEADING θ</span><strong id="nav-robot-heading">—</strong><small>DEGREES</small></div><div class="map-instruction-preview">Click map after selecting INIT, GOAL, or STATION.</div></div>
+          </div>
+          <div class="navigation-footer preview-collapsible-body"><span><i class="legend-dot robot"></i> Diablo</span><span><i class="legend-dot init"></i> init pose</span><span><i class="legend-dot goal"></i> goal</span><span><i class="legend-dot path"></i> Nav2 path</span><label><input id="show-lidar" type="checkbox" checked> LiDAR</label><label><input id="show-path" type="checkbox" checked> PATH</label></div>
+        </section>
+
+        <section class="control-card preview-collapsible pose-station-card">
+          <div class="preview-card-heading"><div><div class="card-title">POSE &amp; STATIONS</div><small>INITIAL LOCALIZATION · GOAL NAV2 · REGISTRY</small></div><button class="preview-collapse" type="button" aria-label="Collapse pose and stations">−</button></div>
+          <div class="pose-station-preview-grid preview-collapsible-body">
+            <div class="pose-editor-preview init-editor-preview"><div class="preview-subheading"><b>SET INIT POSE</b><button class="tool-button active" data-tool="initial" type="button">PICK MAP</button></div><div class="coordinate-grid"><label>X (M)<input id="initial-x" type="number" value="0.00" step="0.01"></label><label>Y (M)<input id="initial-y" type="number" value="0.00" step="0.01"></label><label>θ (DEG)<input id="initial-heading" type="number" value="0" step="0.1"></label></div><button class="secondary-button compact" id="apply-initial" type="button">APPLY INITIAL</button></div>
+            <div class="pose-editor-preview goal-editor-preview"><div class="preview-subheading"><b>SET GOAL POSE</b><button class="tool-button" data-tool="goal" type="button">PICK MAP</button></div><div class="coordinate-grid"><label>X (M)<input id="goal-x" type="number" value="1.20" step="0.01"></label><label>Y (M)<input id="goal-y" type="number" value="0.60" step="0.01"></label><label>θ (DEG)<input id="goal-heading" type="number" value="0" step="0.1"></label></div><button class="primary-button compact" id="send-goal" type="button">SEND GOAL</button></div>
+            <div class="pose-editor-preview station-editor-preview"><div class="preview-subheading"><b>STATION REGISTRY</b><small>LOCAL</small></div><label class="station-name-preview">NAME<input id="station-name" type="text" placeholder="station_01"></label><div class="coordinate-grid"><label>X (M)<input id="station-x" type="number" value="0.00" step="0.01"></label><label>Y (M)<input id="station-y" type="number" value="0.00" step="0.01"></label><label>θ (DEG)<input id="station-heading" type="number" value="0" step="0.1"></label></div><div class="station-preview-actions"><button class="secondary-button compact tool-button" data-tool="station" type="button">PICK MAP</button><button class="primary-button compact" id="save-station" type="button">SAVE</button></div><div id="station-list-preview" class="station-list-preview">Belum ada station.</div></div>
+          </div>
+        </section>
+
+        <section class="control-card preview-collapsible navigation-controls-card">
+          <div class="preview-card-heading"><div><div class="card-title">NAVIGATION CONTROLS</div><small>ROS LAUNCH CONTROL</small></div><button class="preview-collapse" type="button" aria-label="Collapse navigation controls">−</button></div>
+          <div class="hardware-preview-status preview-collapsible-body"><div><span>HARDWARE GATE</span><b id="hardware-status-preview">IDLE</b></div><small id="hardware-message-preview">Start hardware before using Drive Control.</small><div class="hardware-preview-components"><span id="hardware-diablo-preview">● DIABLO ROS2 · OFFLINE</span><span id="hardware-lidar-preview">● LIDAR · OFFLINE</span><span id="hardware-dxl-preview">● DYNAMIXEL U2D2 · OFFLINE</span></div></div>
+          <div class="nav-start-preview-grid preview-collapsible-body"><div><b>HARDWARE</b><small>Diablo + LiDAR + U2D2</small><button class="primary-button compact" id="start-hardware" type="button">START HARDWARE</button></div><div><b>LOCALIZATION</b><small>AMCL</small><button class="secondary-button compact" id="start-localization" type="button">START AMCL LOCAL</button></div><div><b>NAVIGATION</b><small>Nav2</small><button class="secondary-button compact" id="start-navigation" type="button">START NAV2 (PURE)</button></div><div><b>MAPPING</b><small>SLAM Toolbox</small><button class="secondary-button compact" id="start-mapping" type="button">START NEW MAP</button></div></div>
+          <div class="nav-state preview-collapsible-body" id="nav-state">IDLE · no goal</div>
+        </section>
+
+        <section class="control-card preview-collapsible costmap-preview-card">
+          <div class="preview-card-heading"><div><div class="card-title">COSTMAP LAYERS</div><small>GLOBAL · LOCAL · INFLATION</small></div><button class="preview-collapse" type="button" aria-label="Collapse costmap layers">−</button></div>
+          <div class="costmap-preview-grid preview-collapsible-body"><label><input id="show-global-costmap" type="checkbox" checked> <i class="costmap-swatch global"></i> GLOBAL COSTMAP <small id="global-costmap-status">WAITING</small></label><label><input id="show-local-costmap" type="checkbox" checked> <i class="costmap-swatch local"></i> LOCAL COSTMAP <small id="local-costmap-status">WAITING</small></label><label><input id="show-inflation" type="checkbox" checked> <i class="costmap-swatch inflation"></i> INFLATION LAYER <small>NON-LETHAL</small></label></div>
+        </section>
+
+        <section class="control-card preview-collapsible nav-history-preview-card">
+          <div class="preview-card-heading"><div><div class="card-title">NAVIGATION LOG HISTORY</div><small>LOCALIZATION // NAV2 FEEDBACK</small></div><button class="preview-collapse" type="button" aria-label="Collapse navigation history">−</button></div>
+          <div class="nav-history-preview preview-collapsible-body" id="navigation-history"><div class="event-empty">No localization or Nav2 events yet.</div></div>
+        </section>
+      </div>
+
+      <div class="tab-panel" id="tab-topics">
+        <div class="panel-heading">
+          <div>
+            <div class="eyebrow">LIVE ROS 2 DATA</div>
+            <h2>Topic echo</h2>
+          </div>
+          <span class="hint">Maksimal 4 topic · update ±5 Hz</span>
+        </div>
+        <div class="topic-toolbar">
+          <input id="topic-filter" class="text-input" type="search" placeholder="Filter topic…" autocomplete="off">
+          <select id="topic-select" class="topic-select" aria-label="Select ROS topic"></select>
+          <button class="primary-button compact" id="add-topic" type="button">ADD</button>
+          <button class="secondary-button compact" id="clear-topics" type="button">CLEAR</button>
+        </div>
+        <div class="topic-cards" id="topic-cards">
+          <div class="empty-state">Pilih topic untuk mulai echo.</div>
+        </div>
+      </div>
+
+      <div class="tab-panel" id="tab-settings">
+        <div class="panel-heading">
+          <div>
+            <div class="eyebrow">SYSTEM CONFIGURATION</div>
+            <h2>Web HMI settings</h2>
+          </div>
+          <span class="hint">React + Vite source lives in <code>src/</code></span>
+        </div>
+        <div class="settings-preview-grid">
+          <div class="control-card">
+            <div class="card-title">WEB HMI ARCHITECTURE</div>
+            <div class="architecture-preview"><span>Browser<br><b>React + Vite</b></span><i>↔</i><span>FastAPI<br><b>web_node.py</b></span><i>↔</i><span>ROS 2<br><b>rclpy / Nav2</b></span></div>
+            <p class="safety-note">Realtime commands and telemetry use <code>/ws</code>; queries and control fallbacks use <code>/api/*</code>.</p>
+          </div>
+          <div class="control-card">
+            <div class="card-title">DIABLO ROUTING</div>
+            <div class="settings-row"><span>MANUAL</span><code>/diablo/MotionCmd/manual</code></div>
+            <div class="settings-row"><span>NAV2 INPUT</span><code>/cmd_vel_smoothed</code></div>
+            <div class="settings-row"><span>DRIVER OUTPUT</span><code>/diablo/MotionCmd</code></div>
+            <div class="settings-row"><span>FRAMES</span><code>map → odom → base_link</code></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <aside class="side-column">
+      <section class="panel telemetry-panel">
+        <div class="panel-heading compact-heading"><div><div class="eyebrow">ONBOARD TELEMETRY</div><h2>Diablo status</h2></div></div>
+        <div class="metric-grid">
+          <div class="metric"><span>BATTERY</span><strong id="battery-percent">—</strong><small id="battery-voltage">— V</small></div>
+          <div class="metric"><span>ROBOT MODE</span><strong id="robot-mode">—</strong><small id="body-error">no error data</small></div>
+          <div class="metric"><span>POSITION</span><strong id="position-metric">—</strong><small id="position-source">—</small></div>
+          <div class="metric"><span>IMU YAW</span><strong id="imu-yaw">—</strong><small id="imu-rpy">roll — · pitch —</small></div>
+        </div>
+      </section>
+      <section class="panel event-panel">
+        <div class="panel-heading compact-heading"><div><div class="eyebrow">EVENT STREAM</div><h2>System log</h2></div><button id="clear-log" class="icon-button" type="button" aria-label="Clear log">×</button></div>
+        <div class="event-log" id="event-log"><div class="log-line info"><time>--:--:--</time><span>Web interface initialized.</span></div></div>
+      </section>
+      <section class="panel connection-panel">
+        <div class="connection-row"><span>MANUAL CMD</span><code id="manual-topic">—</code></div>
+        <div class="connection-row"><span>ODOM / BASE</span><code id="odom-topic">—</code></div>
+        <div class="connection-row"><span>SCAN</span><code id="scan-topic">—</code></div>
+      </section>
+    </aside>
+  </main>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

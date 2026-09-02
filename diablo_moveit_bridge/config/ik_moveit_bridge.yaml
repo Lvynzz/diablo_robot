@@ -1,0 +1,45 @@
+ik_moveit_bridge:
+  ros__parameters:
+    target_topic: /diablo/ik_target
+    joint_states_topic: /joint_states
+    ik_service: /compute_ik
+    move_action: /move_action
+
+    group_name: left_manipulator
+    ik_link_name: left_arm_tip_link
+    planning_frame: torso_link
+
+    # Omit this parameter to use the three active arm joints from the selected
+    # left/right manipulator group. Set it explicitly if needed by hardware.
+
+    # Safety default: solve IK and plan, but do not execute on hardware.
+    execute: false
+    ik_timeout_sec: 3.0
+    planning_time_sec: 3.0
+    joint_goal_tolerance: 0.02
+    max_velocity_scaling: 0.10
+    max_acceleration_scaling: 0.10
+
+    # If the requested XYZ has no IK solution, test nearby XYZ positions in
+    # increasing distance order. The first successful candidate is selected.
+    fallback_enabled: true
+    fallback_search_radius_m: 0.15
+    fallback_search_step_m: 0.02
+    fallback_max_candidates: 220
+    fallback_refinement_steps: 6
+    fallback_ik_timeout_sec: 0.10
+    avoid_collisions: true
+
+    # For a target farther than the arm workspace, project the target ray to
+    # a reachable straight-arm pose. The DH-style seed is then checked by
+    # MoveIt IK and planned normally.
+    pointing_enabled: true
+    pointing_trigger_distance_m: 0.45
+    pointing_elbow_target_rad: 0.0
+    pointing_elbow_tolerance_rad: 0.08
+    pointing_relaxed_step_m: 0.01
+    pointing_relaxed_candidates: 4
+    dh_seed_enabled: true
+    # false = DH is a seed and MoveIt may bend to avoid collision/reach the
+    # projected point; true = constrain elbow near pointing_elbow_target_rad.
+    pointing_lock_elbow: false

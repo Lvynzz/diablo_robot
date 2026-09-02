@@ -27,7 +27,7 @@ def generate_launch_description():
         DeclareLaunchArgument(
             "reset_encoder_service", default_value="/diablo/reset_encoder"
         ),
-        DeclareLaunchArgument("lidar_start_service", default_value="/lidar/start"),
+        DeclareLaunchArgument("lidar_start_service", default_value="/start_motor"),
         DeclareLaunchArgument(
             "diablo_start_command", default_value="ros2 run diablo_ctrl diablo_ctrl_node"
         ),

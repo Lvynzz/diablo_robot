@@ -55,6 +55,8 @@ def test_web_ui_has_teleop_navigation_and_topic_echo_panels():
     ros_node = read_text("diablo_web_interface/ros_node.py")
     web_node = read_text("diablo_web_interface/web_node.py")
     hardware_manager = read_text("diablo_web_interface/hardware_manager.py")
+    web_launch = read_text("launch/web_interface.launch.py")
+    nav2_launch = read_text("launch/nav2_web.launch.py")
 
     assert '"vite"' in package_json
     assert '"react"' in package_json
@@ -86,6 +88,8 @@ def test_web_ui_has_teleop_navigation_and_topic_echo_panels():
     assert "onToggleCollapse" in sidebar
     assert '"/diablo/reset_encoder"' in ros_node
     assert '"/start_motor"' in ros_node
+    assert 'DeclareLaunchArgument("lidar_start_service", default_value="/start_motor")' in web_launch
+    assert 'DeclareLaunchArgument("lidar_start_service", default_value="/start_motor")' in nav2_launch
     assert "HardwareManager" in ros_node
     assert "def start_hardware" in ros_node
     assert "def list_maps" in ros_node

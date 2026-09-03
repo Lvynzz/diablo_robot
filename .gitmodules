@@ -1,3 +1,15 @@
 [submodule "sllidar_ros2"]
 	path = sllidar_ros2
 	url = https://github.com/Slamtec/sllidar_ros2.git
+
+[submodule "DynamixelSDK"]
+	path = DynamixelSDK
+	url = https://github.com/ROBOTIS-GIT/DynamixelSDK.git
+
+[submodule "diablo_ros2"]
+	path = diablo_ros2
+	url = https://github.com/DDTRobot/diablo_ros2.git
+
+[submodule "dynamixel_interfaces"]
+	path = dynamixel_interfaces
+	url = https://github.com/ROBOTIS-GIT/dynamixel_interfaces.git

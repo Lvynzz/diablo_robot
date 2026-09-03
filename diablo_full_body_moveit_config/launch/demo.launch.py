@@ -41,7 +41,7 @@ def generate_launch_description():
         package="controller_manager",
         executable="ros2_control_node",
         output="screen",
-        parameters=[moveit_config.robot_description, robot_controllers],
+        parameters=[robot_controllers, moveit_config.robot_description],
     )
     joint_state_broadcaster = Node(
         package="controller_manager",
@@ -51,18 +51,34 @@ def generate_launch_description():
         ],
         output="screen",
     )
-    trajectory_controller = Node(
+    base_controller = Node(
         package="controller_manager",
         executable="spawner",
         arguments=[
-            "diablo_full_body_controller", "--controller-manager", "/controller_manager"
+            "diablo_base_controller", "--controller-manager", "/controller_manager"
         ],
         output="screen",
     )
-    start_trajectory_controller = RegisterEventHandler(
+    left_arm_controller = Node(
+        package="controller_manager",
+        executable="spawner",
+        arguments=[
+            "left_arm_controller", "--controller-manager", "/controller_manager"
+        ],
+        output="screen",
+    )
+    right_arm_controller = Node(
+        package="controller_manager",
+        executable="spawner",
+        arguments=[
+            "right_arm_controller", "--controller-manager", "/controller_manager"
+        ],
+        output="screen",
+    )
+    start_controllers = RegisterEventHandler(
         event_handler=OnProcessExit(
             target_action=joint_state_broadcaster,
-            on_exit=[trajectory_controller],
+            on_exit=[base_controller, left_arm_controller, right_arm_controller],
         )
     )
 
@@ -89,7 +105,7 @@ def generate_launch_description():
         robot_state_publisher,
         ros2_control,
         joint_state_broadcaster,
-        start_trajectory_controller,
+        start_controllers,
         move_group,
         rviz,
     ])

@@ -1,0 +1,12 @@
+<?xml version="1.0"?>
+<library path="diablo_base_hardware">
+  <class
+    name="diablo_base_hardware/DiabloSystemHardware"
+    type="diablo_base_hardware::DiabloSystemHardware"
+    base_class_type="hardware_interface::SystemInterface">
+    <description>
+      Converts ros2_control differential-drive wheel commands into Diablo
+      vehicle-level MotionCtrl commands and exposes wheel telemetry.
+    </description>
+  </class>
+</library>

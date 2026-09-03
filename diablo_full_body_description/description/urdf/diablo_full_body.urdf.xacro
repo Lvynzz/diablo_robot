@@ -8,6 +8,34 @@
 <xacro:arg name="prefix" default=""/>
 <!-- Set true to publish only the torso, head and upper-body manipulators. -->
 <xacro:arg name="upper_only" default="false"/>
+<!-- Keep the existing mock default for RViz/MoveIt-only use.  Hardware
+     launch files explicitly pass use_mock_hardware:=false. -->
+<xacro:arg name="use_mock_hardware" default="true"/>
+<xacro:arg name="enable_base_hardware" default="true"/>
+<xacro:arg name="enable_arm_hardware" default="true"/>
+<xacro:arg name="arm_port_name" default="/dev/ttyUSB1"/>
+<xacro:arg name="hand_port_name" default="/dev/ttyUSB2"/>
+<xacro:arg name="baud_rate" default="1000000"/>
+<xacro:arg name="wheel_radius" default="0.105"/>
+<xacro:arg name="track_width" default="0.3751"/>
+
+<!-- One GPIO description is shared by the arm and Seed Robotics hand
+     ros2_control systems below.  The IDs are kept next to the calls so the
+     physical bus mapping remains easy to audit. -->
+<xacro:macro name="diablo_dynamixel_gpio" params="gpio_name motor_id">
+  <gpio name="${gpio_name}">
+    <param name="type">dxl</param>
+    <param name="ID">${motor_id}</param>
+    <command_interface name="Goal Position"/>
+    <state_interface name="Present Position"/>
+    <state_interface name="Present Velocity"/>
+    <state_interface name="Present Current"/>
+    <param name="Operating Mode">3</param>
+    <param name="Position P Gain">800</param>
+    <param name="Position I Gain">100</param>
+    <param name="Position D Gain">100</param>
+  </gpio>
+</xacro:macro>
 
 	<xacro:unless value="$(arg upper_only)">
 		<!-- diablo_base_link -->
@@ -1100,100 +1128,255 @@
 			</geometry>
 		</collision>
 	</link>
-  <!--
-    Standalone simulation hardware.  This deliberately uses ros2_control's
-    mock system instead of diablo_ros2_control, so xacro expansion and MoveIt
-    Setup Assistant do not depend on the PC workspace or a hardware plugin.
-    Mimic finger joints are driven by their parent joint and are not declared
-    as independent hardware interfaces.
+	  <!--
+    The default remains a mock system so the existing description and MoveIt
+    demo can still be opened without hardware.  The real launch passes
+    use_mock_hardware:=false and selects the three systems below.
+    Mimic finger joints are intentionally not independent interfaces.
   -->
-  <ros2_control name="DiabloFullBodyMockSystem" type="system">
-    <hardware>
-      <plugin>mock_components/GenericSystem</plugin>
-    </hardware>
+  <xacro:if value="$(arg use_mock_hardware)">
+    <ros2_control name="DiabloFullBodyMockSystem" type="system">
+      <hardware>
+        <plugin>mock_components/GenericSystem</plugin>
+      </hardware>
 
-    <joint name="left_fake_hip_joint">
-      <command_interface name="position"/>
-      <state_interface name="position"><param name="initial_value">0.0</param></state_interface>
-      <state_interface name="velocity"><param name="initial_value">0.0</param></state_interface>
-    </joint>
-    <joint name="left_fake_knee_joint">
-      <command_interface name="position"/>
-      <state_interface name="position"><param name="initial_value">0.0</param></state_interface>
-      <state_interface name="velocity"><param name="initial_value">0.0</param></state_interface>
-    </joint>
-    <joint name="left_wheel_joint">
-      <command_interface name="position"/>
-      <state_interface name="position"><param name="initial_value">0.0</param></state_interface>
-      <state_interface name="velocity"><param name="initial_value">0.0</param></state_interface>
-    </joint>
-    <joint name="right_fake_hip_joint">
-      <command_interface name="position"/>
-      <state_interface name="position"><param name="initial_value">0.0</param></state_interface>
-      <state_interface name="velocity"><param name="initial_value">0.0</param></state_interface>
-    </joint>
-    <joint name="right_fake_knee_joint">
-      <command_interface name="position"/>
-      <state_interface name="position"><param name="initial_value">0.0</param></state_interface>
-      <state_interface name="velocity"><param name="initial_value">0.0</param></state_interface>
-    </joint>
-    <joint name="right_wheel_joint">
-      <command_interface name="position"/>
-      <state_interface name="position"><param name="initial_value">0.0</param></state_interface>
-      <state_interface name="velocity"><param name="initial_value">0.0</param></state_interface>
-    </joint>
+      <xacro:unless value="$(arg upper_only)">
+        <joint name="left_fake_hip_joint">
+          <command_interface name="position"/>
+          <state_interface name="position"><param name="initial_value">0.0</param></state_interface>
+          <state_interface name="velocity"><param name="initial_value">0.0</param></state_interface>
+        </joint>
+        <joint name="left_fake_knee_joint">
+          <command_interface name="position"/>
+          <state_interface name="position"><param name="initial_value">0.0</param></state_interface>
+          <state_interface name="velocity"><param name="initial_value">0.0</param></state_interface>
+        </joint>
+        <joint name="right_fake_hip_joint">
+          <command_interface name="position"/>
+          <state_interface name="position"><param name="initial_value">0.0</param></state_interface>
+          <state_interface name="velocity"><param name="initial_value">0.0</param></state_interface>
+        </joint>
+        <joint name="right_fake_knee_joint">
+          <command_interface name="position"/>
+          <state_interface name="position"><param name="initial_value">0.0</param></state_interface>
+          <state_interface name="velocity"><param name="initial_value">0.0</param></state_interface>
+        </joint>
+        <joint name="left_wheel_joint">
+          <command_interface name="velocity"/>
+          <state_interface name="position"><param name="initial_value">0.0</param></state_interface>
+          <state_interface name="velocity"><param name="initial_value">0.0</param></state_interface>
+        </joint>
+        <joint name="right_wheel_joint">
+          <command_interface name="velocity"/>
+          <state_interface name="position"><param name="initial_value">0.0</param></state_interface>
+          <state_interface name="velocity"><param name="initial_value">0.0</param></state_interface>
+        </joint>
+      </xacro:unless>
 
-    <joint name="upper_left_shoulder_pitch_joint">
-      <command_interface name="position"/>
-      <state_interface name="position"><param name="initial_value">0.0</param></state_interface>
-      <state_interface name="velocity"><param name="initial_value">0.0</param></state_interface>
-    </joint>
-    <joint name="upper_left_shoulder_roll_joint">
-      <command_interface name="position"/>
-      <state_interface name="position"><param name="initial_value">0.0</param></state_interface>
-      <state_interface name="velocity"><param name="initial_value">0.0</param></state_interface>
-    </joint>
-    <joint name="upper_left_elbow_joint">
-      <command_interface name="position"/>
-      <state_interface name="position"><param name="initial_value">0.0</param></state_interface>
-      <state_interface name="velocity"><param name="initial_value">0.0</param></state_interface>
-    </joint>
-    <joint name="upper_left_wrist_joint">
-      <command_interface name="position"/>
-      <state_interface name="position"><param name="initial_value">0.0</param></state_interface>
-      <state_interface name="velocity"><param name="initial_value">0.0</param></state_interface>
-    </joint>
-    <joint name="upper_left_thumb_base">
-      <command_interface name="position"/>
-      <state_interface name="position"><param name="initial_value">0.0</param></state_interface>
-      <state_interface name="velocity"><param name="initial_value">0.0</param></state_interface>
-    </joint>
+      <joint name="upper_left_shoulder_pitch_joint">
+        <command_interface name="position"/>
+        <state_interface name="position"><param name="initial_value">0.0</param></state_interface>
+        <state_interface name="velocity"><param name="initial_value">0.0</param></state_interface>
+      </joint>
+      <joint name="upper_left_shoulder_roll_joint">
+        <command_interface name="position"/>
+        <state_interface name="position"><param name="initial_value">0.0</param></state_interface>
+        <state_interface name="velocity"><param name="initial_value">0.0</param></state_interface>
+      </joint>
+      <joint name="upper_left_elbow_joint">
+        <command_interface name="position"/>
+        <state_interface name="position"><param name="initial_value">0.0</param></state_interface>
+        <state_interface name="velocity"><param name="initial_value">0.0</param></state_interface>
+      </joint>
+      <joint name="upper_left_wrist_joint">
+        <command_interface name="position"/>
+        <state_interface name="position"><param name="initial_value">0.0</param></state_interface>
+        <state_interface name="velocity"><param name="initial_value">0.0</param></state_interface>
+      </joint>
+      <joint name="upper_left_thumb_base">
+        <command_interface name="position"/>
+        <state_interface name="position"><param name="initial_value">0.0</param></state_interface>
+        <state_interface name="velocity"><param name="initial_value">0.0</param></state_interface>
+      </joint>
+      <joint name="upper_right_shoulder_pitch_joint">
+        <command_interface name="position"/>
+        <state_interface name="position"><param name="initial_value">0.0</param></state_interface>
+        <state_interface name="velocity"><param name="initial_value">0.0</param></state_interface>
+      </joint>
+      <joint name="upper_right_shoulder_roll_joint">
+        <command_interface name="position"/>
+        <state_interface name="position"><param name="initial_value">0.0</param></state_interface>
+        <state_interface name="velocity"><param name="initial_value">0.0</param></state_interface>
+      </joint>
+      <joint name="upper_right_elbow_joint">
+        <command_interface name="position"/>
+        <state_interface name="position"><param name="initial_value">0.0</param></state_interface>
+        <state_interface name="velocity"><param name="initial_value">0.0</param></state_interface>
+      </joint>
+      <joint name="upper_right_wrist_joint">
+        <command_interface name="position"/>
+        <state_interface name="position"><param name="initial_value">0.0</param></state_interface>
+        <state_interface name="velocity"><param name="initial_value">0.0</param></state_interface>
+      </joint>
+      <joint name="upper_right_thumb_base">
+        <command_interface name="position"/>
+        <state_interface name="position"><param name="initial_value">0.0</param></state_interface>
+        <state_interface name="velocity"><param name="initial_value">0.0</param></state_interface>
+      </joint>
+    </ros2_control>
+  </xacro:if>
 
-    <joint name="upper_right_shoulder_pitch_joint">
-      <command_interface name="position"/>
-      <state_interface name="position"><param name="initial_value">0.0</param></state_interface>
-      <state_interface name="velocity"><param name="initial_value">0.0</param></state_interface>
-    </joint>
-    <joint name="upper_right_shoulder_roll_joint">
-      <command_interface name="position"/>
-      <state_interface name="position"><param name="initial_value">0.0</param></state_interface>
-      <state_interface name="velocity"><param name="initial_value">0.0</param></state_interface>
-    </joint>
-    <joint name="upper_right_elbow_joint">
-      <command_interface name="position"/>
-      <state_interface name="position"><param name="initial_value">0.0</param></state_interface>
-      <state_interface name="velocity"><param name="initial_value">0.0</param></state_interface>
-    </joint>
-    <joint name="upper_right_wrist_joint">
-      <command_interface name="position"/>
-      <state_interface name="position"><param name="initial_value">0.0</param></state_interface>
-      <state_interface name="velocity"><param name="initial_value">0.0</param></state_interface>
-    </joint>
-    <joint name="upper_right_thumb_base">
-      <command_interface name="position"/>
-      <state_interface name="position"><param name="initial_value">0.0</param></state_interface>
-      <state_interface name="velocity"><param name="initial_value">0.0</param></state_interface>
-    </joint>
-  </ros2_control>
+  <xacro:unless value="$(arg use_mock_hardware)">
+    <!-- Diablo base: only wheels are exposed because hip/knee balance is
+         controlled internally by the official Diablo controller. -->
+    <xacro:if value="$(arg enable_base_hardware)">
+      <xacro:unless value="$(arg upper_only)">
+      <ros2_control name="DiabloBaseSystem" type="system">
+        <hardware>
+          <plugin>diablo_base_hardware/DiabloSystemHardware</plugin>
+          <param name="motion_cmd_topic">/diablo/MotionCmd</param>
+          <param name="motors_topic">/diablo/sensor/Motors</param>
+          <param name="wheel_radius">$(arg wheel_radius)</param>
+          <param name="track_width">$(arg track_width)</param>
+          <param name="left_feedback_sign">1.0</param>
+          <param name="right_feedback_sign">-1.0</param>
+          <param name="max_forward">1.0</param>
+          <param name="max_yaw_rate">1.0</param>
+          <param name="crawl_up">1.0</param>
+          <param name="feedback_timeout_ms">1000.0</param>
+        </hardware>
+        <joint name="left_wheel_joint">
+          <command_interface name="velocity"/>
+          <state_interface name="position"/>
+          <state_interface name="velocity"/>
+        </joint>
+        <joint name="right_wheel_joint">
+          <command_interface name="velocity"/>
+          <state_interface name="position"/>
+          <state_interface name="velocity"/>
+        </joint>
+      </ros2_control>
+      </xacro:unless>
+    </xacro:if>
+
+    <xacro:if value="$(arg enable_arm_hardware)">
+      <!-- U2D2-A: six arm actuators.  Neck IDs 11 and 12 intentionally remain
+           outside ros2_control because they are owned by human detection. -->
+      <ros2_control name="DiabloArmDynamixelSystem" type="system">
+      <hardware>
+        <plugin>dynamixel_hardware_interface/DynamixelHardware</plugin>
+        <param name="port_name">$(arg arm_port_name)</param>
+        <param name="baud_rate">$(arg baud_rate)</param>
+        <param name="number_of_joints">6</param>
+        <param name="number_of_transmissions">6</param>
+        <param name="error_timeout_ms">1000</param>
+        <param name="disable_torque_at_init">true</param>
+        <param name="dynamixel_model_folder">/param/dxl_model</param>
+        <param name="transmission_to_joint_matrix">1,0,0,0,0,0, 0,1,0,0,0,0, 0,0,1,0,0,0, 0,0,0,1,0,0, 0,0,0,0,1,0, 0,0,0,0,0,1</param>
+        <param name="joint_to_transmission_matrix">1,0,0,0,0,0, 0,1,0,0,0,0, 0,0,1,0,0,0, 0,0,0,1,0,0, 0,0,0,0,1,0, 0,0,0,0,0,1</param>
+        <param name="dynamixel_state_pub_msg_name">/diablo/arm/dynamixel_state</param>
+        <param name="get_dynamixel_data_srv_name">/diablo/arm/get_dxl_data</param>
+        <param name="set_dynamixel_data_srv_name">/diablo/arm/set_dxl_data</param>
+        <param name="reboot_dxl_srv_name">/diablo/arm/reboot_dxl</param>
+        <param name="set_dxl_torque_srv_name">/diablo/arm/set_dxl_torque</param>
+      </hardware>
+
+      <joint name="upper_right_shoulder_pitch_joint">
+        <command_interface name="position"/>
+        <state_interface name="position"/>
+        <state_interface name="velocity"/>
+        <state_interface name="effort"/>
+      </joint>
+      <joint name="upper_right_shoulder_roll_joint">
+        <command_interface name="position"/>
+        <state_interface name="position"/>
+        <state_interface name="velocity"/>
+        <state_interface name="effort"/>
+      </joint>
+      <joint name="upper_right_elbow_joint">
+        <command_interface name="position"/>
+        <state_interface name="position"/>
+        <state_interface name="velocity"/>
+        <state_interface name="effort"/>
+      </joint>
+      <joint name="upper_left_shoulder_pitch_joint">
+        <command_interface name="position"/>
+        <state_interface name="position"/>
+        <state_interface name="velocity"/>
+        <state_interface name="effort"/>
+      </joint>
+      <joint name="upper_left_shoulder_roll_joint">
+        <command_interface name="position"/>
+        <state_interface name="position"/>
+        <state_interface name="velocity"/>
+        <state_interface name="effort"/>
+      </joint>
+      <joint name="upper_left_elbow_joint">
+        <command_interface name="position"/>
+        <state_interface name="position"/>
+        <state_interface name="velocity"/>
+        <state_interface name="effort"/>
+      </joint>
+
+      <xacro:diablo_dynamixel_gpio gpio_name="dxl_right_shoulder_pitch" motor_id="1"/>
+      <xacro:diablo_dynamixel_gpio gpio_name="dxl_right_shoulder_roll" motor_id="2"/>
+      <xacro:diablo_dynamixel_gpio gpio_name="dxl_right_elbow" motor_id="3"/>
+      <xacro:diablo_dynamixel_gpio gpio_name="dxl_left_shoulder_pitch" motor_id="6"/>
+      <xacro:diablo_dynamixel_gpio gpio_name="dxl_left_shoulder_roll" motor_id="7"/>
+      <xacro:diablo_dynamixel_gpio gpio_name="dxl_left_elbow" motor_id="8"/>
+      </ros2_control>
+
+      <!-- U2D2-B: Seed Robotics hand actuators. -->
+      <ros2_control name="DiabloHandDynamixelSystem" type="system">
+      <hardware>
+        <plugin>dynamixel_hardware_interface/DynamixelHardware</plugin>
+        <param name="port_name">$(arg hand_port_name)</param>
+        <param name="baud_rate">$(arg baud_rate)</param>
+        <param name="number_of_joints">4</param>
+        <param name="number_of_transmissions">4</param>
+        <param name="error_timeout_ms">1000</param>
+        <param name="disable_torque_at_init">true</param>
+        <param name="dynamixel_model_folder">/param/dxl_model</param>
+        <param name="transmission_to_joint_matrix">1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1</param>
+        <param name="joint_to_transmission_matrix">1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1</param>
+        <param name="dynamixel_state_pub_msg_name">/diablo/hand/dynamixel_state</param>
+        <param name="get_dynamixel_data_srv_name">/diablo/hand/get_dxl_data</param>
+        <param name="set_dynamixel_data_srv_name">/diablo/hand/set_dxl_data</param>
+        <param name="reboot_dxl_srv_name">/diablo/hand/reboot_dxl</param>
+        <param name="set_dxl_torque_srv_name">/diablo/hand/set_dxl_torque</param>
+      </hardware>
+
+      <joint name="upper_right_wrist_joint">
+        <command_interface name="position"/>
+        <state_interface name="position"/>
+        <state_interface name="velocity"/>
+        <state_interface name="effort"/>
+      </joint>
+      <joint name="upper_right_thumb_base">
+        <command_interface name="position"/>
+        <state_interface name="position"/>
+        <state_interface name="velocity"/>
+        <state_interface name="effort"/>
+      </joint>
+      <joint name="upper_left_wrist_joint">
+        <command_interface name="position"/>
+        <state_interface name="position"/>
+        <state_interface name="velocity"/>
+        <state_interface name="effort"/>
+      </joint>
+      <joint name="upper_left_thumb_base">
+        <command_interface name="position"/>
+        <state_interface name="position"/>
+        <state_interface name="velocity"/>
+        <state_interface name="effort"/>
+      </joint>
+
+      <xacro:diablo_dynamixel_gpio gpio_name="dxl_right_wrist" motor_id="4"/>
+      <xacro:diablo_dynamixel_gpio gpio_name="dxl_right_thumb" motor_id="5"/>
+      <xacro:diablo_dynamixel_gpio gpio_name="dxl_left_wrist" motor_id="9"/>
+      <xacro:diablo_dynamixel_gpio gpio_name="dxl_left_thumb" motor_id="10"/>
+      </ros2_control>
+    </xacro:if>
+  </xacro:unless>
 
 </robot>

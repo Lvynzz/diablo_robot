@@ -15,6 +15,12 @@ Lokasi: sikut kanan,
 Resting position value: 177.8
 Orientasi Positif: Depan robot
 
+ID4:
+Lokasi: pergelangan tangan kanan / wrist kanan.
+
+ID5:
+Lokasi: ibu jari kanan / thumb kanan.
+
 ID6: 
 Lokasi: bahu kiri, 
 Resting position value: 184.7
@@ -30,8 +36,21 @@ Lokasi: sikut kiri,
 Resting position value: 172.7
 Orientasi Positif: belakang robot
 
+ID9:
+Lokasi: pergelangan tangan kiri / wrist kiri.
+
+ID10:
+Lokasi: ibu jari kiri / thumb kiri.
+
 ID11: 
 Lokasi: leher, 
 Resting position value: -44.2
 Orientasi Positif: kiri robot / ccw
 
+ID12:
+Lokasi: leher (gerak atas/bawah).
+
+Bus:
+U2D2-A: ID 1,2,3,6,7,8,11,12; default port /dev/ttyUSB1.
+U2D2-B: ID 4,5,9,10 (Seed Robotics hands); default port /dev/ttyUSB2.
+BaudRate kedua bus: 1000000 bps.

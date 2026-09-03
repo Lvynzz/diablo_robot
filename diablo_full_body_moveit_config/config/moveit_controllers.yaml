@@ -8,24 +8,25 @@ moveit_controller_manager: moveit_simple_controller_manager/MoveItSimpleControll
 
 moveit_simple_controller_manager:
   controller_names:
-    - diablo_full_body_controller
+    - left_arm_controller
+    - right_arm_controller
 
-  diablo_full_body_controller:
+  left_arm_controller:
     type: FollowJointTrajectory
     action_ns: follow_joint_trajectory
     default: true
     joints:
-      - left_fake_hip_joint
-      - left_fake_knee_joint
-      - left_wheel_joint
-      - right_fake_hip_joint
-      - right_fake_knee_joint
-      - right_wheel_joint
       - upper_left_shoulder_pitch_joint
       - upper_left_shoulder_roll_joint
       - upper_left_elbow_joint
       - upper_left_wrist_joint
       - upper_left_thumb_base
+
+  right_arm_controller:
+    type: FollowJointTrajectory
+    action_ns: follow_joint_trajectory
+    default: false
+    joints:
       - upper_right_shoulder_pitch_joint
       - upper_right_shoulder_roll_joint
       - upper_right_elbow_joint

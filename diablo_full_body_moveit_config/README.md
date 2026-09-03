@@ -1,9 +1,8 @@
-# MoveIt full-body Diablo — panduan simulasi
+# MoveIt full-body Diablo — simulasi dan hardware
 
 Package ini menjalankan model full-body Diablo secara mandiri di `diablo_ws`.
-Package ini tidak membutuhkan `diablopc_ws`, tidak membuka port serial, dan
-tidak menggerakkan robot fisik. Controller yang dipakai adalah
-`mock_components/GenericSystem`, sehingga aman untuk menguji plan dan execute.
+Demo `demo.launch.py` memakai `mock_components/GenericSystem`, sedangkan
+`full_body_hardware.launch.py` memakai plugin hardware nyata.
 
 ## 1. Build
 
@@ -14,6 +13,8 @@ cd ~/diablo_ws
 source /opt/ros/humble/setup.bash
 colcon build --symlink-install \
   --packages-select \
+  diablo_base_hardware \
+  diablo_goal_controller \
   diablo_full_body_description \
   diablo_moveit_bridge \
   diablo_full_body_moveit_config
@@ -29,7 +30,93 @@ source ~/diablo_ws/install/setup.bash
 
 Jangan source `diablopc_ws` untuk demo ini.
 
-## 2. Jalankan MoveIt dan RViz
+## 2. Uji Step 3 di robot
+
+Perubahan dari workspace development harus disalin dahulu ke
+`/home/diablo/diablo_ws`. Jalankan build di robot:
+
+```bash
+cd /home/diablo/diablo_ws
+source /opt/ros/humble/setup.bash
+colcon build --symlink-install \
+  --packages-select \
+  diablo_base_hardware \
+  diablo_goal_controller \
+  diablo_full_body_description \
+  diablo_full_body_moveit_config
+source install/setup.bash
+```
+
+Pastikan driver resmi `diablo_ctrl_node` sudah berjalan satu kali dan jangan
+membuka port U2D2 yang sama dari proses lain.
+
+Jika driver belum berjalan, jalankan di terminal robot terpisah:
+
+```bash
+source /opt/ros/humble/setup.bash
+source /home/diablo/diablo_ws/install/setup.bash
+ros2 run diablo_ctrl diablo_ctrl_node
+```
+
+Pertama, uji mode crawling dan command vehicle langsung tanpa ros2_control.
+Pastikan robot berada di lantai, area bebas, dan emergency stop siap:
+
+```bash
+ros2 topic pub --once /diablo/MotionCmd motion_msgs/msg/MotionCtrl \
+  "{mode_mark: true, value: {up: 1.0}, mode: {pitch_ctrl_mode: false, roll_ctrl_mode: false, height_ctrl_mode: false, stand_mode: false, jump_mode: false, split_mode: false}}"
+ros2 topic pub --once /diablo/MotionCmd motion_msgs/msg/MotionCtrl \
+  "{mode_mark: false, value: {forward: 0.0, left: 0.0, up: 1.0, roll: 0.0, pitch: 0.0, leg_split: 0.0}}"
+```
+
+Setelah uji terisolasi berhasil, launch hardware lengkap dengan kedua U2D2:
+
+```bash
+ros2 launch diablo_full_body_moveit_config full_body_hardware.launch.py \
+  use_mock_hardware:=false \
+  arm_port_name:=/dev/ttyUSB1 \
+  hand_port_name:=/dev/ttyUSB2 \
+  start_move_group:=false
+```
+
+Jika udev rule sudah membuat nama tetap, ganti dua argumen port dengan nama
+tersebut. Jangan menjalankan dua node yang membuka U2D2 yang sama.
+
+Untuk menguji adapter base saja (tidak membuka U2D2-A/B untuk lengan),
+gunakan terminal lain:
+
+```bash
+ros2 launch diablo_full_body_moveit_config full_body_hardware.launch.py \
+  use_mock_hardware:=false \
+  enable_arm_hardware:=false \
+  enable_base_hardware:=true \
+  start_arm_controllers:=false \
+  start_base_controller:=true \
+  start_move_group:=false
+```
+
+Di terminal ketiga, pantau command yang diterjemahkan:
+
+```bash
+ros2 topic echo /diablo/MotionCmd
+```
+
+Di terminal keempat, beri kecepatan sangat rendah selama sekitar dua detik dan
+hentikan publisher dengan `Ctrl-C`:
+
+```bash
+ros2 topic pub -r 5 /cmd_vel geometry_msgs/msg/Twist \
+  "{linear: {x: 0.05}, angular: {z: 0.0}}"
+```
+
+Setelah itu, laporkan apakah robot tetap crawling, bergerak lurus, dan apakah
+`/odom` serta feedback roda masuk akal:
+
+```bash
+ros2 topic echo /odom --once
+ros2 topic echo /diablo/sensor/Motors --once
+```
+
+## 4. Jalankan MoveIt dan RViz
 
 Di Terminal 1:
 
@@ -42,8 +129,9 @@ ros2 launch diablo_full_body_moveit_config demo.launch.py
 Tunggu sampai log berikut muncul:
 
 ```text
-Configured and activated joint_state_broadcaster
-Configured and activated diablo_full_body_controller
+Configured and activated `joint_state_broadcaster`, `diablo_base_controller`,
+`left_arm_controller`, and `right_arm_controller`
+
 You can start planning now!
 ```
 
@@ -53,7 +141,7 @@ Untuk menjalankan tanpa RViz:
 ros2 launch diablo_full_body_moveit_config demo.launch.py use_rviz:=false
 ```
 
-## 3. Group yang tersedia
+## 5. Group yang tersedia
 
 | Group | Fungsi |
 |---|---|
@@ -68,7 +156,7 @@ shoulder pitch, shoulder roll, dan elbow. Solver IK memakai KDL dengan
 ditegakkan. Group `full_body` tidak memiliki satu rantai serial, jadi group
 ini tidak digunakan untuk pose IK.
 
-## 4. Plan dan execute dari RViz
+## 6. Plan dan execute dari RViz
 
 Pada panel `MotionPlanning` di RViz:
 
@@ -76,18 +164,18 @@ Pada panel `MotionPlanning` di RViz:
 2. Pilih pose goal atau gunakan marker goal jika tersedia.
 3. Tekan `Plan` untuk membuat trajectory.
 4. Tekan `Execute` atau `Plan & Execute` untuk mengirim trajectory ke
-   `diablo_full_body_controller`.
+   `left_arm_controller` atau `right_arm_controller` sesuai sisi target.
 
 Mode `full_body` digunakan untuk joint-space planning, bukan untuk marker IK
 tangan. Mesh robot tidak digerakkan dengan cara drag langsung; yang digeser
 adalah interactive marker goal milik MotionPlanning.
 
-## 5. Kirim koordinat melalui IK
+## 7. Kirim koordinat melalui IK
 
 Cara ini adalah cara yang paling jelas untuk mengirim target koordinat.
 Koordinat menggunakan satuan meter dan frame `torso_link`.
 
-### 5.1 Jalankan bridge IK
+### 7.1 Jalankan bridge IK
 
 Di Terminal 2, setelah Terminal 1 aktif:
 
@@ -106,7 +194,7 @@ ros2 launch diablo_full_body_moveit_config ik_pose_bridge.launch.py \
   execute:=false
 ```
 
-### 5.2 Kirim target lengan kiri
+### 7.2 Kirim target lengan kiri
 
 Di Terminal 3:
 
@@ -127,7 +215,7 @@ IK succeeded for joints: ...
 MoveIt request executed successfully
 ```
 
-### 5.3 Kirim target lengan kanan
+### 7.3 Kirim target lengan kanan
 
 Hentikan bridge kiri dengan `Ctrl+C`, lalu jalankan di Terminal 2:
 
@@ -145,7 +233,7 @@ ros2 topic pub --once /diablo/ik_target geometry_msgs/msg/PoseStamped \
   "{header: {frame_id: torso_link}, pose: {position: {x: 0.033, y: -0.338, z: 0.152}, orientation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}}}"
 ```
 
-## 6. Cek hasil IK dan controller
+## 8. Cek hasil IK dan controller
 
 Daftar topic dan service yang berguna:
 
@@ -164,7 +252,7 @@ Jika tidak ada gerakan, periksa hal berikut:
 - Gunakan `left_manipulator` atau `right_manipulator`, bukan `full_body`, untuk
   target pose IK.
 
-## 7. MoveIt Setup Assistant
+## 9. MoveIt Setup Assistant
 
 File URDF/Xacro standalone yang dipakai adalah:
 
@@ -181,7 +269,7 @@ ros2 run moveit_setup_assistant moveit_setup_assistant \
   --urdf_path "$(ros2 pkg prefix diablo_full_body_description)/share/diablo_full_body_description/description/urdf/diablo_full_body.urdf.xacro"
 ```
 
-## 8. Catatan warna merah di RViz
+## 10. Catatan warna merah di RViz
 
 URDF standalone tidak mendefinisikan material merah. Jika link terlihat merah,
 MoveIt biasanya sedang menampilkan link yang dianggap collision. Di display

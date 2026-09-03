@@ -36,8 +36,8 @@ untuk roda dan dua instance `dynamixel_hardware_interface` untuk U2D2-A/B.
 Mapping hardware upper-body:
 
 ```text
-U2D2-A (/dev/ttyUSB1): IDs 1,2,3,6,7,8 untuk lengan.
-U2D2-B (/dev/ttyUSB2): IDs 4,5,9,10 untuk wrist/thumb Seed Robotics.
+U2D2-A (/dev/u2d2_arm): IDs 1,2,3,6,7,8 untuk lengan.
+U2D2-B (/dev/u2d2_hand): IDs 4,5,9,10 untuk wrist/thumb Seed Robotics.
 IDs 11,12 untuk leher tidak dimiliki ros2_control karena dipakai human detection.
 Baudrate kedua bus: 1000000.
 ```

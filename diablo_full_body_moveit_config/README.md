@@ -73,8 +73,8 @@ Setelah uji terisolasi berhasil, launch hardware lengkap dengan kedua U2D2:
 ```bash
 ros2 launch diablo_full_body_moveit_config full_body_hardware.launch.py \
   use_mock_hardware:=false \
-  arm_port_name:=/dev/ttyUSB1 \
-  hand_port_name:=/dev/ttyUSB2 \
+  arm_port_name:=/dev/u2d2_arm \
+  hand_port_name:=/dev/u2d2_hand \
   start_move_group:=false
 ```
 

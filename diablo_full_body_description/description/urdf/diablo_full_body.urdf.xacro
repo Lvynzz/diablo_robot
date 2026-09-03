@@ -13,8 +13,8 @@
 <xacro:arg name="use_mock_hardware" default="true"/>
 <xacro:arg name="enable_base_hardware" default="true"/>
 <xacro:arg name="enable_arm_hardware" default="true"/>
-<xacro:arg name="arm_port_name" default="/dev/ttyUSB1"/>
-<xacro:arg name="hand_port_name" default="/dev/ttyUSB2"/>
+<xacro:arg name="arm_port_name" default="/dev/u2d2_arm"/>
+<xacro:arg name="hand_port_name" default="/dev/u2d2_hand"/>
 <xacro:arg name="baud_rate" default="1000000"/>
 <xacro:arg name="wheel_radius" default="0.105"/>
 <xacro:arg name="track_width" default="0.3751"/>

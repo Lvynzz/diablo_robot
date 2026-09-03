@@ -166,12 +166,12 @@ def generate_launch_description():
         ),
         DeclareLaunchArgument(
             "arm_port_name",
-            default_value="/dev/ttyUSB1",
+            default_value="/dev/u2d2_arm",
             description="U2D2-A port for arm Dynamixels",
         ),
         DeclareLaunchArgument(
             "hand_port_name",
-            default_value="/dev/ttyUSB2",
+            default_value="/dev/u2d2_hand",
             description="U2D2-B port for Seed Robotics hand Dynamixels",
         ),
         DeclareLaunchArgument("baud_rate", default_value="1000000"),

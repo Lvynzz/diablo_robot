@@ -51,6 +51,7 @@ ID12:
 Lokasi: leher (gerak atas/bawah).
 
 Bus:
-U2D2-A: ID 1,2,3,6,7,8,11,12; default port /dev/ttyUSB1.
-U2D2-B: ID 4,5,9,10 (Seed Robotics hands); default port /dev/ttyUSB2.
+Controller bawah: default port /dev/diablo_controller (symlink ke board Diablo).
+U2D2-A: ID 1,2,3,6,7,8,11,12; default port /dev/u2d2_arm.
+U2D2-B: ID 4,5,9,10 (Seed Robotics hands); default port /dev/u2d2_hand.
 BaudRate kedua bus: 1000000 bps.

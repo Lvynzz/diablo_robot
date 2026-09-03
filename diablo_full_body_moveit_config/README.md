@@ -104,15 +104,15 @@ Di terminal keempat, beri kecepatan sangat rendah selama sekitar dua detik dan
 hentikan publisher dengan `Ctrl-C`:
 
 ```bash
-ros2 topic pub -r 5 /cmd_vel geometry_msgs/msg/Twist \
+ros2 topic pub -r 5 /diablo_base_controller/cmd_vel_unstamped geometry_msgs/msg/Twist \
   "{linear: {x: 0.05}, angular: {z: 0.0}}"
 ```
 
 Setelah itu, laporkan apakah robot tetap crawling, bergerak lurus, dan apakah
-`/odom` serta feedback roda masuk akal:
+`/diablo_base_controller/odom` serta feedback roda masuk akal:
 
 ```bash
-ros2 topic echo /odom --once
+ros2 topic echo /diablo_base_controller/odom --once
 ros2 topic echo /diablo/sensor/Motors --once
 ```
 

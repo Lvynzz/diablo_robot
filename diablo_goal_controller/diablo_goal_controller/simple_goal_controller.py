@@ -24,8 +24,13 @@ class SimpleGoalController(Node):
         self.declare_parameter("linear_gain", 0.8)
         self.declare_parameter("angular_gain", 1.5)
         self.declare_parameter("rotate_in_place_threshold", 0.60)
-        self.declare_parameter("cmd_vel_topic", "/cmd_vel")
-        self.declare_parameter("odom_topic", "/odom")
+        # Humble's diff_drive_controller exposes relative topics below its
+        # controller namespace.  Keep these defaults aligned with the
+        # controller spawned by full_body_hardware.launch.py.
+        self.declare_parameter(
+            "cmd_vel_topic", "/diablo_base_controller/cmd_vel_unstamped"
+        )
+        self.declare_parameter("odom_topic", "/diablo_base_controller/odom")
 
         self.goal_x = float(self.get_parameter("goal_x").value)
         self.goal_y = float(self.get_parameter("goal_y").value)

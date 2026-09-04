@@ -21,5 +21,6 @@ timeout are hardware parameters in the URDF.
 
 On activation the adapter sends one `mode_mark=true`, `stand_mode=false`
 message so the official driver requests crawling mode.  During operation it
-sends vehicle-level motion commands every control cycle; deactivation sends a
-zero command.
+sends vehicle-level motion commands at 25 Hz by default, matching the official
+teleop rate and avoiding unnecessary serial traffic; the ros2_control loop can
+run faster for feedback and odometry.  Deactivation sends a zero command.

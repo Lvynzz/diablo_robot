@@ -1243,6 +1243,7 @@
           <param name="max_forward">1.0</param>
           <param name="max_yaw_rate">1.0</param>
           <param name="crawl_up">1.0</param>
+          <param name="command_publish_rate">25.0</param>
           <param name="feedback_timeout_ms">1000.0</param>
         </hardware>
         <joint name="left_wheel_joint">

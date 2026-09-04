@@ -122,6 +122,16 @@ hardware_interface::CallbackReturn DiabloSystemHardware::on_init(
   crawl_up_ = parameter_as_double(info_, "crawl_up", crawl_up_, logger);
   feedback_timeout_ms_ = parameter_as_double(
     info_, "feedback_timeout_ms", feedback_timeout_ms_, logger);
+  command_publish_rate_ = parameter_as_double(
+    info_, "command_publish_rate", command_publish_rate_, logger);
+
+  if (!std::isfinite(command_publish_rate_) || command_publish_rate_ <= 0.0) {
+    RCLCPP_WARN(
+      logger,
+      "command_publish_rate must be positive; using %.1f Hz",
+      25.0);
+    command_publish_rate_ = 25.0;
+  }
 
   if (!std::isfinite(wheel_radius_) || wheel_radius_ <= 0.0 ||
     !std::isfinite(track_width_) || track_width_ <= 0.0)
@@ -146,8 +156,9 @@ hardware_interface::CallbackReturn DiabloSystemHardware::on_init(
     motion_cmd_topic_.c_str(), motors_topic_.c_str(), wheel_radius_, track_width_);
   RCLCPP_INFO(
     logger,
-    "Feedback signs: left=%.1f, right=%.1f; command limits: forward=%.3f, yaw=%.3f",
-    left_feedback_sign_, right_feedback_sign_, max_forward_, max_yaw_rate_);
+    "Feedback signs: left=%.1f, right=%.1f; command limits: forward=%.3f, yaw=%.3f; publish rate=%.1f Hz",
+    left_feedback_sign_, right_feedback_sign_, max_forward_, max_yaw_rate_,
+    command_publish_rate_);
 
   return hardware_interface::CallbackReturn::SUCCESS;
 }
@@ -183,6 +194,7 @@ hardware_interface::CallbackReturn DiabloSystemHardware::on_activate(
 {
   std::fill(commands_.begin(), commands_.end(), 0.0);
   active_ = true;
+  command_publish_initialized_ = false;
   publish_crawl_command();
   RCLCPP_INFO(node_->get_logger(), "Diablo base activated; crawl-mode command sent once");
   return hardware_interface::CallbackReturn::SUCCESS;
@@ -194,6 +206,7 @@ hardware_interface::CallbackReturn DiabloSystemHardware::on_deactivate(
   if (node_ && rclcpp::ok()) {
     publish_motion_command(0.0, 0.0);
   }
+  command_publish_initialized_ = false;
   active_ = false;
   return hardware_interface::CallbackReturn::SUCCESS;
 }
@@ -266,9 +279,19 @@ hardware_interface::return_type DiabloSystemHardware::write(
   const double angular = wheel_radius_ *
     (right_wheel_velocity - left_wheel_velocity) / track_width_;
 
+  const auto now = std::chrono::steady_clock::now();
+  const double publish_period = 1.0 / command_publish_rate_;
+  if (command_publish_initialized_ &&
+    std::chrono::duration<double>(now - last_command_publish_time_).count() < publish_period)
+  {
+    return hardware_interface::return_type::OK;
+  }
+
   publish_motion_command(
     clamp_symmetric(linear, max_forward_),
     clamp_symmetric(angular, max_yaw_rate_));
+  last_command_publish_time_ = now;
+  command_publish_initialized_ = true;
   return hardware_interface::return_type::OK;
 }
 

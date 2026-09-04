@@ -1,6 +1,7 @@
 #ifndef DIABLO_BASE_HARDWARE__DIABLO_SYSTEM_HARDWARE_HPP_
 #define DIABLO_BASE_HARDWARE__DIABLO_SYSTEM_HARDWARE_HPP_
 
+#include <chrono>
 #include <cstddef>
 #include <memory>
 #include <mutex>
@@ -96,6 +97,9 @@ private:
   double max_yaw_rate_{1.0};
   double crawl_up_{1.0};
   double feedback_timeout_ms_{1000.0};
+  double command_publish_rate_{25.0};
+  std::chrono::steady_clock::time_point last_command_publish_time_{};
+  bool command_publish_initialized_{false};
   bool active_{false};
 };
 

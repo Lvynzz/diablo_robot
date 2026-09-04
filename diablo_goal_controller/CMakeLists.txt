@@ -3,9 +3,10 @@ project(diablo_goal_controller)
 
 find_package(ament_cmake REQUIRED)
 
-install(PROGRAMS
-  diablo_goal_controller/simple_goal_controller.py
-  DESTINATION lib/${PROJECT_NAME}
-)
+  install(PROGRAMS
+    diablo_goal_controller/simple_goal_controller.py
+    DESTINATION lib/${PROJECT_NAME}
+    RENAME simple_goal_controller
+  )
 
 ament_package()

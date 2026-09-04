@@ -8,6 +8,7 @@ from nav_msgs.msg import Odometry
 from rcl_interfaces.msg import SetParametersResult
 from rclpy.executors import ExternalShutdownException
 from rclpy.node import Node
+from rclpy.qos import qos_profile_sensor_data
 
 
 class SimpleGoalController(Node):
@@ -49,7 +50,7 @@ class SimpleGoalController(Node):
         odom_topic = str(self.get_parameter("odom_topic").value)
         self.cmd_vel_publisher = self.create_publisher(Twist, cmd_vel_topic, 10)
         self.odom_subscription = self.create_subscription(
-            Odometry, odom_topic, self.odom_callback, 10
+            Odometry, odom_topic, self.odom_callback, qos_profile_sensor_data
         )
         self.timer = self.create_timer(0.05, self.control_cycle)
         self.add_on_set_parameters_callback(self.parameters_callback)
@@ -60,6 +61,7 @@ class SimpleGoalController(Node):
         self.last_odom_time = None
         self.goal_reported = False
         self.no_odom_reported = False
+        self.odom_received_reported = False
 
         self.get_logger().info(
             f"Goal ({self.goal_x:.3f}, {self.goal_y:.3f}), "
@@ -96,6 +98,12 @@ class SimpleGoalController(Node):
         self.yaw = math.atan2(sin_yaw, cos_yaw)
         self.last_odom_time = self.get_clock().now()
         self.no_odom_reported = False
+        if not self.odom_received_reported:
+            self.get_logger().info(
+                f"Odometry received at ({self.x:.3f}, {self.y:.3f}), "
+                f"yaw {self.yaw:.3f} rad"
+            )
+            self.odom_received_reported = True
 
     def publish_stop(self):
         if rclpy.ok():

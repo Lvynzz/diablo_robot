@@ -6,6 +6,7 @@ import rclpy
 from geometry_msgs.msg import Twist
 from nav_msgs.msg import Odometry
 from rcl_interfaces.msg import SetParametersResult
+from rclpy.executors import ExternalShutdownException
 from rclpy.node import Node
 
 
@@ -61,10 +62,8 @@ class SimpleGoalController(Node):
         self.no_odom_reported = False
 
         self.get_logger().info(
-            "Goal (%.3f, %.3f), tolerance %.3f m; waiting for odometry",
-            self.goal_x,
-            self.goal_y,
-            self.goal_tolerance,
+            f"Goal ({self.goal_x:.3f}, {self.goal_y:.3f}), "
+            f"tolerance {self.goal_tolerance:.3f} m; waiting for odometry"
         )
 
     @staticmethod
@@ -99,7 +98,8 @@ class SimpleGoalController(Node):
         self.no_odom_reported = False
 
     def publish_stop(self):
-        self.cmd_vel_publisher.publish(Twist())
+        if rclpy.ok():
+            self.cmd_vel_publisher.publish(Twist())
 
     def control_cycle(self):
         if self.last_odom_time is None:
@@ -113,7 +113,7 @@ class SimpleGoalController(Node):
         if self.odom_timeout > 0.0 and odom_age > self.odom_timeout:
             self.publish_stop()
             self.get_logger().error(
-                "Odometry is stale (%.2f s); publishing zero cmd_vel", odom_age
+                f"Odometry is stale ({odom_age:.2f} s); publishing zero cmd_vel"
             )
             return
 
@@ -124,7 +124,7 @@ class SimpleGoalController(Node):
             self.publish_stop()
             if not self.goal_reported:
                 self.get_logger().info(
-                    "Goal reached at (%.3f, %.3f)", self.x, self.y
+                    f"Goal reached at ({self.x:.3f}, {self.y:.3f})"
                 )
                 self.goal_reported = True
             return
@@ -154,12 +154,13 @@ def main(args=None):
     node = SimpleGoalController()
     try:
         rclpy.spin(node)
-    except KeyboardInterrupt:
+    except (KeyboardInterrupt, ExternalShutdownException):
         pass
     finally:
         node.stop()
         node.destroy_node()
-        rclpy.shutdown()
+        if rclpy.ok():
+            rclpy.shutdown()
 
 
 if __name__ == "__main__":

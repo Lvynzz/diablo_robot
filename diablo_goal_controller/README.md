@@ -5,7 +5,10 @@
 `/diablo_base_controller/cmd_vel_unstamped` for a single planar `(x, y)` goal.
 It rotates in place when the heading error is large, then drives forward with
 a small heading correction.  It stops when the goal tolerance is reached or
-odometry becomes stale.
+odometry becomes stale.  By default, the first odometry sample received after
+startup is treated as `(0, 0, 0)`, so goals are relative to the robot's startup
+pose and heading.  Use `-p reset_odom_on_start:=false` to use the odometry
+coordinates as published by `diff_drive_controller`.
 
 Example:
 

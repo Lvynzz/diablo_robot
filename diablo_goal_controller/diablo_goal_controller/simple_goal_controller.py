@@ -26,6 +26,7 @@ class SimpleGoalController(Node):
         self.declare_parameter("linear_gain", 0.8)
         self.declare_parameter("angular_gain", 1.5)
         self.declare_parameter("rotate_in_place_threshold", 0.60)
+        self.declare_parameter("reset_odom_on_start", True)
         # Humble's diff_drive_controller exposes relative topics below its
         # controller namespace.  Keep these defaults aligned with the
         # controller spawned by full_body_hardware.launch.py.
@@ -45,6 +46,9 @@ class SimpleGoalController(Node):
         self.rotate_in_place_threshold = float(
             self.get_parameter("rotate_in_place_threshold").value
         )
+        self.reset_odom_on_start = bool(
+            self.get_parameter("reset_odom_on_start").value
+        )
 
         cmd_vel_topic = str(self.get_parameter("cmd_vel_topic").value)
         odom_topic = str(self.get_parameter("odom_topic").value)
@@ -62,10 +66,15 @@ class SimpleGoalController(Node):
         self.goal_reported = False
         self.no_odom_reported = False
         self.odom_received_reported = False
+        self.odom_origin_set = False
+        self.odom_origin_x = 0.0
+        self.odom_origin_y = 0.0
+        self.odom_origin_yaw = 0.0
 
         self.get_logger().info(
             f"Goal ({self.goal_x:.3f}, {self.goal_y:.3f}), "
-            f"tolerance {self.goal_tolerance:.3f} m; waiting for odometry"
+            f"tolerance {self.goal_tolerance:.3f} m; "
+            f"reset_odom_on_start={self.reset_odom_on_start}; waiting for odometry"
         )
 
     @staticmethod
@@ -89,20 +98,46 @@ class SimpleGoalController(Node):
         return SetParametersResult(successful=True)
 
     def odom_callback(self, message):
-        self.x = message.pose.pose.position.x
-        self.y = message.pose.pose.position.y
+        raw_x = message.pose.pose.position.x
+        raw_y = message.pose.pose.position.y
 
         orientation = message.pose.pose.orientation
         sin_yaw = 2.0 * (orientation.w * orientation.z + orientation.x * orientation.y)
         cos_yaw = 1.0 - 2.0 * (orientation.y * orientation.y + orientation.z * orientation.z)
-        self.yaw = math.atan2(sin_yaw, cos_yaw)
+        raw_yaw = math.atan2(sin_yaw, cos_yaw)
+
+        if self.reset_odom_on_start:
+            if not self.odom_origin_set:
+                self.odom_origin_x = raw_x
+                self.odom_origin_y = raw_y
+                self.odom_origin_yaw = raw_yaw
+                self.odom_origin_set = True
+
+            delta_x = raw_x - self.odom_origin_x
+            delta_y = raw_y - self.odom_origin_y
+            origin_cos = math.cos(self.odom_origin_yaw)
+            origin_sin = math.sin(self.odom_origin_yaw)
+            self.x = origin_cos * delta_x + origin_sin * delta_y
+            self.y = -origin_sin * delta_x + origin_cos * delta_y
+            self.yaw = self.normalize_angle(raw_yaw - self.odom_origin_yaw)
+        else:
+            self.x = raw_x
+            self.y = raw_y
+            self.yaw = raw_yaw
+
         self.last_odom_time = self.get_clock().now()
         self.no_odom_reported = False
         if not self.odom_received_reported:
-            self.get_logger().info(
-                f"Odometry received at ({self.x:.3f}, {self.y:.3f}), "
-                f"yaw {self.yaw:.3f} rad"
-            )
+            if self.reset_odom_on_start:
+                self.get_logger().info(
+                    f"Odometry origin set from ({raw_x:.3f}, {raw_y:.3f}), "
+                    f"yaw {raw_yaw:.3f} rad; controller pose reset to (0, 0, 0)"
+                )
+            else:
+                self.get_logger().info(
+                    f"Odometry received at ({self.x:.3f}, {self.y:.3f}), "
+                    f"yaw {self.yaw:.3f} rad"
+                )
             self.odom_received_reported = True
 
     def publish_stop(self):

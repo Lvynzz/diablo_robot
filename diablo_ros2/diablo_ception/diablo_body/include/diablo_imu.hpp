@@ -1,6 +1,7 @@
 #pragma once
 
 #include <chrono>
+#include <string>
 #include "rclcpp/rclcpp.hpp"
 #include <sensor_msgs/msg/imu.hpp>
 #include "ception_msgs/msg/imu_euler.hpp"
@@ -19,6 +20,7 @@ private:
     builtin_interfaces::msg::Time                                imu_timestamp;
     rclcpp::Publisher<sensor_msgs::msg::Imu>::SharedPtr         imu_Publisher_;
     rclcpp::Publisher<ception_msgs::msg::IMUEuler>::SharedPtr euler_Publisher_;
+    std::string imu_frame_id_;
 
 public:
     diablo_imu_publisher(rclcpp::Node::SharedPtr node_ptr,DIABLO::OSDK::Vehicle* vehicle);
@@ -27,6 +29,5 @@ public:
     void imu_pub_init(void);
     void lazyPublisher(void);
 };
-
 
 

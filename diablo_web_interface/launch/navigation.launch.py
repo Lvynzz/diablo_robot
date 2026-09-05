@@ -51,7 +51,14 @@ def generate_launch_description():
         DeclareLaunchArgument("params_file", default_value=default_params),
         DeclareLaunchArgument("map", default_value=default_map),
         DeclareLaunchArgument("use_sim_time", default_value="false"),
-        DeclareLaunchArgument("enable_wheel_odom", default_value="true"),
+        DeclareLaunchArgument(
+            "enable_wheel_odom",
+            default_value="false",
+            description=(
+                "Start legacy standalone wheel odometry. Keep false when "
+                "full_body_hardware.launch.py provides EKF odometry."
+            ),
+        ),
         DeclareLaunchArgument("enable_mux", default_value="true"),
         DeclareLaunchArgument("mux_default_mode", default_value="auto"),
         DeclareLaunchArgument(
@@ -62,9 +69,9 @@ def generate_launch_description():
         ),
         DeclareLaunchArgument("nav_cmd_topic", default_value="/cmd_vel_smoothed"),
         DeclareLaunchArgument("motor_topic", default_value="/diablo/sensor/Motors"),
-        DeclareLaunchArgument("odom_topic", default_value="/odom"),
+        DeclareLaunchArgument("odom_topic", default_value="/odometry/filtered"),
         DeclareLaunchArgument("odom_frame", default_value="odom"),
-        DeclareLaunchArgument("base_frame", default_value="base_link"),
+        DeclareLaunchArgument("base_frame", default_value="diablo_base_link"),
         DeclareLaunchArgument("scan_topic", default_value="/scan"),
         DeclareLaunchArgument("wheel_radius", default_value="0.105"),
         DeclareLaunchArgument("track_width", default_value="0.3751"),

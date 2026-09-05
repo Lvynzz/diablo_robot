@@ -34,8 +34,33 @@ def _launch_setup(context):
         "baud_rate": LaunchConfiguration("baud_rate").perform(context),
         "wheel_radius": LaunchConfiguration("wheel_radius").perform(context),
         "track_width": LaunchConfiguration("track_width").perform(context),
+        "use_ekf": LaunchConfiguration("use_ekf").perform(context),
     }
     robot_description = xacro.process_file(xacro_file, mappings=mappings).toxml()
+
+    use_ekf_active = (
+        mappings["use_ekf"].lower() == "true"
+        and mappings["enable_base_hardware"].lower() == "true"
+        and LaunchConfiguration("start_base_controller").perform(context).lower() == "true"
+        and mappings["upper_only"].lower() != "true"
+    )
+
+    controller_parameters = [controllers_file]
+    localization_share = None
+    if use_ekf_active:
+        localization_share = get_package_share_directory("diablo_localization")
+        ekf_controllers_file = os.path.join(
+            moveit_share, "config", "ros2_controllers_ekf.yaml"
+        )
+        ekf_params_file = LaunchConfiguration("ekf_params_file").perform(context)
+        if not ekf_params_file:
+            ekf_params_file = os.path.join(
+                localization_share, "config", "diablo_ekf.yaml"
+            )
+        # The second file overrides only enable_odom_tf.  This prevents the
+        # raw diff-drive controller and EKF from publishing the same TF.
+        controller_parameters.append(ekf_controllers_file)
+    controller_parameters.append({"robot_description": robot_description})
 
     robot_state_publisher = Node(
         package="robot_state_publisher",
@@ -49,7 +74,7 @@ def _launch_setup(context):
         package="controller_manager",
         executable="ros2_control_node",
         output="screen",
-        parameters=[controllers_file, {"robot_description": robot_description}],
+        parameters=controller_parameters,
     )
 
     joint_state_broadcaster = Node(
@@ -112,6 +137,30 @@ def _launch_setup(context):
         ros2_control,
         joint_state_broadcaster,
     ]
+    if use_ekf_active:
+        actions.append(
+            IncludeLaunchDescription(
+                PythonLaunchDescriptionSource(
+                    os.path.join(localization_share, "launch", "localization.launch.py")
+                ),
+                launch_arguments={
+                    "params_file": ekf_params_file,
+                    "imu_parent_frame": LaunchConfiguration("imu_parent_frame"),
+                    "imu_frame": LaunchConfiguration("imu_frame"),
+                    "imu_x": LaunchConfiguration("imu_x"),
+                    "imu_y": LaunchConfiguration("imu_y"),
+                    "imu_z": LaunchConfiguration("imu_z"),
+                    "imu_roll": LaunchConfiguration("imu_roll"),
+                    "imu_pitch": LaunchConfiguration("imu_pitch"),
+                    "imu_yaw": LaunchConfiguration("imu_yaw"),
+                    "reset_topic": LaunchConfiguration("reset_topic"),
+                    "reset_service": LaunchConfiguration("reset_service"),
+                    "set_pose_service": LaunchConfiguration("set_pose_service"),
+                    "reset_frame": LaunchConfiguration("reset_frame"),
+                    "stop_cmd_topic": LaunchConfiguration("stop_cmd_topic"),
+                }.items(),
+            )
+        )
     if controller_spawners:
         actions.append(
             RegisterEventHandler(
@@ -177,6 +226,39 @@ def generate_launch_description():
         DeclareLaunchArgument("baud_rate", default_value="1000000"),
         DeclareLaunchArgument("wheel_radius", default_value="0.105"),
         DeclareLaunchArgument("track_width", default_value="0.3751"),
+        DeclareLaunchArgument(
+            "use_ekf",
+            default_value="true",
+            description=(
+                "Start wheel/IMU robot_localization and let it publish "
+                "odom -> diablo_base_link"
+            ),
+        ),
+        DeclareLaunchArgument(
+            "ekf_params_file",
+            default_value="",
+            description="Optional robot_localization parameter file",
+        ),
+        DeclareLaunchArgument(
+            "imu_parent_frame", default_value="diablo_base_link"
+        ),
+        DeclareLaunchArgument("imu_frame", default_value="diablo_robot"),
+        DeclareLaunchArgument("imu_x", default_value="0.0"),
+        DeclareLaunchArgument("imu_y", default_value="0.0"),
+        DeclareLaunchArgument("imu_z", default_value="0.0"),
+        DeclareLaunchArgument("imu_roll", default_value="0.0"),
+        DeclareLaunchArgument("imu_pitch", default_value="0.0"),
+        DeclareLaunchArgument("imu_yaw", default_value="0.0"),
+        DeclareLaunchArgument("reset_topic", default_value="/diablo/reset_pose"),
+        DeclareLaunchArgument("reset_service", default_value="/diablo/reset_odom"),
+        DeclareLaunchArgument(
+            "set_pose_service", default_value="/diablo_ekf_filter/set_pose"
+        ),
+        DeclareLaunchArgument("reset_frame", default_value="odom"),
+        DeclareLaunchArgument(
+            "stop_cmd_topic",
+            default_value="/diablo_base_controller/cmd_vel_unstamped",
+        ),
         DeclareLaunchArgument(
             "start_base_controller",
             default_value="true",

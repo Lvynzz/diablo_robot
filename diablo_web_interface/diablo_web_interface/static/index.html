@@ -52,9 +52,9 @@
           <span class="hint">Tahan tombol / keyboard untuk bergerak</span>
         </div>
         <div class="position-summary-preview">
-          <div class="preview-stat tone-green"><span>X POSITION</span><strong id="preview-x-position">0.00</strong><small>METERS · WHEEL ODOM</small></div>
-          <div class="preview-stat tone-blue"><span>Y POSITION</span><strong id="preview-y-position">0.00</strong><small>METERS · WHEEL ODOM</small></div>
-          <div class="preview-stat tone-orange"><span>HEADING θ</span><strong id="preview-heading">0.0</strong><small>DEGREES · WHEEL ODOM</small></div>
+          <div class="preview-stat tone-green"><span>X POSITION</span><strong id="preview-x-position">0.00</strong><small>METERS · FILTERED ODOM</small></div>
+          <div class="preview-stat tone-blue"><span>Y POSITION</span><strong id="preview-y-position">0.00</strong><small>METERS · FILTERED ODOM</small></div>
+          <div class="preview-stat tone-orange"><span>HEADING θ</span><strong id="preview-heading">0.0</strong><small>DEGREES · FILTERED ODOM</small></div>
           <div class="preview-quick-actions"><span>QUICK ACTIONS</span><button id="reset-odom" type="button">RESET ODOM</button><button id="reset-encoder" type="button">RESET ENCODER</button><button id="start-lidar" type="button">START LIDAR</button></div>
         </div>
         <div class="teleop-grid">
@@ -112,7 +112,7 @@
             <div class="wheel-preview-foot"><span>LEG LENGTH</span><b>— / — m</b></div>
           </div>
           <div class="control-card trajectory-preview">
-            <div class="card-title">TRAJECTORY MAP <small>WHEEL ODOMETRY // /ODOM</small></div>
+            <div class="card-title">TRAJECTORY MAP <small>FUSED WHEEL/IMU // /ODOMETRY/FILTERED</small></div>
             <svg viewBox="0 0 420 150" role="img" aria-label="Wheel odometry trajectory preview"><defs><pattern id="preview-grid" width="21" height="21" patternUnits="userSpaceOnUse"><path d="M 21 0 L 0 0 0 21" fill="none" stroke="#b8c9d6" stroke-width=".6" /></pattern></defs><rect width="420" height="150" fill="url(#preview-grid)"/><line x1="210" y1="0" x2="210" y2="150" stroke="#91a8b9" stroke-dasharray="3 4"/><line x1="0" y1="75" x2="420" y2="75" stroke="#91a8b9" stroke-dasharray="3 4"/><polyline points="90,111 105,106 118,108 130,100 143,96 154,88 165,90 177,78 190,73 204,75" fill="none" stroke="#2f78ae" stroke-width="2.2"/><circle cx="204" cy="75" r="5" fill="#4f925c" stroke="#fff" stroke-width="2"/></svg>
             <small class="trajectory-preview-source">SOURCE: WAITING FOR /ODOM</small>
           </div>
@@ -201,7 +201,7 @@
             <div class="settings-row"><span>MANUAL</span><code>/diablo/MotionCmd/manual</code></div>
             <div class="settings-row"><span>NAV2 INPUT</span><code>/cmd_vel_smoothed</code></div>
             <div class="settings-row"><span>DRIVER OUTPUT</span><code>/diablo/MotionCmd</code></div>
-            <div class="settings-row"><span>FRAMES</span><code>map → odom → base_link</code></div>
+            <div class="settings-row"><span>FRAMES</span><code>map → odom → diablo_base_link</code></div>
           </div>
         </div>
       </div>

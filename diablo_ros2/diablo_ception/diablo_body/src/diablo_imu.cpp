@@ -1,12 +1,55 @@
 #include "diablo_imu.hpp"
 
+#include <cmath>
+
 using namespace std::chrono;
 
 void diablo_imu_publisher::imu_pub_init(void)
 {
+    imu_frame_id_ = this->node_ptr->declare_parameter<std::string>(
+        "imu_frame_id", "diablo_robot");
+    const double configured_orientation_variance = this->node_ptr->declare_parameter<double>(
+        "imu_orientation_variance", 0.0025);
+    const double configured_gyro_variance = this->node_ptr->declare_parameter<double>(
+        "imu_gyro_variance", 0.0004);
+    const double orientation_variance =
+        std::isfinite(configured_orientation_variance) &&
+        configured_orientation_variance > 0.0 ? configured_orientation_variance : 0.0025;
+    const double gyro_variance =
+        std::isfinite(configured_gyro_variance) && configured_gyro_variance > 0.0 ?
+        configured_gyro_variance : 0.0004;
+
     imu_Publisher_ = this->node_ptr->create_publisher<sensor_msgs::msg::Imu>("diablo/sensor/Imu",10);
     euler_Publisher_ = this->node_ptr->create_publisher<ception_msgs::msg::IMUEuler>("diablo/sensor/ImuEuler",10);
     timer_ = this->node_ptr->create_wall_timer(20ms,std::bind(&diablo_imu_publisher::lazyPublisher, this));
+
+    // The original driver left all covariance arrays at zero.  Supply
+    // conservative estimates for orientation/gyro and explicitly mark the
+    // acceleration estimate unavailable until its SDK unit is calibrated.
+    imu_msg_.orientation_covariance.fill(0.0);
+    imu_msg_.orientation_covariance[0] = orientation_variance;
+    imu_msg_.orientation_covariance[4] = orientation_variance;
+    imu_msg_.orientation_covariance[8] = orientation_variance;
+    imu_msg_.angular_velocity_covariance.fill(0.0);
+    imu_msg_.angular_velocity_covariance[0] = gyro_variance;
+    imu_msg_.angular_velocity_covariance[4] = gyro_variance;
+    imu_msg_.angular_velocity_covariance[8] = gyro_variance;
+    imu_msg_.linear_acceleration_covariance.fill(0.0);
+    imu_msg_.linear_acceleration_covariance[0] = -1.0;
+
+    if (orientation_variance != configured_orientation_variance ||
+        gyro_variance != configured_gyro_variance) {
+        RCLCPP_WARN(
+            this->node_ptr->get_logger(),
+            "IMU covariance parameters must be positive finite values; "
+            "check imu_orientation_variance and imu_gyro_variance");
+    }
+
+    RCLCPP_INFO(
+        this->node_ptr->get_logger(),
+        "IMU frame: %s; orientation variance=%.6g, gyro variance=%.6g; "
+        "linear acceleration covariance disabled until units are verified",
+        imu_frame_id_.c_str(), orientation_variance, gyro_variance);
     this->vehicle->telemetry->configTopic(DIABLO::OSDK::TOPIC_QUATERNION, OSDK_PUSH_DATA_50Hz);
     this->vehicle->telemetry->configTopic(DIABLO::OSDK::TOPIC_ACCL, OSDK_PUSH_DATA_50Hz);
     this->vehicle->telemetry->configTopic(DIABLO::OSDK::TOPIC_GYRO, OSDK_PUSH_DATA_50Hz);
@@ -68,10 +111,10 @@ void diablo_imu_publisher::lazyPublisher(void){
 
             imu_timestamp = this->node_ptr->get_clock()->now();
             imu_msg_.header.stamp = imu_timestamp;
-            imu_msg_.header.frame_id = "diablo_robot";
+            imu_msg_.header.frame_id = imu_frame_id_;
 
             euler_msg_.header.stamp = imu_timestamp;
-            euler_msg_.header.frame_id = "diablo_robot";
+            euler_msg_.header.frame_id = imu_frame_id_;
             imu_Publisher_->publish(imu_msg_);
             euler_Publisher_->publish(euler_msg_);
 
@@ -86,4 +129,3 @@ diablo_imu_publisher::diablo_imu_publisher(rclcpp::Node::SharedPtr node_ptr,DIAB
     this->vehicle = vehicle;
 
 }
-

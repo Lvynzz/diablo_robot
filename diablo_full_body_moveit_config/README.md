@@ -13,7 +13,10 @@ cd ~/diablo_ws
 source /opt/ros/humble/setup.bash
 colcon build --symlink-install \
   --packages-select \
+  diablo_body \
+  diablo_ctrl \
   diablo_base_hardware \
+  diablo_localization \
   diablo_goal_controller \
   diablo_full_body_description \
   diablo_moveit_bridge \
@@ -40,7 +43,10 @@ cd /home/diablo/diablo_ws
 source /opt/ros/humble/setup.bash
 colcon build --symlink-install \
   --packages-select \
+  diablo_body \
+  diablo_ctrl \
   diablo_base_hardware \
+  diablo_localization \
   diablo_goal_controller \
   diablo_full_body_description \
   diablo_full_body_moveit_config
@@ -75,7 +81,24 @@ ros2 launch diablo_full_body_moveit_config full_body_hardware.launch.py \
   use_mock_hardware:=false \
   arm_port_name:=/dev/u2d2_arm \
   hand_port_name:=/dev/u2d2_hand \
+  use_ekf:=true \
   start_move_group:=false
+```
+
+Dengan `use_ekf:=true`, launch juga menjalankan `robot_localization` pada
+`/diablo_ekf_filter`, menerbitkan `/odometry/filtered`, dan menyediakan reset
+pose. EKF memakai velocity roda serta gyro Z IMU; akselerasi IMU sengaja belum
+digunakan. `diablo_base_controller` tetap menerbitkan topic odom mentah,
+tetapi tidak lagi menerbitkan TF `odom -> diablo_base_link` agar tidak bentrok
+dengan EKF.
+
+Pastikan driver resmi sudah berjalan dan frame IMU default
+`diablo_robot` memang sebidang dengan `diablo_base_link`. Jika posisi atau
+orientasi sensor berbeda, berikan transform saat launch, misalnya:
+
+```bash
+imu_x:=0.0 imu_y:=0.0 imu_z:=0.0 \
+imu_roll:=0.0 imu_pitch:=0.0 imu_yaw:=0.0
 ```
 
 Jika udev rule sudah membuat nama tetap, ganti dua argumen port dengan nama
@@ -91,6 +114,7 @@ ros2 launch diablo_full_body_moveit_config full_body_hardware.launch.py \
   enable_base_hardware:=true \
   start_arm_controllers:=false \
   start_base_controller:=true \
+  use_ekf:=true \
   start_move_group:=false
 ```
 
@@ -99,6 +123,30 @@ Di terminal ketiga, pantau command yang diterjemahkan:
 ```bash
 ros2 topic echo /diablo/MotionCmd
 ```
+
+Reset pose hanya jika ingin menjadikan posisi robot saat ini sebagai origin
+baru. Perintah ini tidak dijalankan otomatis saat startup, sehingga jika tidak
+dikirim pose EKF tetap berlanjut ketika robot dipindahkan untuk tes berikutnya:
+
+```bash
+ros2 topic pub --once -w 1 /diablo/reset_pose std_msgs/msg/Bool "{data: true}"
+```
+
+Atau melalui service yang juga dipakai web HMI:
+
+```bash
+ros2 service call /diablo/reset_odom std_srvs/srv/Trigger "{}"
+```
+
+Pantau hasilnya:
+
+```bash
+ros2 topic echo /odometry/filtered --once
+ros2 run tf2_ros tf2_echo odom diablo_base_link
+```
+
+Untuk menjalankan sistem lama tanpa EKF, gunakan `use_ekf:=false` dan goal
+controller dapat diarahkan ke `/diablo_base_controller/odom`.
 
 Di terminal keempat, beri kecepatan sangat rendah selama sekitar dua detik dan
 hentikan publisher dengan `Ctrl-C`:

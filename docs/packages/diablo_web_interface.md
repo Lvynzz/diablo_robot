@@ -37,13 +37,16 @@ preview untuk memeriksa layout.
 
 ## Launch
 
+Jalankan `full_body_hardware.launch.py use_ekf:=true` terlebih dahulu agar
+`/odometry/filtered` dan TF `odom -> diablo_base_link` tersedia.
+
 Untuk HMI/teleop:
 
 ```bash
 ros2 launch diablo_web_interface web_interface.launch.py
 ```
 
-Untuk HMI + wheel odom + Nav2:
+Untuk HMI + filtered odom + Nav2:
 
 ```bash
 ros2 launch diablo_web_interface nav2_web.launch.py \
@@ -64,9 +67,10 @@ Topic/service default:
 
 ```text
 /diablo/MotionCmd/manual -> mux -> /diablo/MotionCmd
-/odom
+/odometry/filtered
 /scan
 /diablo/sensor/Motors
+/diablo/reset_pose
 /diablo/reset_odom
 /diablo/reset_encoder
 /start_motor
@@ -75,6 +79,10 @@ Topic/service default:
 Drive Control terkunci sampai `/diablo/sensor/Motors` memberi feedback. Tombol
 **START HARDWARE** menjalankan command Diablo/Dynamixel yang dikonfigurasi dan
 memanggil service LiDAR atau menjalankan `lidar_start_command`.
+
+Reset pose tidak terjadi otomatis. Kirim `Bool(data=true)` ke
+`/diablo/reset_pose` atau panggil service `/diablo/reset_odom` hanya jika ingin
+menjadikan pose saat ini sebagai origin baru.
 
 ## Pengaturan hardware
 

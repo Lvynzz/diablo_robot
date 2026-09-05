@@ -20,8 +20,8 @@ def generate_launch_description():
         ),
         DeclareLaunchArgument("host", default_value="0.0.0.0"),
         DeclareLaunchArgument("port", default_value="8000"),
-        DeclareLaunchArgument("base_frame", default_value="base_link"),
-        DeclareLaunchArgument("odom_topic", default_value="/odom"),
+        DeclareLaunchArgument("base_frame", default_value="diablo_base_link"),
+        DeclareLaunchArgument("odom_topic", default_value="/odometry/filtered"),
         DeclareLaunchArgument("odom_frame", default_value="odom"),
         DeclareLaunchArgument("scan_topic", default_value="/scan"),
         DeclareLaunchArgument(
@@ -41,7 +41,11 @@ def generate_launch_description():
         DeclareLaunchArgument("navigation_start_command", default_value=""),
         DeclareLaunchArgument("mapping_start_command", default_value=""),
         DeclareLaunchArgument("maps_dir", default_value=""),
-        DeclareLaunchArgument("enable_wheel_odom", default_value="true"),
+        DeclareLaunchArgument(
+            "enable_wheel_odom",
+            default_value="false",
+            description="Use only without the ros2_control/EKF odometry stack",
+        ),
         DeclareLaunchArgument("wheel_radius", default_value="0.105"),
         DeclareLaunchArgument("track_width", default_value="0.3751"),
         DeclareLaunchArgument("motor_topic", default_value="/diablo/sensor/Motors"),

@@ -13,7 +13,7 @@ amcl:
     alpha3: 0.2
     alpha4: 0.2
     alpha5: 0.2
-    base_frame_id: base_link
+    base_frame_id: diablo_base_link
     beam_skip_distance: 0.5
     beam_skip_error_threshold: 0.9
     beam_skip_threshold: 0.3
@@ -52,8 +52,8 @@ bt_navigator:
   ros__parameters:
     use_sim_time: false
     global_frame: map
-    robot_base_frame: base_link
-    odom_topic: /odom
+    robot_base_frame: diablo_base_link
+    odom_topic: /odometry/filtered
     bt_loop_duration: 10
     default_server_timeout: 20
     wait_for_service_timeout: 1000
@@ -92,7 +92,7 @@ controller_server:
   ros__parameters:
     use_sim_time: false
     controller_frequency: 10.0
-    odom_topic: /odom
+    odom_topic: /odometry/filtered
     min_x_velocity_threshold: 0.001
     min_y_velocity_threshold: 0.0
     min_theta_velocity_threshold: 0.001
@@ -155,7 +155,7 @@ local_costmap:
       update_frequency: 5.0
       publish_frequency: 3.0
       global_frame: odom
-      robot_base_frame: base_link
+      robot_base_frame: diablo_base_link
       rolling_window: true
       width: 4.0
       height: 4.0
@@ -192,7 +192,7 @@ global_costmap:
       update_frequency: 1.0
       publish_frequency: 1.0
       global_frame: map
-      robot_base_frame: base_link
+      robot_base_frame: diablo_base_link
       transform_tolerance: 0.5
       footprint: "[[0.30, 0.20], [0.30, -0.20], [-0.30, -0.20], [-0.30, 0.20]]"
       footprint_padding: 0.03
@@ -239,7 +239,7 @@ behavior_server:
     footprint_topic: local_costmap/published_footprint
     cycle_frequency: 10.0
     global_frame: odom
-    robot_base_frame: base_link
+    robot_base_frame: diablo_base_link
     transform_tolerance: 0.5
     behavior_plugins: [spin, backup, drive_on_heading, wait]
     spin:
@@ -272,7 +272,7 @@ velocity_smoother:
     min_velocity: [-0.30, 0.0, -0.60]
     max_accel: [0.40, 0.0, 0.80]
     max_decel: [-0.50, 0.0, -0.80]
-    odom_topic: /odom
+    odom_topic: /odometry/filtered
     odom_duration: 0.1
     deadband_velocity: [0.0, 0.0, 0.0]
     velocity_timeout: 0.5

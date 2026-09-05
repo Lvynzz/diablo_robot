@@ -28,7 +28,7 @@ dibuat, backend memakai frontend fallback di
   `diablo_web_interface/static/`.
 
 Panel Drive Control menggunakan tema HMI industrial berwarna biru-abu terang,
-sidebar pilihan panel di kiri, tiga readout posisi dari wheel odometry, quick
+sidebar pilihan panel di kiri, tiga readout posisi dari fused wheel/IMU odometry, quick
 actions, Motion Control, wheel encoder telemetry, keybind legend, dan trajectory
 map. Panel obstacle laser depan serta magnetic navigation sensor sengaja tidak
 ditampilkan pada versi ini. Setiap panel dapat ditutup dari tombol chevron di
@@ -61,10 +61,11 @@ Topics, dan Settings dapat diperiksa.
 | `web_node` | FastAPI + WebSocket: teleop, goal Nav2, initial pose, telemetry, topic echo, hardware startup, reset odom/encoder, start LiDAR |
 | `motion_cmd_bridge` | `Twist` Nav2 → `MotionCtrl` Diablo |
 | `motion_cmd_mux` | Pemilih manual/auto dengan command watchdog |
-| `wheel_odom` | Estimasi `/odom` dari `motion_msgs/LegMotors` dan TF `odom → base_link` |
+| `wheel_odom` | Estimasi odom encoder legacy; gunakan hanya jika EKF/ros2_control tidak berjalan |
+| `diablo_localization` | EKF wheel/IMU pada `/odometry/filtered` dan reset pose eksplisit |
 | `navigation.launch.py` | map server, AMCL, costmap, planner, controller dan lifecycle Nav2 |
 | `mapping.launch.py` | SLAM Toolbox + odometri roda opsional |
-| `nav2_web.launch.py` | Launch gabungan web, mux, wheel odom dan Nav2 |
+| `nav2_web.launch.py` | Launch gabungan web, mux, filtered odom dan Nav2 |
 
 ## Build di laptop/robot
 
@@ -84,11 +85,17 @@ dependency dipasang di laptop.
 
 ## Menjalankan web + Nav2
 
-Jalankan launch berikut pada mesin ROS. Tombol **START HARDWARE** di panel
+Jalankan hardware full-body dengan `use_ekf:=true`, lalu jalankan launch
+berikut pada mesin ROS. Tombol **START HARDWARE** di panel
 Navigation akan menjalankan driver Diablo dan Dynamixel yang dikonfigurasi;
 LiDAR bisa dijalankan lewat command atau service start. Jika driver sudah
 dijalankan oleh systemd/launch lain, command terkait dapat dikosongkan dan HMI
 tetap menunggu feedback ROS. Kemudian:
+
+```bash
+ros2 launch diablo_full_body_moveit_config full_body_hardware.launch.py \
+  use_mock_hardware:=false use_ekf:=true
+```
 
 ```bash
 source ~/diablo_ws/install/setup.bash
@@ -164,10 +171,12 @@ motor telemetry. Nav2 masih membutuhkan:
    dari frame laser ke frame robot.
 2. TF `map → odom` dari AMCL atau SLAM Toolbox. Launch standar menyediakan
    AMCL; gunakan `mapping.launch.py` bila ingin membuat peta.
-3. Frame robot yang konsisten. Konfigurasi default memakai `base_link`. URDF
-   full-body yang ada memakai `diablo_base_link`, sehingga jalankan dengan
-   `base_frame:=diablo_base_link` dan pastikan sensor/Nav2 memakai params yang
-   sama.
+3. Frame robot yang konsisten. Konfigurasi default memakai `diablo_base_link`.
+   IMU driver memakai `diablo_robot` dan launch EKF menyediakan static TF
+   identity di antara kedua frame tersebut; ubah transform jika pemasangan
+   sensor tidak sejajar.
+
+4. `robot_localization` melalui `ros-humble-robot-localization`.
 
 `wheel_odom` menggunakan `left_wheel_pos/right_wheel_pos` dalam radian dan
 revolution counter dari `LegMotors`. Nilai awalnya `wheel_radius=0.105`,
@@ -175,7 +184,19 @@ revolution counter dari `LegMotors`. Nilai awalnya `wheel_radius=0.105`,
 Kalibrasikan di tempat sebelum navigasi: bila maju menghasilkan odom mundur,
 ubah `left_wheel_direction`/`right_wheel_direction`; bila jarak tidak sesuai,
 ubah radius. Untuk odom eksternal, jalankan `enable_wheel_odom:=false` dan
-gunakan `odom_topic:=/nama_odom`.
+gunakan `odom_topic:=/nama_odom`. Jangan menjalankan `wheel_odom` ketika
+`full_body_hardware.launch.py use_ekf:=true`, karena keduanya dapat
+mempublikasikan odometry/TF yang bersaing.
+
+Reset pose fused hanya dengan sengaja. Opsi `-w 1` menunggu node reset
+terhubung sebelum mengirim pesan one-shot:
+
+```bash
+ros2 topic pub --once -w 1 /diablo/reset_pose std_msgs/msg/Bool "{data: true}"
+```
+
+Tanpa perintah tersebut, EKF tidak melakukan reset otomatis dan pose tetap
+berlanjut selama node tidak direstart.
 
 Shortcut teleoperasi default mengikuti [dokumentasi resmi Diablo](https://github.com/DDTRobot/diablo_ros2/blob/main/docs/docs_en/README_EN.md):
 `W/S` maju-mundur, `A/D` putar, `Q/E` roll, `Z` standing mode, `X` crawling

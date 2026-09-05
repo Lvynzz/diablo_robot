@@ -16,8 +16,9 @@ ros2 run diablo_ctrl diablo_ctrl_node
 ```
 
 Serial SDK yang dipakai driver saat ini diinisialisasi di
-`diablo_ctrl.cpp` dengan `/dev/ttyS3`. Perubahan port harus dilakukan di driver,
-bukan pada package web, lalu workspace perlu dibuild ulang.
+`diablo_ctrl.cpp` dengan `/dev/diablo_controller`. Port dapat diganti melalui
+parameter `controller_port`, bukan dengan mengubah package web, lalu workspace
+perlu dibuild ulang jika binary belum terbaru.
 
 Pengguna aplikasi biasanya tidak perlu memanggil API library ini secara
 langsung. Jika mengubah protocol atau timing, lakukan pengujian tanpa robot

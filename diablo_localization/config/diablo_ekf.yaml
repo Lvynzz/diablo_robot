@@ -1,0 +1,50 @@
+# Local planar estimator for Diablo.
+#
+# The filter intentionally consumes wheel/IMU rates instead of absolute wheel
+# pose or absolute IMU orientation.  This makes the EKF origin explicit and
+# allows /diablo/reset_pose to remain effective while the robot keeps running.
+# It also means that an external localizer (AMCL/SLAM) can later correct the
+# map -> odom transform without fighting this filter.
+
+diablo_ekf_filter:
+  ros__parameters:
+    frequency: 30.0
+    sensor_timeout: 0.25
+    two_d_mode: true
+    transform_time_offset: 0.0
+    transform_timeout: 0.15
+    print_diagnostics: true
+    debug: false
+    publish_tf: true
+    publish_acceleration: false
+    predict_to_current_time: true
+
+    map_frame: map
+    odom_frame: odom
+    base_link_frame: diablo_base_link
+    world_frame: odom
+
+    # nav_msgs/Odometry config order:
+    # x, y, z, roll, pitch, yaw, vx, vy, vz, vroll, vpitch, vyaw, ax, ay, az
+    # Use wheel forward/yaw rates; do not fuse the duplicate wheel pose.
+    odom0: /diablo_base_controller/odom
+    odom0_config: [false, false, false, false, false, false,
+                   true, false, false, false, false, true,
+                   false, false, false]
+    odom0_queue_size: 10
+    odom0_nodelay: false
+    odom0_differential: false
+    odom0_relative: false
+
+    # Use only IMU gyro Z.  The absolute quaternion is not fused here because
+    # its startup/reference heading is driver-defined; gyro integration keeps
+    # the EKF resettable to any operator-selected heading.
+    imu0: /diablo/sensor/Imu
+    imu0_config: [false, false, false, false, false, false,
+                  false, false, false, false, false, true,
+                  false, false, false]
+    imu0_queue_size: 20
+    imu0_nodelay: false
+    imu0_differential: false
+    imu0_relative: false
+    imu0_remove_gravitational_acceleration: false

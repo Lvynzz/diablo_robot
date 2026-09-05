@@ -227,8 +227,8 @@ function TrajectoryMiniMap({ state }: { state: DiabloState }) {
         {trajectory.length > 1 && <polyline points={trajectory.map((item) => point(item.x, item.y)).join(" ")} className="trajectory-line" />}
         {currentPoint && <circle cx={currentPoint[0]} cy={currentPoint[1]} r="5" className="trajectory-robot" />}
       </svg>
-      <div className="trajectory-legend"><span><i className="legend-line blue" /> Wheel odometry</span><span><i className="legend-dot cyan" /> Current robot</span></div>
-      <small className="trajectory-source">SOURCE: {current?.source || "WAITING FOR /ODOM"}</small>
+      <div className="trajectory-legend"><span><i className="legend-line blue" /> Fused wheel/IMU odometry</span><span><i className="legend-dot cyan" /> Current robot</span></div>
+      <small className="trajectory-source">SOURCE: {current?.source || "WAITING FOR /ODOMETRY/FILTERED"}</small>
     </div>
   );
 }
@@ -425,9 +425,9 @@ export function DriveView({ state, hardwareReady, panels, sendCommand, onEvent }
   return (
     <div className="view-stack drive-view">
       <div className="position-summary">
-        <StatCard label="X POSITION" value={fmt(wheelPose?.x)} unit="METERS · WHEEL ODOM" tone="green" />
-        <StatCard label="Y POSITION" value={fmt(wheelPose?.y)} unit="METERS · WHEEL ODOM" tone="blue" />
-        <StatCard label="HEADING θ" value={fmtDegrees(wheelPose?.theta)} unit="DEGREES · WHEEL ODOM" tone="orange" />
+        <StatCard label="X POSITION" value={fmt(wheelPose?.x)} unit="METERS · FILTERED ODOM" tone="green" />
+        <StatCard label="Y POSITION" value={fmt(wheelPose?.y)} unit="METERS · FILTERED ODOM" tone="blue" />
+        <StatCard label="HEADING θ" value={fmtDegrees(wheelPose?.theta)} unit="DEGREES · FILTERED ODOM" tone="orange" />
         <div className="quick-actions">
           <span>QUICK ACTIONS</span>
           <button type="button" onClick={() => void quickRequest({ type: "reset_odom" }, "Reset odom requested.")}>RESET ODOM</button>
@@ -454,7 +454,7 @@ export function DriveView({ state, hardwareReady, panels, sendCommand, onEvent }
           <p className="safety-copy">W/S, A/D, Q/E mengikuti teleop resmi Diablo. Perintah mode dikirim sebagai <code>MotionCtrl.mode_mark=true</code>; tekan STOP atau lepaskan tombol untuk command nol.</p>
         </Panel>}
 
-        {panels.trajectory && <Panel title="Trajectory Map" eyebrow="WHEEL ODOMETRY // /ODOM" accent="cyan" actions={<span className="panel-chip">LIVE TRACE</span>}>
+        {panels.trajectory && <Panel title="Trajectory Map" eyebrow="FUSED ODOMETRY // /ODOMETRY/FILTERED" accent="cyan" actions={<span className="panel-chip">LIVE TRACE</span>}>
           <TrajectoryMiniMap state={state} />
         </Panel>}
       </div>

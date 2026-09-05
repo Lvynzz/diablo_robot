@@ -13,9 +13,14 @@ source ~/diablo_ws/install/setup.bash
 ros2 run diablo_ctrl diablo_ctrl_node
 ```
 
-Saat ini port SDK di source driver adalah `/dev/ttyS3`; port tersebut bukan
-parameter launch. Jika hardware memakai port lain, ubah source `diablo_ctrl`
-dan build ulang setelah memastikan wiring/board.
+Port SDK default driver adalah `/dev/diablo_controller`. Pada robot, udev rule
+memetakan nama itu ke USB controller Diablo yang sesuai. Jika hardware memakai
+port lain, berikan parameter saat menjalankan node:
+
+```bash
+ros2 run diablo_ctrl diablo_ctrl_node --ros-args \
+  -p controller_port:=/dev/diablo_controller
+```
 
 ## Topic
 

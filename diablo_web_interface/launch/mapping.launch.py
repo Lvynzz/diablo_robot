@@ -16,8 +16,14 @@ def generate_launch_description():
         DeclareLaunchArgument("params_file", default_value=default_params),
         DeclareLaunchArgument("scan_topic", default_value="/scan"),
         DeclareLaunchArgument("motor_topic", default_value="/diablo/sensor/Motors"),
-        DeclareLaunchArgument("enable_wheel_odom", default_value="true"),
-        DeclareLaunchArgument("base_frame", default_value="base_link"),
+        DeclareLaunchArgument(
+            "enable_wheel_odom",
+            default_value="false",
+            description="Use only without the ros2_control/EKF odometry stack",
+        ),
+        DeclareLaunchArgument("odom_topic", default_value="/odometry/filtered"),
+        DeclareLaunchArgument("odom_frame", default_value="odom"),
+        DeclareLaunchArgument("base_frame", default_value="diablo_base_link"),
         DeclareLaunchArgument("wheel_radius", default_value="0.105"),
         DeclareLaunchArgument("track_width", default_value="0.3751"),
         Node(
@@ -27,6 +33,8 @@ def generate_launch_description():
             output="screen",
             parameters=[{
                 "input_topic": LaunchConfiguration("motor_topic"),
+                "odom_topic": LaunchConfiguration("odom_topic"),
+                "odom_frame": LaunchConfiguration("odom_frame"),
                 "base_frame": LaunchConfiguration("base_frame"),
                 "wheel_radius": LaunchConfiguration("wheel_radius"),
                 "track_width": LaunchConfiguration("track_width"),

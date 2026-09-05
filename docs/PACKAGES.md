@@ -35,3 +35,4 @@ referensi API lengkap untuk submodule/vendor.
 | `diablo_full_body_description` | [diablo_full_body_description.md](packages/diablo_full_body_description.md) |
 | `diablo_full_body_moveit_config` | [diablo_full_body_moveit_config.md](packages/diablo_full_body_moveit_config.md) |
 | `diablo_moveit_bridge` | [diablo_moveit_bridge.md](packages/diablo_moveit_bridge.md) |
+| `diablo_localization` | [diablo_localization.md](packages/diablo_localization.md) |

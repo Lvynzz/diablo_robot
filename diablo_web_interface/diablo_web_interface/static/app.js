@@ -11,7 +11,7 @@ let topicCatalog = [];
 let selectedTopics = [];
 let mapData = makePreviewMap();
 let robotPose = { x: 0.62, y: 0.42, theta: 0.18, source: "local preview /map" };
-let wheelRobotPose = { x: 0.62, y: 0.42, theta: 0.18, source: "local preview /odom" };
+let wheelRobotPose = { x: 0.62, y: 0.42, theta: 0.18, source: "local preview /odometry/filtered" };
 let navPath = makePreviewPath();
 let lidarScan = makePreviewScan();
 let localCostmap = makePreviewCostmap(mapData, 2);
@@ -224,7 +224,7 @@ function updatePoseUi() {
   $("nav-robot-y").textContent = robotPose ? formatNumber(robotPose.y) : "—";
   $("nav-robot-heading").textContent = robotPose ? formatNumber(Number(robotPose.theta) * 180 / Math.PI, 1) : "—";
   $("position-metric").textContent = robotPose ? `${formatNumber(robotPose.x)} , ${formatNumber(robotPose.y)}` : "—";
-  $("position-source").textContent = robotPose ? robotPose.source || "unknown" : "waiting for TF / odom";
+  $("position-source").textContent = robotPose ? robotPose.source || "unknown" : "waiting for TF / odometry/filtered";
 }
 
 function updateHardwareUi(hardware) {

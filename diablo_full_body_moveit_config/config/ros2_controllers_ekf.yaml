@@ -1,0 +1,5 @@
+# Loaded after ros2_controllers.yaml when EKF mode is enabled.  The raw
+# diff-drive odometry topic remains available, but the EKF owns odom -> base.
+diablo_base_controller:
+  ros__parameters:
+    enable_odom_tf: false

@@ -3,7 +3,7 @@
 import math
 
 import rclpy
-from geometry_msgs.msg import Twist
+from geometry_msgs.msg import Pose2D, Twist
 from nav_msgs.msg import Odometry
 from rcl_interfaces.msg import SetParametersResult
 from rclpy.executors import ExternalShutdownException
@@ -12,32 +12,46 @@ from rclpy.qos import qos_profile_sensor_data
 
 
 class SimpleGoalController(Node):
-    """Small go-to-(x,y) controller driven by diff_drive_controller odometry."""
+    """Small planar go-to-pose controller for the Diablo base.
+
+    Goals are expressed in the configured odometry frame.  A ``Pose2D`` on
+    ``goal_topic`` contains x/y in metres and theta in radians.  Parameters
+    remain available for one-shot command-line tests.
+    """
 
     def __init__(self):
         super().__init__("simple_goal_controller")
 
         self.declare_parameter("goal_x", 0.0)
         self.declare_parameter("goal_y", 0.0)
+        self.declare_parameter("goal_yaw", 0.0)
+        self.declare_parameter("use_goal_yaw", False)
         self.declare_parameter("goal_tolerance", 0.05)
+        self.declare_parameter("goal_yaw_tolerance", 0.08)
         self.declare_parameter("odom_timeout", 1.0)
         self.declare_parameter("max_linear_speed", 0.25)
         self.declare_parameter("max_angular_speed", 0.60)
         self.declare_parameter("linear_gain", 0.8)
         self.declare_parameter("angular_gain", 1.5)
         self.declare_parameter("rotate_in_place_threshold", 0.60)
-        self.declare_parameter("reset_odom_on_start", True)
+        self.declare_parameter("reset_odom_on_start", False)
+        self.declare_parameter("goal_topic", "/diablo/goal_pose")
         # Humble's diff_drive_controller exposes relative topics below its
         # controller namespace.  Keep these defaults aligned with the
         # controller spawned by full_body_hardware.launch.py.
         self.declare_parameter(
             "cmd_vel_topic", "/diablo_base_controller/cmd_vel_unstamped"
         )
-        self.declare_parameter("odom_topic", "/diablo_base_controller/odom")
+        self.declare_parameter("odom_topic", "/odometry/filtered")
 
         self.goal_x = float(self.get_parameter("goal_x").value)
         self.goal_y = float(self.get_parameter("goal_y").value)
+        self.goal_yaw = float(self.get_parameter("goal_yaw").value)
+        self.use_goal_yaw = bool(self.get_parameter("use_goal_yaw").value)
         self.goal_tolerance = float(self.get_parameter("goal_tolerance").value)
+        self.goal_yaw_tolerance = float(
+            self.get_parameter("goal_yaw_tolerance").value
+        )
         self.odom_timeout = float(self.get_parameter("odom_timeout").value)
         self.max_linear_speed = float(self.get_parameter("max_linear_speed").value)
         self.max_angular_speed = float(self.get_parameter("max_angular_speed").value)
@@ -52,9 +66,17 @@ class SimpleGoalController(Node):
 
         cmd_vel_topic = str(self.get_parameter("cmd_vel_topic").value)
         odom_topic = str(self.get_parameter("odom_topic").value)
+        goal_topic = str(self.get_parameter("goal_topic").value).strip()
         self.cmd_vel_publisher = self.create_publisher(Twist, cmd_vel_topic, 10)
         self.odom_subscription = self.create_subscription(
             Odometry, odom_topic, self.odom_callback, qos_profile_sensor_data
+        )
+        self.goal_subscription = (
+            self.create_subscription(
+                Pose2D, goal_topic, self.goal_callback, 10
+            )
+            if goal_topic
+            else None
         )
         self.timer = self.create_timer(0.05, self.control_cycle)
         self.add_on_set_parameters_callback(self.parameters_callback)
@@ -73,7 +95,9 @@ class SimpleGoalController(Node):
 
         self.get_logger().info(
             f"Goal ({self.goal_x:.3f}, {self.goal_y:.3f}), "
+            f"yaw={self.goal_yaw:.3f} rad, use_goal_yaw={self.use_goal_yaw}; "
             f"tolerance {self.goal_tolerance:.3f} m; "
+            f"odom={odom_topic}; goal_topic={goal_topic or 'disabled'}; "
             f"reset_odom_on_start={self.reset_odom_on_start}; waiting for odometry"
         )
 
@@ -95,7 +119,26 @@ class SimpleGoalController(Node):
             elif parameter.name == "goal_y":
                 self.goal_y = float(parameter.value)
                 self.goal_reported = False
+            elif parameter.name == "goal_yaw":
+                self.goal_yaw = float(parameter.value)
+                self.goal_reported = False
+            elif parameter.name == "use_goal_yaw":
+                self.use_goal_yaw = bool(parameter.value)
+                self.goal_reported = False
         return SetParametersResult(successful=True)
+
+    def goal_callback(self, message):
+        values = (float(message.x), float(message.y), float(message.theta))
+        if not all(math.isfinite(value) for value in values):
+            self.get_logger().error("Ignoring non-finite goal pose")
+            return
+        self.goal_x, self.goal_y, self.goal_yaw = values
+        self.use_goal_yaw = True
+        self.goal_reported = False
+        self.get_logger().info(
+            f"New goal pose: ({self.goal_x:.3f}, {self.goal_y:.3f}), "
+            f"yaw={self.goal_yaw:.3f} rad"
+        )
 
     def odom_callback(self, message):
         raw_x = message.pose.pose.position.x
@@ -164,11 +207,28 @@ class SimpleGoalController(Node):
         delta_y = self.goal_y - self.y
         distance = math.hypot(delta_x, delta_y)
         if distance <= self.goal_tolerance:
+            if self.use_goal_yaw:
+                final_heading_error = self.normalize_angle(self.goal_yaw - self.yaw)
+                if abs(final_heading_error) > self.goal_yaw_tolerance:
+                    command = Twist()
+                    command.angular.z = self.clamp(
+                        self.angular_gain * final_heading_error,
+                        self.max_angular_speed,
+                    )
+                    self.cmd_vel_publisher.publish(command)
+                    return
+
             self.publish_stop()
             if not self.goal_reported:
-                self.get_logger().info(
-                    f"Goal reached at ({self.x:.3f}, {self.y:.3f})"
-                )
+                if self.use_goal_yaw:
+                    self.get_logger().info(
+                        f"Goal pose reached at ({self.x:.3f}, {self.y:.3f}), "
+                        f"yaw={self.yaw:.3f} rad"
+                    )
+                else:
+                    self.get_logger().info(
+                        f"Goal reached at ({self.x:.3f}, {self.y:.3f})"
+                    )
                 self.goal_reported = True
             return
 

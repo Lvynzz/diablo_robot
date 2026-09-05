@@ -72,7 +72,8 @@ Mode ini berguna untuk diagnosis. Jangan menjalankannya bersamaan dengan
 Terminal 1 — driver Diablo:
 
 ```bash
-ros2 run diablo_ctrl diablo_ctrl_node
+ros2 run diablo_ctrl diablo_ctrl_node --ros-args \
+  -p controller_port:=/dev/diablo_controller
 ```
 
 Terminal 2 — controller Dynamixel upper body, bila diperlukan:
@@ -100,8 +101,15 @@ Sebelum menjalankan Nav2, pastikan topic dan TF berikut ada:
 
 ```bash
 ros2 topic echo /scan --once
-ros2 topic echo /odom --once
-ros2 run tf2_ros tf2_echo base_link laser
+ros2 topic echo /odometry/filtered --once
+ros2 run tf2_ros tf2_echo odom diablo_base_link
+```
+
+Jalankan localization dan base controller melalui launch hardware:
+
+```bash
+ros2 launch diablo_full_body_moveit_config full_body_hardware.launch.py \
+  use_mock_hardware:=false use_ekf:=true
 ```
 
 Kemudian:
@@ -155,9 +163,10 @@ gerak otomatis memerlukan prosedur keselamatan tambahan.
 | Gejala | Pemeriksaan |
 | --- | --- |
 | HMI tidak terbuka | `systemctl status`, port `8000`, dan firewall |
-| `DIABLO ROS2` error | port `/dev/ttyS3`, power, dan log `diablo_ctrl_node` |
+| `DIABLO ROS2` error | port `/dev/diablo_controller`, power, dan log `diablo_ctrl_node` |
 | U2D2 gagal | port/baudrate di xacro dan akses `dialout` |
 | `/start_motor` unavailable | node `sllidar_node` belum berjalan |
 | `/scan` kosong | model, baudrate, serial port, dan permission LiDAR |
 | Drive Control terkunci | belum ada message `/diablo/sensor/Motors` |
-| Nav2 tidak aktif | cek `/scan`, `/odom`, TF, map, dan lifecycle nodes |
+| EKF tidak aktif | cek `ros2 node list`, `/odometry/filtered`, frame IMU, dan `robot_localization` |
+| Nav2 tidak aktif | cek `/scan`, `/odometry/filtered`, TF, map, dan lifecycle nodes |

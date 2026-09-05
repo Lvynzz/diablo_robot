@@ -252,7 +252,7 @@ def generate_launch_description():
         DeclareLaunchArgument("reset_topic", default_value="/diablo/reset_pose"),
         DeclareLaunchArgument("reset_service", default_value="/diablo/reset_odom"),
         DeclareLaunchArgument(
-            "set_pose_service", default_value="/diablo_ekf_filter/set_pose"
+            "set_pose_service", default_value="/set_pose"
         ),
         DeclareLaunchArgument("reset_frame", default_value="odom"),
         DeclareLaunchArgument(

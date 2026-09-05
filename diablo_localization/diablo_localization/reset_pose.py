@@ -24,7 +24,10 @@ class PoseReset(Node):
         self.declare_parameter("reset_topic", "/diablo/reset_pose")
         self.declare_parameter("reset_service", "/diablo/reset_odom")
         self.declare_parameter(
-            "set_pose_service", "/diablo_ekf_filter/set_pose"
+            # robot_localization creates this service in the node namespace.
+            # In the ROS 2 Humble binary that means /set_pose; the node name
+            # does not automatically become a namespace.
+            "set_pose_service", "/set_pose"
         )
         self.declare_parameter("reset_frame", "odom")
         self.declare_parameter(
@@ -68,7 +71,7 @@ class PoseReset(Node):
         return response
 
     def _request_reset(self, source):
-        if not self._set_pose_client.wait_for_service(timeout_sec=0.5):
+        if not self._set_pose_client.wait_for_service(timeout_sec=2.0):
             message = f"EKF set_pose service unavailable: {self.set_pose_service}"
             self.get_logger().error(message)
             return False, message

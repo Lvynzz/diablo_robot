@@ -18,6 +18,23 @@ diablo_ekf_filter:
     publish_tf: true
     publish_acceleration: false
     predict_to_current_time: true
+    dynamic_process_noise_covariance: true
+
+    # Lightweight relative-odometry profile.  The filter currently receives
+    # wheel/IMU rates only, so these values keep the covariance bounded enough
+    # for short goal-navigation tests.  They do not make wheel odometry
+    # globally accurate, and should be retuned if an absolute sensor is added.
+    # Values are diagonal entries in the state order documented below.
+    process_noise_covariance: [1.0e-4, 1.0e-4, 1.0e-4,
+                               1.0e-4, 1.0e-4, 2.0e-4,
+                               1.0e-3, 1.0e-3, 1.0e-3,
+                               1.0e-3, 1.0e-3, 2.0e-3,
+                               1.0e-3, 1.0e-3, 1.0e-3]
+    initial_estimate_covariance: [1.0e-6, 1.0e-6, 1.0e-6,
+                                  1.0e-6, 1.0e-6, 1.0e-6,
+                                  1.0e-4, 1.0e-4, 1.0e-4,
+                                  1.0e-4, 1.0e-4, 1.0e-4,
+                                  1.0e-4, 1.0e-4, 1.0e-4]
 
     map_frame: map
     odom_frame: odom

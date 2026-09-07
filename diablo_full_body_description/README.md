@@ -36,8 +36,8 @@ untuk roda dan dua instance `dynamixel_hardware_interface` untuk U2D2-A/B.
 Frame lidar bernama `laser`. RPLIDAR A2 dipasang dengan kabel menghadap bagian
 belakang robot, sehingga joint tetapnya dari `diablo_base_link` ke `laser`
 memakai yaw `pi` (180 derajat). Offset posisi `lidar_x`, `lidar_y`, dan
-`lidar_z` masih default nol dan sebaiknya diisi setelah jarak fisik lidar dari
-pusat frame dasar diukur.
+`lidar_z` mengikuti hasil pengukuran: `x=0.00 m`, `y=+0.08 m`, dan `z=+0.17 m`,
+dihitung dari pusat frame dasar.
 
 Mapping hardware upper-body:
 

@@ -284,12 +284,12 @@ def generate_launch_description():
         ),
         DeclareLaunchArgument(
             "lidar_y",
-            default_value="0.0",
+            default_value="0.08",
             description="RPLIDAR frame y offset from diablo_base_link (m)",
         ),
         DeclareLaunchArgument(
             "lidar_z",
-            default_value="0.0",
+            default_value="0.17",
             description="RPLIDAR frame z offset from diablo_base_link (m)",
         ),
         DeclareLaunchArgument(

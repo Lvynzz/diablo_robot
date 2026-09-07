@@ -28,6 +28,14 @@ The EKF launch remains available for experiments with
 `ros2 launch diablo_localization localization.launch.py`, but it is not used
 by `full_body_hardware.launch.py` unless `use_ekf:=true` is explicitly set.
 
+When enabled, the Diablo profile follows the AMR estimator pattern: it fuses
+wheel forward velocity and yaw rate from
+`/diablo_base_controller/odom`, plus relative yaw from the onboard IMU at
+`/diablo/sensor/Imu`.  It does not fuse absolute wheel pose, acceleration, or
+the IMU gyro separately.  The filtered result is published on
+`/odometry/filtered`; point the goal controller to that topic explicitly when
+testing the EKF.
+
 The static IMU transform parameters are only used by the optional EKF launch.
 The default local wheel odometry path does not subscribe to IMU data.
 

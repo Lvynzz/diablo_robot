@@ -122,8 +122,13 @@ generik berikut wajib disesuaikan dengan model, baudrate, dan port robot:
 ```bash
 ros2 launch diablo_web_interface web_interface.launch.py \
   lidar_start_command:="ros2 run sllidar_ros2 sllidar_node --ros-args \
-    -p serial_port:=/dev/ttyUSBx -p serial_baudrate:=256000"
+    -p serial_port:=/dev/rplidar -p serial_baudrate:=256000 \
+    -p frame_id:=laser"
 ```
+
+RPLIDAR A2 pada robot dipasang dengan kabel menghadap belakang. Karena itu
+frame `laser` sudah diberi TF tetap yaw 180 derajat dari `diablo_base_link`;
+`inverted` tidak perlu diubah hanya karena orientasi pemasangan.
 
 Jangan gunakan `/dev/ttyUSBx` sebelum memeriksa apakah port itu milik LiDAR
 atau U2D2.

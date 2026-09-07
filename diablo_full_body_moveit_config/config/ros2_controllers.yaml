@@ -22,7 +22,7 @@ diablo_base_controller:
       - left_wheel_joint
     right_wheel_names:
       - right_wheel_joint
-    wheel_separation: 0.475
+    wheel_separation: 0.510
     wheel_radius: 0.093
     publish_rate: 50.0
     odom_frame_id: odom

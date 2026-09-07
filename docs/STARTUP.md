@@ -86,7 +86,8 @@ Terminal 3 — LiDAR:
 
 ```bash
 ros2 run sllidar_ros2 sllidar_node --ros-args \
-  -p serial_port:=/dev/ttyUSBx -p serial_baudrate:=256000
+  -p serial_port:=/dev/rplidar -p serial_baudrate:=256000 \
+  -p frame_id:=laser
 ```
 
 Terminal 4 — HMI:

@@ -47,7 +47,7 @@ def generate_launch_description():
             description="Use only without the ros2_control/local odometry stack",
         ),
         DeclareLaunchArgument("wheel_radius", default_value="0.093"),
-        DeclareLaunchArgument("track_width", default_value="0.475"),
+        DeclareLaunchArgument("track_width", default_value="0.510"),
         DeclareLaunchArgument("motor_topic", default_value="/diablo/sensor/Motors"),
 
         IncludeLaunchDescription(

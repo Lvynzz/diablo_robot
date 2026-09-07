@@ -28,12 +28,18 @@ Pilih launch sesuai model LiDAR dan sesuaikan device/baudrate:
 
 ```bash
 ros2 launch sllidar_ros2 sllidar_a2m7_launch.py \
-  serial_port:=/dev/ttyUSBx
+  serial_port:=/dev/rplidar \
+  frame_id:=laser
 ```
 
 Untuk model lain, lihat daftar `sllidar_*_launch.py` di folder `launch/`.
 Jangan menebak model atau baudrate. Verifikasi dengan label perangkat dan
 manual hardware.
+
+Pada robot ini kabel/interface RPLIDAR menghadap ke belakang. Deskripsi robot
+sudah menyediakan fixed TF `diablo_base_link -> laser` dengan yaw 180 derajat,
+sehingga tidak perlu mengubah `inverted` hanya karena pemasangan fisik tersebut.
+Jika port atau model berbeda, sesuaikan `serial_port` dan nama launch-nya.
 
 Cek topic dan service:
 

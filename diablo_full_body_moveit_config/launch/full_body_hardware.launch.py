@@ -36,6 +36,10 @@ def _launch_setup(context):
         "track_width": LaunchConfiguration("track_width").perform(context),
         "left_feedback_sign": LaunchConfiguration("left_feedback_sign").perform(context),
         "right_feedback_sign": LaunchConfiguration("right_feedback_sign").perform(context),
+        "lidar_x": LaunchConfiguration("lidar_x").perform(context),
+        "lidar_y": LaunchConfiguration("lidar_y").perform(context),
+        "lidar_z": LaunchConfiguration("lidar_z").perform(context),
+        "lidar_yaw": LaunchConfiguration("lidar_yaw").perform(context),
         "use_ekf": LaunchConfiguration("use_ekf").perform(context),
         "use_local_odom": LaunchConfiguration("use_local_odom").perform(context),
     }
@@ -262,7 +266,7 @@ def generate_launch_description():
         ),
         DeclareLaunchArgument("baud_rate", default_value="1000000"),
         DeclareLaunchArgument("wheel_radius", default_value="0.093"),
-        DeclareLaunchArgument("track_width", default_value="0.475"),
+        DeclareLaunchArgument("track_width", default_value="0.510"),
         DeclareLaunchArgument(
             "left_feedback_sign",
             default_value="1.0",
@@ -272,6 +276,26 @@ def generate_launch_description():
             "right_feedback_sign",
             default_value="1.0",
             description="Sign applied to right wheel feedback before odometry",
+        ),
+        DeclareLaunchArgument(
+            "lidar_x",
+            default_value="0.0",
+            description="RPLIDAR frame x offset from diablo_base_link (m)",
+        ),
+        DeclareLaunchArgument(
+            "lidar_y",
+            default_value="0.0",
+            description="RPLIDAR frame y offset from diablo_base_link (m)",
+        ),
+        DeclareLaunchArgument(
+            "lidar_z",
+            default_value="0.0",
+            description="RPLIDAR frame z offset from diablo_base_link (m)",
+        ),
+        DeclareLaunchArgument(
+            "lidar_yaw",
+            default_value="3.141592653589793",
+            description="RPLIDAR yaw relative to diablo_base_link (rad)",
         ),
         DeclareLaunchArgument(
             "use_ekf",

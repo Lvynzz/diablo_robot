@@ -28,10 +28,16 @@ ros2 run moveit_setup_assistant moveit_setup_assistant \
   --urdf_path "$(ros2 pkg prefix diablo_full_body_description)/share/diablo_full_body_description/description/urdf/diablo_full_body.urdf.xacro"
 ```
 
-Model menghasilkan 38 link dan 37 joint setelah ekspansi xacro. Secara default
+Model menghasilkan 39 link dan 38 joint setelah ekspansi xacro. Secara default
 URDF memakai `mock_components/GenericSystem` untuk simulasi. Launch hardware
 meneruskan `use_mock_hardware:=false`, lalu memakai `DiabloSystemHardware`
 untuk roda dan dua instance `dynamixel_hardware_interface` untuk U2D2-A/B.
+
+Frame lidar bernama `laser`. RPLIDAR A2 dipasang dengan kabel menghadap bagian
+belakang robot, sehingga joint tetapnya dari `diablo_base_link` ke `laser`
+memakai yaw `pi` (180 derajat). Offset posisi `lidar_x`, `lidar_y`, dan
+`lidar_z` masih default nol dan sebaiknya diisi setelah jarak fisik lidar dari
+pusat frame dasar diukur.
 
 Mapping hardware upper-body:
 

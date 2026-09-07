@@ -17,9 +17,15 @@
 <xacro:arg name="hand_port_name" default="/dev/u2d2_hand"/>
 <xacro:arg name="baud_rate" default="1000000"/>
 <xacro:arg name="wheel_radius" default="0.093"/>
-<xacro:arg name="track_width" default="0.475"/>
+<xacro:arg name="track_width" default="0.510"/>
 <xacro:arg name="left_feedback_sign" default="1.0"/>
 <xacro:arg name="right_feedback_sign" default="1.0"/>
+<!-- RPLIDAR A2 is mounted with its cable/interface toward the robot rear.
+     The sensor frame is therefore yawed 180 degrees relative to the base. -->
+<xacro:arg name="lidar_x" default="0.0"/>
+<xacro:arg name="lidar_y" default="0.0"/>
+<xacro:arg name="lidar_z" default="0.0"/>
+<xacro:arg name="lidar_yaw" default="3.141592653589793"/>
 
 <!-- One GPIO description is shared by the arm and Seed Robotics hand
      ros2_control systems below.  The IDs are kept next to the calls so the
@@ -61,6 +67,17 @@
 			</geometry>
 		</collision>
 	</link>
+
+	<!-- RPLIDAR A2 frame.  The translation defaults to the base origin until
+	     the physical sensor offset is measured.  Its cable points backward,
+	     so the sensor frame is rotated 180 degrees around +Z. -->
+	<link name="laser"/>
+	<joint name="diablo_laser_joint" type="fixed">
+		<origin xyz="$(arg lidar_x) $(arg lidar_y) $(arg lidar_z)"
+			rpy="0 0 $(arg lidar_yaw)" />
+		<parent link="diablo_base_link" />
+		<child link="laser" />
+	</joint>
 
 	<!-- left_leg -->
 	<joint name="left_fake_hip_joint" type="revolute">

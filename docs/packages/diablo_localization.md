@@ -28,3 +28,32 @@ diberikan secara eksplisit.
 Setelah reset, koordinat lokal pada `/diablo/odometry` memakai `x` positif ke
 depan robot, `y` positif ke kiri, dan heading `theta` dalam radian positif
 berlawanan arah jarum jam.
+
+## Kalibrasi wheel odometry
+
+Jika odometri kembali ke `(0, 0)` tetapi robot tidak kembali ke tanda fisik
+awal, periksa dulu bahwa hanya ada satu publisher odometri:
+
+```bash
+ros2 topic info -v /diablo/odometry
+ros2 node list | grep -E 'diablo_local_odom|diablo_wheel_odom|simple_goal_controller'
+```
+
+Kalibrasikan gerak lurus terlebih dahulu. Ukur jarak fisik `d_physical` dan
+jarak odometri `d_odom`, lalu gunakan:
+
+```text
+wheel_radius_new = wheel_radius_old * d_physical / d_odom
+```
+
+Untuk kalibrasi putaran, ukur perubahan heading fisik `yaw_physical` dan
+heading odometri `yaw_odom`:
+
+```text
+track_width_new = track_width_old * yaw_odom / yaw_physical
+```
+
+Gunakan hasil yang sama pada `wheel_radius`/`track_width` hardware dan
+`wheel_radius`/`wheel_separation` `diff_drive_controller`. Wheel odometry
+tidak dapat mengoreksi slip; jika error fisik tetap besar setelah kalibrasi,
+diperlukan referensi eksternal seperti IMU fusion atau lidar.

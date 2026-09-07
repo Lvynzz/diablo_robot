@@ -30,6 +30,11 @@ class SimpleGoalController(Node):
         self.declare_parameter("goal_yaw_tolerance", 0.08)
         self.declare_parameter("odom_timeout", 1.0)
         self.declare_parameter("max_linear_speed", 0.25)
+        # Diablo's low-level controller may not overcome wheel friction at
+        # very small forward commands.  Keep this configurable so a goal
+        # controller can compensate without changing direct/manual velocity
+        # commands globally.
+        self.declare_parameter("min_linear_speed", 0.04)
         self.declare_parameter("max_angular_speed", 0.60)
         self.declare_parameter("linear_gain", 0.8)
         self.declare_parameter("angular_gain", 1.5)
@@ -54,6 +59,9 @@ class SimpleGoalController(Node):
         )
         self.odom_timeout = float(self.get_parameter("odom_timeout").value)
         self.max_linear_speed = float(self.get_parameter("max_linear_speed").value)
+        self.min_linear_speed = max(
+            0.0, float(self.get_parameter("min_linear_speed").value)
+        )
         self.max_angular_speed = float(self.get_parameter("max_angular_speed").value)
         self.linear_gain = float(self.get_parameter("linear_gain").value)
         self.angular_gain = float(self.get_parameter("angular_gain").value)
@@ -97,6 +105,8 @@ class SimpleGoalController(Node):
             f"Goal ({self.goal_x:.3f}, {self.goal_y:.3f}), "
             f"yaw={self.goal_yaw:.3f} rad, use_goal_yaw={self.use_goal_yaw}; "
             f"tolerance {self.goal_tolerance:.3f} m; "
+            f"linear speed {self.min_linear_speed:.3f}.."
+            f"{self.max_linear_speed:.3f} m/s; "
             f"odom={odom_topic}; goal_topic={goal_topic or 'disabled'}; "
             f"reset_odom_on_start={self.reset_odom_on_start}; waiting for odometry"
         )
@@ -125,6 +135,14 @@ class SimpleGoalController(Node):
             elif parameter.name == "use_goal_yaw":
                 self.use_goal_yaw = bool(parameter.value)
                 self.goal_reported = False
+            elif parameter.name == "min_linear_speed":
+                value = float(parameter.value)
+                if not math.isfinite(value) or value < 0.0:
+                    return SetParametersResult(
+                        successful=False,
+                        reason="min_linear_speed must be finite and non-negative",
+                    )
+                self.min_linear_speed = value
         return SetParametersResult(successful=True)
 
     def goal_callback(self, message):
@@ -242,6 +260,12 @@ class SimpleGoalController(Node):
             linear = 0.0
         else:
             linear = self.clamp(self.linear_gain * distance, self.max_linear_speed)
+            if linear > 0.0 and self.max_linear_speed > 0.0:
+                # Apply the floor only while the goal is still outside the
+                # position tolerance.  The stop condition above remains the
+                # authority near the goal, preventing a permanent command.
+                minimum = min(self.min_linear_speed, self.max_linear_speed)
+                linear = max(linear, minimum)
 
         command = Twist()
         command.linear.x = linear

@@ -10,12 +10,20 @@ odometry becomes stale.  The controller does not reset its odometry origin by
 default; use the explicit localization reset command when a new test origin
 is desired.
 
+The controller compensates for a low-level forward-velocity deadband with
+`min_linear_speed` (default `0.04 m/s`).  The floor is applied only while the
+goal is outside `goal_tolerance`; once the goal is inside the tolerance, a
+zero command is published.  Set it to `0.0` to disable the compensation.  A
+larger value can cause overshoot, so tune it using a clear area and low
+`max_linear_speed` first.
+
 Example:
 
 ```bash
 ros2 run diablo_goal_controller simple_goal_controller --ros-args \
   -p goal_x:=1.0 -p goal_y:=0.0 \
-  -p use_goal_yaw:=true -p goal_yaw:=0.0
+  -p use_goal_yaw:=true -p goal_yaw:=0.0 \
+  -p goal_tolerance:=0.02 -p min_linear_speed:=0.04
 ```
 
 The goal can also be sent as one command containing x/y metres and heading in
@@ -39,6 +47,7 @@ ros2 param set /simple_goal_controller goal_x 0.5
 ros2 param set /simple_goal_controller goal_y 0.8
 ros2 param set /simple_goal_controller use_goal_yaw true
 ros2 param set /simple_goal_controller goal_yaw 1.5708
+ros2 param set /simple_goal_controller min_linear_speed 0.04
 ```
 
 Reset the local wheel pose only when you want a new local origin.  If this
@@ -58,5 +67,6 @@ Run the goal controller after the hardware launch has published local odometry:
 
 ```bash
 ros2 run diablo_goal_controller simple_goal_controller --ros-args \
-  -p goal_x:=1.0 -p goal_y:=0.0 -p use_goal_yaw:=false
+  -p goal_x:=1.0 -p goal_y:=0.0 -p use_goal_yaw:=false \
+  -p goal_tolerance:=0.02 -p min_linear_speed:=0.04
 ```

@@ -261,8 +261,8 @@ def generate_launch_description():
             description="U2D2-B port for Seed Robotics hand Dynamixels",
         ),
         DeclareLaunchArgument("baud_rate", default_value="1000000"),
-        DeclareLaunchArgument("wheel_radius", default_value="0.105"),
-        DeclareLaunchArgument("track_width", default_value="0.3751"),
+        DeclareLaunchArgument("wheel_radius", default_value="0.093"),
+        DeclareLaunchArgument("track_width", default_value="0.475"),
         DeclareLaunchArgument(
             "left_feedback_sign",
             default_value="1.0",

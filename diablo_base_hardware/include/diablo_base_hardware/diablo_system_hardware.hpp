@@ -89,8 +89,8 @@ private:
 
   std::string motion_cmd_topic_;
   std::string motors_topic_;
-  double wheel_radius_{0.105};
-  double track_width_{0.3751};
+  double wheel_radius_{0.093};
+  double track_width_{0.475};
   double left_feedback_sign_{1.0};
   double right_feedback_sign_{1.0};
   double max_forward_{1.0};

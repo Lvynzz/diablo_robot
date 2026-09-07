@@ -181,7 +181,7 @@ motor telemetry. Nav2 masih membutuhkan:
 
 `wheel_odom` dan adapter base menggunakan `left_wheel_pos/right_wheel_pos`
 dalam radian serta revolution counter dari `LegMotors`. Nilai awalnya
-`wheel_radius=0.105`, `track_width=0.3751`, arah kiri `+1` dan kanan `-1`
+`wheel_radius=0.105`, `track_width=0.3751`, arah kiri `+1` dan kanan `+1`
 mengikuti konstanta SDK. Kalibrasikan di tempat sebelum navigasi: bila maju
 menghasilkan odom mundur, ubah `left_feedback_sign`/`right_feedback_sign` pada
 full-body launch; bila jarak tidak sesuai, ubah radius. Dalam mode default,

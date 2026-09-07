@@ -14,9 +14,10 @@ linear  = wheel_radius * (left + right) / 2
 angular = wheel_radius * (right - left) / track_width
 ```
 
-Feedback positions are unwrapped with `enc_rev * 2*pi`.  The default feedback
-signs are `left=+1` and `right=-1`, matching the SDK's wheel direction
-convention.  The full-body launch exposes these as
+Feedback positions are unwrapped with `enc_rev * 2*pi`.  The calibrated
+feedback signs for this robot are `left=+1` and `right=+1`: both raw wheel
+velocities are positive during a physical forward command.  The full-body
+launch exposes these as
 `left_feedback_sign`/`right_feedback_sign` for a physical direction check:
 after a local reset, a real forward motion must increase `x`. All geometry,
 signs, limits, topic names, and the feedback timeout are hardware parameters

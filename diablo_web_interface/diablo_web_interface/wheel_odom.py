@@ -31,7 +31,7 @@ class DiabloWheelOdom(Node):
         self.declare_parameter("wheel_radius", 0.105)
         self.declare_parameter("track_width", 0.3751)
         self.declare_parameter("left_wheel_direction", 1.0)
-        self.declare_parameter("right_wheel_direction", -1.0)
+        self.declare_parameter("right_wheel_direction", 1.0)
         self.declare_parameter("use_encoder_revolutions", True)
         self.declare_parameter("publish_tf", True)
 

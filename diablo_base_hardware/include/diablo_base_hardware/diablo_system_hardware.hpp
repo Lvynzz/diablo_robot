@@ -92,7 +92,7 @@ private:
   double wheel_radius_{0.105};
   double track_width_{0.3751};
   double left_feedback_sign_{1.0};
-  double right_feedback_sign_{-1.0};
+  double right_feedback_sign_{1.0};
   double max_forward_{1.0};
   double max_yaw_rate_{1.0};
   double crawl_up_{1.0};

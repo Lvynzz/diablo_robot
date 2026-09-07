@@ -19,7 +19,7 @@
 <xacro:arg name="wheel_radius" default="0.105"/>
 <xacro:arg name="track_width" default="0.3751"/>
 <xacro:arg name="left_feedback_sign" default="1.0"/>
-<xacro:arg name="right_feedback_sign" default="-1.0"/>
+<xacro:arg name="right_feedback_sign" default="1.0"/>
 
 <!-- One GPIO description is shared by the arm and Seed Robotics hand
      ros2_control systems below.  The IDs are kept next to the calls so the

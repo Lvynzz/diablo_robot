@@ -270,7 +270,7 @@ def generate_launch_description():
         ),
         DeclareLaunchArgument(
             "right_feedback_sign",
-            default_value="-1.0",
+            default_value="1.0",
             description="Sign applied to right wheel feedback before odometry",
         ),
         DeclareLaunchArgument(

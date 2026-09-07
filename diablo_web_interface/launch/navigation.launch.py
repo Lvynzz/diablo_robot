@@ -76,7 +76,7 @@ def generate_launch_description():
         DeclareLaunchArgument("wheel_radius", default_value="0.105"),
         DeclareLaunchArgument("track_width", default_value="0.3751"),
         DeclareLaunchArgument("left_wheel_direction", default_value="1.0"),
-        DeclareLaunchArgument("right_wheel_direction", default_value="-1.0"),
+        DeclareLaunchArgument("right_wheel_direction", default_value="1.0"),
         DeclareLaunchArgument("use_encoder_revolutions", default_value="true"),
 
         Node(

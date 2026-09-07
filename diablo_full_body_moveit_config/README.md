@@ -168,12 +168,11 @@ ros2 topic echo /diablo_base_controller/odom --once
 ros2 topic echo /diablo/sensor/Motors --once
 ```
 
-Dengan tanda default `left_feedback_sign:=1.0` dan
-`right_feedback_sign:=-1.0`, perintah maju positif harus membuat `x` pada
-`/diablo/odometry` bertambah. Jika uji maju yang benar-benar menghasilkan
-gerak fisik justru membuat `x` berkurang, ulangi launch dengan kedua tanda
-dibalik (`left_feedback_sign:=-1.0 right_feedback_sign:=1.0`) lalu gunakan
-konfigurasi yang terbukti benar untuk robot tersebut.
+Dengan tanda terkalibrasi `left_feedback_sign:=1.0` dan
+`right_feedback_sign:=1.0`, kedua velocity encoder mentah positif ketika robot
+bergerak maju. Perintah maju positif harus membuat `x` pada
+`/diablo/odometry` bertambah dan yaw tetap dekat nol. Jika kabel, firmware,
+atau konfigurasi controller berubah, ulangi uji ini sebelum mengganti tanda.
 
 ## 4. Jalankan MoveIt dan RViz
 

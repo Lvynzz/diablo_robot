@@ -42,7 +42,7 @@ class SimpleGoalController(Node):
         self.declare_parameter(
             "cmd_vel_topic", "/diablo_base_controller/cmd_vel_unstamped"
         )
-        self.declare_parameter("odom_topic", "/odometry/filtered")
+        self.declare_parameter("odom_topic", "/diablo/odometry")
 
         self.goal_x = float(self.get_parameter("goal_x").value)
         self.goal_y = float(self.get_parameter("goal_y").value)

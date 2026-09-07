@@ -28,7 +28,7 @@ dibuat, backend memakai frontend fallback di
   `diablo_web_interface/static/`.
 
 Panel Drive Control menggunakan tema HMI industrial berwarna biru-abu terang,
-sidebar pilihan panel di kiri, tiga readout posisi dari fused wheel/IMU odometry, quick
+sidebar pilihan panel di kiri, tiga readout posisi dari resettable wheel odometry, quick
 actions, Motion Control, wheel encoder telemetry, keybind legend, dan trajectory
 map. Panel obstacle laser depan serta magnetic navigation sensor sengaja tidak
 ditampilkan pada versi ini. Setiap panel dapat ditutup dari tombol chevron di
@@ -61,11 +61,11 @@ Topics, dan Settings dapat diperiksa.
 | `web_node` | FastAPI + WebSocket: teleop, goal Nav2, initial pose, telemetry, topic echo, hardware startup, reset odom/encoder, start LiDAR |
 | `motion_cmd_bridge` | `Twist` Nav2 → `MotionCtrl` Diablo |
 | `motion_cmd_mux` | Pemilih manual/auto dengan command watchdog |
-| `wheel_odom` | Estimasi odom encoder legacy; gunakan hanya jika EKF/ros2_control tidak berjalan |
-| `diablo_localization` | EKF wheel/IMU pada `/odometry/filtered` dan reset pose eksplisit |
+| `wheel_odom` | Estimasi odom encoder legacy untuk launch yang tidak memakai ros2_control |
+| `diablo_localization` | Odom roda lokal resettable pada `/diablo/odometry`; EKF tetap opsional |
 | `navigation.launch.py` | map server, AMCL, costmap, planner, controller dan lifecycle Nav2 |
 | `mapping.launch.py` | SLAM Toolbox + odometri roda opsional |
-| `nav2_web.launch.py` | Launch gabungan web, mux, filtered odom dan Nav2 |
+| `nav2_web.launch.py` | Launch gabungan web, mux, odom roda lokal dan Nav2 |
 
 ## Build di laptop/robot
 
@@ -85,7 +85,7 @@ dependency dipasang di laptop.
 
 ## Menjalankan web + Nav2
 
-Jalankan hardware full-body dengan `use_ekf:=true`, lalu jalankan launch
+Jalankan hardware full-body dengan odom roda lokal resettable, lalu jalankan launch
 berikut pada mesin ROS. Tombol **START HARDWARE** di panel
 Navigation akan menjalankan driver Diablo dan Dynamixel yang dikonfigurasi;
 LiDAR bisa dijalankan lewat command atau service start. Jika driver sudah
@@ -94,7 +94,7 @@ tetap menunggu feedback ROS. Kemudian:
 
 ```bash
 ros2 launch diablo_full_body_moveit_config full_body_hardware.launch.py \
-  use_mock_hardware:=false use_ekf:=true
+  use_mock_hardware:=false use_ekf:=false use_local_odom:=true
 ```
 
 ```bash
@@ -172,31 +172,33 @@ motor telemetry. Nav2 masih membutuhkan:
 2. TF `map → odom` dari AMCL atau SLAM Toolbox. Launch standar menyediakan
    AMCL; gunakan `mapping.launch.py` bila ingin membuat peta.
 3. Frame robot yang konsisten. Konfigurasi default memakai `diablo_base_link`.
-   IMU driver memakai `diablo_robot` dan launch EKF menyediakan static TF
-   identity di antara kedua frame tersebut; ubah transform jika pemasangan
-   sensor tidak sejajar.
+   IMU driver memakai `diablo_robot`; static TF IMU hanya diperlukan bila
+   EKF eksperimental diaktifkan. Ubah transform jika pemasangan sensor tidak
+   sejajar.
 
-4. `robot_localization` melalui `ros-humble-robot-localization`.
+4. Package `diablo_localization` untuk odom roda lokal resettable. EKF
+   `robot_localization` hanya diperlukan bila memang diaktifkan eksplisit.
 
-`wheel_odom` menggunakan `left_wheel_pos/right_wheel_pos` dalam radian dan
-revolution counter dari `LegMotors`. Nilai awalnya `wheel_radius=0.105`,
-`track_width=0.3751`, arah kiri `+1` dan kanan `-1` mengikuti konstanta SDK.
-Kalibrasikan di tempat sebelum navigasi: bila maju menghasilkan odom mundur,
-ubah `left_wheel_direction`/`right_wheel_direction`; bila jarak tidak sesuai,
-ubah radius. Untuk odom eksternal, jalankan `enable_wheel_odom:=false` dan
-gunakan `odom_topic:=/nama_odom`. Jangan menjalankan `wheel_odom` ketika
-`full_body_hardware.launch.py use_ekf:=true`, karena keduanya dapat
-mempublikasikan odometry/TF yang bersaing.
+`wheel_odom` dan adapter base menggunakan `left_wheel_pos/right_wheel_pos`
+dalam radian serta revolution counter dari `LegMotors`. Nilai awalnya
+`wheel_radius=0.105`, `track_width=0.3751`, arah kiri `+1` dan kanan `-1`
+mengikuti konstanta SDK. Kalibrasikan di tempat sebelum navigasi: bila maju
+menghasilkan odom mundur, ubah `left_feedback_sign`/`right_feedback_sign` pada
+full-body launch; bila jarak tidak sesuai, ubah radius. Dalam mode default,
+gunakan `/diablo/odometry`; odom mentah tetap ada di
+`/diablo_base_controller/odom`. Jangan menjalankan `wheel_odom` bersamaan
+dengan local odom full-body karena keduanya dapat mempublikasikan odometry/TF
+yang bersaing.
 
-Reset pose fused hanya dengan sengaja. Opsi `-w 1` menunggu node reset
+Reset pose lokal hanya dengan sengaja. Opsi `-w 1` menunggu node reset
 terhubung sebelum mengirim pesan one-shot:
 
 ```bash
 ros2 topic pub --once -w 1 /diablo/reset_pose std_msgs/msg/Bool "{data: true}"
 ```
 
-Tanpa perintah tersebut, EKF tidak melakukan reset otomatis dan pose tetap
-berlanjut selama node tidak direstart.
+Tanpa perintah tersebut, pose odom lokal tetap berlanjut selama node tidak
+direstart.
 
 Shortcut teleoperasi default mengikuti [dokumentasi resmi Diablo](https://github.com/DDTRobot/diablo_ros2/blob/main/docs/docs_en/README_EN.md):
 `W/S` maju-mundur, `A/D` putar, `Q/E` roll, `Z` standing mode, `X` crawling

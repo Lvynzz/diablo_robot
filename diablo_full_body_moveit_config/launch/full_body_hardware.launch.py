@@ -34,12 +34,22 @@ def _launch_setup(context):
         "baud_rate": LaunchConfiguration("baud_rate").perform(context),
         "wheel_radius": LaunchConfiguration("wheel_radius").perform(context),
         "track_width": LaunchConfiguration("track_width").perform(context),
+        "left_feedback_sign": LaunchConfiguration("left_feedback_sign").perform(context),
+        "right_feedback_sign": LaunchConfiguration("right_feedback_sign").perform(context),
         "use_ekf": LaunchConfiguration("use_ekf").perform(context),
+        "use_local_odom": LaunchConfiguration("use_local_odom").perform(context),
     }
     robot_description = xacro.process_file(xacro_file, mappings=mappings).toxml()
 
     use_ekf_active = (
         mappings["use_ekf"].lower() == "true"
+        and mappings["enable_base_hardware"].lower() == "true"
+        and LaunchConfiguration("start_base_controller").perform(context).lower() == "true"
+        and mappings["upper_only"].lower() != "true"
+    )
+    use_local_odom_active = (
+        mappings["use_local_odom"].lower() == "true"
+        and not use_ekf_active
         and mappings["enable_base_hardware"].lower() == "true"
         and LaunchConfiguration("start_base_controller").perform(context).lower() == "true"
         and mappings["upper_only"].lower() != "true"
@@ -60,6 +70,14 @@ def _launch_setup(context):
         # The second file overrides only enable_odom_tf.  This prevents the
         # raw diff-drive controller and EKF from publishing the same TF.
         controller_parameters.append(ekf_controllers_file)
+    elif use_local_odom_active:
+        localization_share = get_package_share_directory("diablo_localization")
+        local_odom_controllers_file = os.path.join(
+            moveit_share, "config", "ros2_controllers_local_odom.yaml"
+        )
+        # The resettable local odometry node owns the same TF in raw-odom
+        # mode, so disable the diff-drive controller's duplicate TF.
+        controller_parameters.append(local_odom_controllers_file)
     controller_parameters.append({"robot_description": robot_description})
 
     robot_state_publisher = Node(
@@ -161,6 +179,25 @@ def _launch_setup(context):
                 }.items(),
             )
         )
+    if use_local_odom_active:
+        actions.append(
+            IncludeLaunchDescription(
+                PythonLaunchDescriptionSource(
+                    os.path.join(localization_share, "launch", "local_odom.launch.py")
+                ),
+                launch_arguments={
+                    "input_odom_topic": "/diablo_base_controller/odom",
+                    "output_odom_topic": "/diablo/odometry",
+                    "odom_frame": "odom",
+                    "base_frame": "diablo_base_link",
+                    "reset_topic": LaunchConfiguration("reset_topic"),
+                    "reset_service": LaunchConfiguration("reset_service"),
+                    "stop_cmd_topic": LaunchConfiguration("stop_cmd_topic"),
+                    "publish_tf": "true",
+                    "reset_on_start": LaunchConfiguration("reset_on_start"),
+                }.items(),
+            )
+        )
     if controller_spawners:
         actions.append(
             RegisterEventHandler(
@@ -227,12 +264,35 @@ def generate_launch_description():
         DeclareLaunchArgument("wheel_radius", default_value="0.105"),
         DeclareLaunchArgument("track_width", default_value="0.3751"),
         DeclareLaunchArgument(
+            "left_feedback_sign",
+            default_value="1.0",
+            description="Sign applied to left wheel feedback before odometry",
+        ),
+        DeclareLaunchArgument(
+            "right_feedback_sign",
+            default_value="-1.0",
+            description="Sign applied to right wheel feedback before odometry",
+        ),
+        DeclareLaunchArgument(
             "use_ekf",
+            default_value="false",
+            description=(
+                "Start the optional wheel/IMU robot_localization estimator "
+                "instead of resettable local wheel odometry"
+            ),
+        ),
+        DeclareLaunchArgument(
+            "use_local_odom",
             default_value="true",
             description=(
-                "Start wheel/IMU robot_localization and let it publish "
-                "odom -> diablo_base_link"
+                "Publish resettable local wheel odometry on /diablo/odometry "
+                "and own odom -> diablo_base_link TF"
             ),
+        ),
+        DeclareLaunchArgument(
+            "reset_on_start",
+            default_value="false",
+            description="Use the first raw odometry sample as local origin",
         ),
         DeclareLaunchArgument(
             "ekf_params_file",

@@ -37,8 +37,9 @@ preview untuk memeriksa layout.
 
 ## Launch
 
-Jalankan `full_body_hardware.launch.py use_ekf:=true` terlebih dahulu agar
-`/odometry/filtered` dan TF `odom -> diablo_base_link` tersedia.
+Jalankan `full_body_hardware.launch.py use_ekf:=false use_local_odom:=true`
+terlebih dahulu agar `/diablo/odometry` dan TF `odom -> diablo_base_link`
+tersedia.
 
 Untuk HMI/teleop:
 
@@ -46,7 +47,7 @@ Untuk HMI/teleop:
 ros2 launch diablo_web_interface web_interface.launch.py
 ```
 
-Untuk HMI + filtered odom + Nav2:
+Untuk HMI + odom roda lokal + Nav2:
 
 ```bash
 ros2 launch diablo_web_interface nav2_web.launch.py \
@@ -67,7 +68,7 @@ Topic/service default:
 
 ```text
 /diablo/MotionCmd/manual -> mux -> /diablo/MotionCmd
-/odometry/filtered
+/diablo/odometry
 /scan
 /diablo/sensor/Motors
 /diablo/reset_pose

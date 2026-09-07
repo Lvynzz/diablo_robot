@@ -25,7 +25,7 @@ class DiabloWheelOdom(Node):
     def __init__(self):
         super().__init__("diablo_wheel_odom")
         self.declare_parameter("input_topic", "/diablo/sensor/Motors")
-        self.declare_parameter("odom_topic", "/odom")
+        self.declare_parameter("odom_topic", "/diablo/odometry")
         self.declare_parameter("odom_frame", "odom")
         self.declare_parameter("base_frame", "base_link")
         self.declare_parameter("wheel_radius", 0.105)

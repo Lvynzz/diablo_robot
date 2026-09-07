@@ -61,7 +61,7 @@ Buka `http://<IP-ROBOT>:8000`.
 ## HMI panels
 
 - **Drive Control** — layout HMI industrial ringan dengan header `DIABLO ROBOT`,
-  sidebar panel di kiri, X/Y/heading dari `/odometry/filtered` fused wheel/IMU,
+  sidebar panel di kiri, X/Y/heading dari `/diablo/odometry` resettable wheel odometry,
   RESET ODOM,
   RESET ENCODER, START LIDAR, MotionCtrl manual, max speed, body/pitch control,
   keybind legend, wheel feedback, dan trajectory map. Panel front obstacle laser
@@ -82,7 +82,7 @@ key baru; hasil remap disimpan di browser operator.
 Quick action memakai service ROS berikut:
 
 - `RESET ODOM` → `/diablo/reset_odom` (`std_srvs/srv/Trigger`, disediakan node
-  `diablo_pose_reset` dan diteruskan ke EKF).
+  `diablo_local_odom`; menyimpan pose roda saat ini sebagai origin baru).
 - `RESET ENCODER` → `/diablo/reset_encoder` secara default; dapat diubah dengan
   `reset_encoder_service:=...`.
 - `START LIDAR` → `/start_motor` (`std_srvs/Empty`) secara default, mengikuti

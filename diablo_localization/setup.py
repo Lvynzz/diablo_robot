@@ -27,10 +27,11 @@ setup(
     zip_safe=True,
     maintainer="alvin",
     maintainer_email="alvin@todo.todo",
-    description="Wheel/IMU EKF localization and explicit pose reset for Diablo",
+    description="Resettable local wheel odometry for Diablo, with optional legacy EKF",
     license="Apache-2.0",
     entry_points={
         "console_scripts": [
+            "local_odom = diablo_localization.local_odom:main",
             "reset_pose = diablo_localization.reset_pose:main",
         ],
     },

@@ -17,7 +17,7 @@ def generate_launch_description():
         ),
         DeclareLaunchArgument("base_frame", default_value="diablo_base_link"),
         DeclareLaunchArgument("map_frame", default_value="map"),
-        DeclareLaunchArgument("odom_topic", default_value="/odometry/filtered"),
+        DeclareLaunchArgument("odom_topic", default_value="/diablo/odometry"),
         DeclareLaunchArgument("scan_topic", default_value="/scan"),
         DeclareLaunchArgument(
             "reset_encoder_service", default_value="/diablo/reset_encoder"

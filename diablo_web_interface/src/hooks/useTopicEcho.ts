@@ -7,7 +7,7 @@ function demoPacket(topic: string, slot: number): TopicPacket {
     ? { voltage: 24.6, percentage: 82, current: 1.8 }
     : topic.includes("Motors")
       ? { left_wheel_pos: 4.2, right_wheel_pos: -4.0, left_wheel_vel: 0.14, right_wheel_vel: -0.13 }
-      : topic === "/odometry/filtered" || topic === "/odom"
+      : topic === "/diablo/odometry" || topic === "/odometry/filtered" || topic === "/odom"
         ? { pose: { pose: { position: { x: 0.62, y: 0.42 } } }, twist: { twist: { linear: { x: 0.04 } } } }
         : topic === "/scan"
           ? { header: { frame_id: "laser" }, ranges: "[180 values]" }

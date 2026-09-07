@@ -16,8 +16,11 @@ angular = wheel_radius * (right - left) / track_width
 
 Feedback positions are unwrapped with `enc_rev * 2*pi`.  The default feedback
 signs are `left=+1` and `right=-1`, matching the SDK's wheel direction
-convention.  All geometry, signs, limits, topic names, and the feedback
-timeout are hardware parameters in the URDF.
+convention.  The full-body launch exposes these as
+`left_feedback_sign`/`right_feedback_sign` for a physical direction check:
+after a local reset, a real forward motion must increase `x`. All geometry,
+signs, limits, topic names, and the feedback timeout are hardware parameters
+in the URDF.
 
 On activation the adapter sends one `mode_mark=true`, `stand_mode=false`
 message so the official driver requests crawling mode.  During operation it

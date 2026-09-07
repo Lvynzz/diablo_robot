@@ -19,9 +19,9 @@ def generate_launch_description():
         DeclareLaunchArgument(
             "enable_wheel_odom",
             default_value="false",
-            description="Use only without the ros2_control/EKF odometry stack",
+            description="Use only without the ros2_control/local odometry stack",
         ),
-        DeclareLaunchArgument("odom_topic", default_value="/odometry/filtered"),
+        DeclareLaunchArgument("odom_topic", default_value="/diablo/odometry"),
         DeclareLaunchArgument("odom_frame", default_value="odom"),
         DeclareLaunchArgument("base_frame", default_value="diablo_base_link"),
         DeclareLaunchArgument("wheel_radius", default_value="0.105"),

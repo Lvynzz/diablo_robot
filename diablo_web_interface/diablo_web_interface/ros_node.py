@@ -95,7 +95,7 @@ class DiabloWebNode(Node):
         self.declare_parameter("manual_cmd_topic", "/diablo/MotionCmd/manual")
         self.declare_parameter("control_mode_topic", "/diablo/control_mode")
         self.declare_parameter("map_topic", "/map")
-        self.declare_parameter("odom_topic", "/odometry/filtered")
+        self.declare_parameter("odom_topic", "/diablo/odometry")
         self.declare_parameter("scan_topic", "/scan")
         self.declare_parameter("base_frame", "diablo_base_link")
         self.declare_parameter("map_frame", "map")
@@ -644,9 +644,9 @@ class DiabloWebNode(Node):
         return {"published": True, "x": x, "y": y, "theta": theta}
 
     def reset_odom(self):
-        """Request the running EKF to reset its local pose origin."""
+        """Request the local wheel odometry to reset its pose origin."""
         if not self._reset_odom_client.wait_for_service(timeout_sec=0.5):
-            return {"requested": False, "message": "EKF pose reset service is unavailable"}
+            return {"requested": False, "message": "Local odometry reset service is unavailable"}
         self._reset_odom_client.call_async(Trigger.Request())
         with self._lock:
             self._odom_pose = {
@@ -656,7 +656,7 @@ class DiabloWebNode(Node):
                 "source": "filtered_odom",
             }
             self._wheel_trajectory = [{"x": 0.0, "y": 0.0}]
-        return {"requested": True, "message": "EKF pose reset requested"}
+        return {"requested": True, "message": "Local wheel odometry reset requested"}
 
     def reset_encoder(self):
         """Reset the wheel odometry encoder reference without changing pose."""

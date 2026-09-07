@@ -3,13 +3,14 @@
 <package format="3">
   <name>diablo_localization</name>
   <version>0.1.0</version>
-  <description>Wheel/IMU EKF localization and explicit pose reset for Diablo.</description>
+  <description>Resettable local wheel odometry for Diablo, with optional legacy EKF.</description>
   <maintainer email="alvin@todo.todo">alvin</maintainer>
   <license>Apache-2.0</license>
 
   <buildtool_depend>ament_python</buildtool_depend>
 
   <depend>geometry_msgs</depend>
+  <depend>nav_msgs</depend>
   <depend>rclpy</depend>
   <depend>robot_localization</depend>
   <depend>std_msgs</depend>

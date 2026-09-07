@@ -1,0 +1,4 @@
+# The resettable local odometry node owns odom -> diablo_base_link.
+diablo_base_controller:
+  ros__parameters:
+    enable_odom_tf: false

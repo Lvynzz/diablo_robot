@@ -4,8 +4,8 @@ Konfigurasi MoveIt 2 untuk simulasi full-body Diablo. Demo menggunakan
 `mock_components/GenericSystem`, sehingga tidak membuka U2D2 dan tidak
 menggerakkan robot fisik.
 
-Launch hardware mengaktifkan EKF wheel/IMU secara default. EKF menerbitkan
-`/odometry/filtered` serta TF `odom -> diablo_base_link`.
+Launch hardware mengaktifkan odometri roda lokal resettable secara default.
+Node ini menerbitkan `/diablo/odometry` serta TF `odom -> diablo_base_link`.
 
 ## Build dan demo
 
@@ -28,7 +28,7 @@ Untuk hardware nyata:
 
 ```bash
 ros2 launch diablo_full_body_moveit_config full_body_hardware.launch.py \
-  use_mock_hardware:=false use_ekf:=true
+  use_mock_hardware:=false use_ekf:=false use_local_odom:=true
 ```
 
 Reset pose secara eksplisit ketika robot berhenti:

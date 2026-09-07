@@ -15,7 +15,7 @@ persiapan navigasi Nav2.
 | `diablo_ros2` | SDK/driver Diablo, telemetry, dan message utama |
 | `diablo_bringup` | URDF ros2_control dan launch controller Dynamixel |
 | `diablo_web_interface` | React/FastAPI HMI, teleop, topic echo, dan Nav2 bridge |
-| `diablo_localization` | EKF wheel/IMU, filtered odometry, dan reset pose eksplisit |
+| `diablo_localization` | Odom roda lokal resettable dan EKF opsional |
 | `sllidar_ros2` | Driver SLAMTEC/RPLIDAR dan service motor LiDAR |
 | `dynamixel_hardware_interface` | Plugin ros2_control untuk U2D2/Dynamixel |
 | `dynamixel_interfaces` | Message/service tambahan untuk Dynamixel |
@@ -55,7 +55,7 @@ sudo apt install -y python3-rosdep python3-colcon-common-extensions \
   ros-humble-ros2-control ros-humble-ros2-controllers \
   ros-humble-navigation2 ros-humble-nav2-bringup \
   ros-humble-slam-toolbox ros-humble-moveit \
-  ros-humble-robot-localization
+ros-humble-robot-localization
 ```
 
 Dependency Python Web HMI:
@@ -128,7 +128,7 @@ ros2 launch diablo_web_interface web_interface.launch.py \
 Jangan gunakan `/dev/ttyUSBx` sebelum memeriksa apakah port itu milik LiDAR
 atau U2D2.
 
-### Profil B — Web HMI + EKF odometry + Nav2
+### Profil B — Web HMI + odometry roda lokal + Nav2
 
 Gunakan setelah frame, `/scan`, odometry, costmap, dan map sudah dikonfigurasi:
 
@@ -212,7 +212,7 @@ ros2 node list
 ros2 topic list
 ros2 topic echo /diablo/sensor/Motors --once
 ros2 topic echo /scan --once
-ros2 topic echo /odometry/filtered --once
+ros2 topic echo /diablo/odometry --once
 ros2 service list | grep -E 'start_motor|reset|controller'
 ls -l /dev/serial/by-id/
 ```

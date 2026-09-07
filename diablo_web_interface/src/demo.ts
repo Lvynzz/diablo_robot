@@ -84,7 +84,7 @@ export const demoState: DiabloState = {
   type: "state",
   stamp: Date.now() / 1000,
   pose: { x: 0.62, y: 0.42, theta: 0.18, source: "demo /map" },
-  wheel_pose: { x: 0.62, y: 0.42, theta: 0.18, source: "demo /odometry/filtered" },
+  wheel_pose: { x: 0.62, y: 0.42, theta: 0.18, source: "demo /diablo/odometry" },
   wheel_trajectory: makeDemoWheelTrajectory(),
   telemetry: {
     battery: { voltage: 24.6, current: 1.8, percentage: 82, temperature: 31.2 },
@@ -133,7 +133,7 @@ export const demoTopics: TopicDescriptor[] = [
   { name: "/diablo/sensor/Body_state", types: ["motion_msgs/msg/RobotStatus"] },
   { name: "/diablo/sensor/Imu", types: ["sensor_msgs/msg/Imu"] },
   { name: "/diablo/sensor/Motors", types: ["motion_msgs/msg/LegMotors"] },
-  { name: "/odometry/filtered", types: ["nav_msgs/msg/Odometry"] },
+  { name: "/diablo/odometry", types: ["nav_msgs/msg/Odometry"] },
   { name: "/scan", types: ["sensor_msgs/msg/LaserScan"] },
   { name: "/diablo/MotionCmd", types: ["motion_msgs/msg/MotionCtrl"] },
 ];

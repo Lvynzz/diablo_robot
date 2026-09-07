@@ -81,16 +81,17 @@ ros2 launch diablo_full_body_moveit_config full_body_hardware.launch.py \
   use_mock_hardware:=false \
   arm_port_name:=/dev/u2d2_arm \
   hand_port_name:=/dev/u2d2_hand \
-  use_ekf:=true \
+  use_ekf:=false \
+  use_local_odom:=true \
   start_move_group:=false
 ```
 
-Dengan `use_ekf:=true`, launch juga menjalankan `robot_localization` pada
-`/diablo_ekf_filter`, menerbitkan `/odometry/filtered`, dan menyediakan reset
-pose. EKF memakai velocity roda serta gyro Z IMU; akselerasi IMU sengaja belum
-digunakan. `diablo_base_controller` tetap menerbitkan topic odom mentah,
-tetapi tidak lagi menerbitkan TF `odom -> diablo_base_link` agar tidak bentrok
-dengan EKF.
+Dengan konfigurasi default `use_ekf:=false use_local_odom:=true`, launch
+menjalankan node `local_odom`. Node ini membaca odom mentah
+`/diablo_base_controller/odom`, menerbitkan `/diablo/odometry`, dan memiliki
+TF `odom -> diablo_base_link` yang dapat di-reset. Odom mentah tetap tersedia
+untuk diagnosis. EKF tidak diperlukan untuk uji navigasi ringan ini; hanya
+aktif jika `use_ekf:=true` diberikan secara eksplisit.
 
 Pastikan driver resmi sudah berjalan dan frame IMU default
 `diablo_robot` memang sebidang dengan `diablo_base_link`. Jika posisi atau
@@ -114,7 +115,8 @@ ros2 launch diablo_full_body_moveit_config full_body_hardware.launch.py \
   enable_base_hardware:=true \
   start_arm_controllers:=false \
   start_base_controller:=true \
-  use_ekf:=true \
+  use_ekf:=false \
+  use_local_odom:=true \
   start_move_group:=false
 ```
 
@@ -126,7 +128,7 @@ ros2 topic echo /diablo/MotionCmd
 
 Reset pose hanya jika ingin menjadikan posisi robot saat ini sebagai origin
 baru. Perintah ini tidak dijalankan otomatis saat startup, sehingga jika tidak
-dikirim pose EKF tetap berlanjut ketika robot dipindahkan untuk tes berikutnya:
+dikirim pose lokal tetap berlanjut ketika robot dipindahkan untuk tes berikutnya:
 
 ```bash
 ros2 topic pub --once -w 1 /diablo/reset_pose std_msgs/msg/Bool "{data: true}"
@@ -141,12 +143,14 @@ ros2 service call /diablo/reset_odom std_srvs/srv/Trigger "{}"
 Pantau hasilnya:
 
 ```bash
-ros2 topic echo /odometry/filtered --once
+ros2 topic echo /diablo/odometry --once
 ros2 run tf2_ros tf2_echo odom diablo_base_link
 ```
 
-Untuk menjalankan sistem lama tanpa EKF, gunakan `use_ekf:=false` dan goal
-controller dapat diarahkan ke `/diablo_base_controller/odom`.
+Jika ingin melewati wrapper dan melihat odom mentah secara langsung, gunakan
+`use_local_odom:=false`; dalam mode itu controller kembali memiliki TF
+`odom -> diablo_base_link` dan topic mentahnya adalah
+`/diablo_base_controller/odom`.
 
 Di terminal keempat, beri kecepatan sangat rendah selama sekitar dua detik dan
 hentikan publisher dengan `Ctrl-C`:
@@ -163,6 +167,13 @@ Setelah itu, laporkan apakah robot tetap crawling, bergerak lurus, dan apakah
 ros2 topic echo /diablo_base_controller/odom --once
 ros2 topic echo /diablo/sensor/Motors --once
 ```
+
+Dengan tanda default `left_feedback_sign:=1.0` dan
+`right_feedback_sign:=-1.0`, perintah maju positif harus membuat `x` pada
+`/diablo/odometry` bertambah. Jika uji maju yang benar-benar menghasilkan
+gerak fisik justru membuat `x` berkurang, ulangi launch dengan kedua tanda
+dibalik (`left_feedback_sign:=-1.0 right_feedback_sign:=1.0`) lalu gunakan
+konfigurasi yang terbukti benar untuk robot tersebut.
 
 ## 4. Jalankan MoveIt dan RViz
 

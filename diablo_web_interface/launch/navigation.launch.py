@@ -56,7 +56,7 @@ def generate_launch_description():
             default_value="false",
             description=(
                 "Start legacy standalone wheel odometry. Keep false when "
-                "full_body_hardware.launch.py provides EKF odometry."
+                "full_body_hardware.launch.py provides local odometry."
             ),
         ),
         DeclareLaunchArgument("enable_mux", default_value="true"),
@@ -69,7 +69,7 @@ def generate_launch_description():
         ),
         DeclareLaunchArgument("nav_cmd_topic", default_value="/cmd_vel_smoothed"),
         DeclareLaunchArgument("motor_topic", default_value="/diablo/sensor/Motors"),
-        DeclareLaunchArgument("odom_topic", default_value="/odometry/filtered"),
+        DeclareLaunchArgument("odom_topic", default_value="/diablo/odometry"),
         DeclareLaunchArgument("odom_frame", default_value="odom"),
         DeclareLaunchArgument("base_frame", default_value="diablo_base_link"),
         DeclareLaunchArgument("scan_topic", default_value="/scan"),

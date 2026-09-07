@@ -7,7 +7,7 @@ const fallbackConfig: WebConfig = {
   manual_cmd_topic: "/diablo/MotionCmd/manual",
   control_mode_topic: "/diablo/control_mode",
   map_topic: "/map",
-  odom_topic: "/odometry/filtered",
+  odom_topic: "/diablo/odometry",
   scan_topic: "/scan",
   base_frame: "diablo_base_link",
   map_frame: "map",
@@ -35,8 +35,8 @@ export function SettingsView({ config, state, connected, nav2Ready, onReconnect,
           <div className="settings-list"><div><span>FastAPI host</span><code>{window.location.host}</code></div><div><span>State stream</span><code>/ws</code></div><div><span>Topic echo stream</span><code>/ws/topics</code></div><div><span>REST namespace</span><code>/api/*</code></div></div>
         </Panel>
         <Panel title="ROS Frame Map" eyebrow="NAV2 CONTRACT" accent="blue">
-          <div className="settings-list"><div><span>Map frame</span><code>{current.map_frame}</code></div><div><span>Base frame</span><code>{current.base_frame}</code></div><div><span>Odometry</span><code>{current.odom_topic} · fused wheel/IMU</code></div><div><span>Laser scan</span><code>{current.scan_topic}</code></div><div><span>Static map</span><code>{current.map_topic}</code></div><div><span>Reset pose</span><code>/diablo/reset_odom</code></div><div><span>Reset encoder</span><code>{current.reset_encoder_service || "not configured"}</code></div><div><span>Start LiDAR</span><code>{current.lidar_start_service || "not configured"}</code></div></div>
-          <div className="settings-callout"><Icon name="map" size={17} /><span>Full-body hardware publishes filtered odometry on <code>/odometry/filtered</code>; EKF owns <code>odom → diablo_base_link</code>.</span></div>
+          <div className="settings-list"><div><span>Map frame</span><code>{current.map_frame}</code></div><div><span>Base frame</span><code>{current.base_frame}</code></div><div><span>Odometry</span><code>{current.odom_topic} · resettable wheel odom</code></div><div><span>Laser scan</span><code>{current.scan_topic}</code></div><div><span>Static map</span><code>{current.map_topic}</code></div><div><span>Reset pose</span><code>/diablo/reset_odom</code></div><div><span>Reset encoder</span><code>{current.reset_encoder_service || "not configured"}</code></div><div><span>Start LiDAR</span><code>{current.lidar_start_service || "not configured"}</code></div></div>
+          <div className="settings-callout"><Icon name="map" size={17} /><span>Full-body hardware publishes resettable wheel odometry on <code>/diablo/odometry</code>; the local odometry node owns <code>odom → diablo_base_link</code>.</span></div>
         </Panel>
       </div>
       <Panel title="Diablo Command Contract" eyebrow="MOTIONCTRL ROUTING" accent="orange">

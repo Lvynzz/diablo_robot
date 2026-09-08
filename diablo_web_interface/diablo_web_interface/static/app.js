@@ -180,7 +180,9 @@
     const teleopReady = Boolean(hardware.ready);
     $("teleop-lock").textContent = teleopReady ? "TELEOP UNLOCKED · MAPPING OPTIONAL" : "START HARDWARE TO UNLOCK TELEOP";
     $("teleop-lock").className = teleopReady ? "unlocked" : "";
-    const pose = state.pose;
+    // Match the AMR navigation renderer: AMCL/map pose has priority, while
+    // wheel odometry keeps the robot visible before AMCL publishes.
+    const pose = state.pose || state.wheel_pose;
     $("pose-x").textContent = pose ? Number(pose.x).toFixed(3) : "—";
     $("pose-y").textContent = pose ? Number(pose.y).toFixed(3) : "—";
     $("pose-theta").textContent = pose ? (Number(pose.theta) * 180 / Math.PI).toFixed(1) : "—";
@@ -317,23 +319,24 @@
     };
     if (checked("layer-global-costmap", true)) drawCostmap(state.global_costmap, "global");
     if (checked("layer-local-costmap", true)) drawCostmap(state.local_costmap, "local");
-    if (checked("layer-lidar", false) && state.scan && state.pose) {
+    const displayPose = state.pose || state.wheel_pose;
+    if (checked("layer-lidar", false) && state.scan && displayPose) {
       ctx.fillStyle = "rgba(36,126,164,.62)";
       const sensorX = Number(state.scan.sensor_x) || 0;
       const sensorY = Number(state.scan.sensor_y) || 0;
       const sensorTheta = Number(state.scan.sensor_theta) || 0;
-      const laserX = state.pose.x + Math.cos(state.pose.theta) * sensorX - Math.sin(state.pose.theta) * sensorY;
-      const laserY = state.pose.y + Math.sin(state.pose.theta) * sensorX + Math.cos(state.pose.theta) * sensorY;
+      const laserX = displayPose.x + Math.cos(displayPose.theta) * sensorX - Math.sin(displayPose.theta) * sensorY;
+      const laserY = displayPose.y + Math.sin(displayPose.theta) * sensorX + Math.cos(displayPose.theta) * sensorY;
       state.scan.ranges.forEach((range, index) => {
         if (range === null || range < state.scan.range_min || range > state.scan.range_max) return;
-        const angle = state.pose.theta + sensorTheta + state.scan.angle_min + index * state.scan.angle_increment;
+        const angle = displayPose.theta + sensorTheta + state.scan.angle_min + index * state.scan.angle_increment;
         const [x, y] = toCanvas(laserX + range * Math.cos(angle), laserY + range * Math.sin(angle));
         ctx.fillRect(x - 1, y - 1, 2.5, 2.5);
       });
     }
-    if (checked("layer-robot", true) && state.pose) {
-      const [x, y] = toCanvas(state.pose.x, state.pose.y);
-      ctx.save(); ctx.translate(x, y); ctx.rotate(-state.pose.theta);
+    if (checked("layer-robot", true) && displayPose) {
+      const [x, y] = toCanvas(displayPose.x, displayPose.y);
+      ctx.save(); ctx.translate(x, y); ctx.rotate(-displayPose.theta);
       ctx.fillStyle = "#4f925c"; ctx.strokeStyle = "#fff"; ctx.lineWidth = 2;
       ctx.beginPath(); ctx.moveTo(13, 0); ctx.lineTo(-9, -7); ctx.lineTo(-6, 0); ctx.lineTo(-9, 7); ctx.closePath(); ctx.fill(); ctx.stroke(); ctx.restore();
     }

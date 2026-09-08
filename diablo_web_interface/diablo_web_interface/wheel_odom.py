@@ -34,6 +34,7 @@ class DiabloWheelOdom(Node):
         self.declare_parameter("right_wheel_direction", 1.0)
         self.declare_parameter("use_encoder_revolutions", True)
         self.declare_parameter("publish_tf", True)
+        self.declare_parameter("max_wheel_delta", 1.5)
 
         input_topic = str(self.get_parameter("input_topic").value)
         odom_topic = str(self.get_parameter("odom_topic").value)
@@ -45,6 +46,9 @@ class DiabloWheelOdom(Node):
         self.right_sign = float(self.get_parameter("right_wheel_direction").value)
         self.use_revolutions = bool(self.get_parameter("use_encoder_revolutions").value)
         self.publish_tf = bool(self.get_parameter("publish_tf").value)
+        self.max_wheel_delta = abs(
+            float(self.get_parameter("max_wheel_delta").value)
+        )
 
         if self.wheel_radius <= 0.0 or self.track_width <= 0.0:
             raise ValueError("wheel_radius and track_width must be positive")
@@ -95,6 +99,8 @@ class DiabloWheelOdom(Node):
 
         delta_left = (left - self._last_left) * self.wheel_radius
         delta_right = (right - self._last_right) * self.wheel_radius
+        wheel_angle_delta_left = left - self._last_left
+        wheel_angle_delta_right = right - self._last_right
         dt = (stamp_ns - self._last_stamp_ns) / 1_000_000_000.0
         if dt <= 0.0 or dt > 1.0:
             dt = 0.02
@@ -102,6 +108,21 @@ class DiabloWheelOdom(Node):
         self._last_left = left
         self._last_right = right
         self._last_stamp_ns = stamp_ns
+
+        # The Diablo SDK revolution counters can briefly contain a stale or
+        # not-yet-initialized value when its serial driver starts. Treat an
+        # impossible single-sample wheel jump as a new baseline instead of
+        # turning it into a multi-metre odometry jump.
+        if self.max_wheel_delta > 0.0 and (
+            abs(wheel_angle_delta_left) > self.max_wheel_delta
+            or abs(wheel_angle_delta_right) > self.max_wheel_delta
+        ):
+            self.get_logger().warning(
+                "Ignored discontinuous wheel sample "
+                f"(left={wheel_angle_delta_left:.3f}, "
+                f"right={wheel_angle_delta_right:.3f} rad)"
+            )
+            return
 
         distance = 0.5 * (delta_left + delta_right)
         delta_yaw = (delta_right - delta_left) / self.track_width

@@ -190,6 +190,11 @@ gunakan `/diablo/odometry`; odom mentah tetap ada di
 dengan local odom full-body karena keduanya dapat mempublikasikan odometry/TF
 yang bersaing.
 
+Standalone `wheel_odom` mengabaikan lonjakan satu sampel di atas 1.5 radian
+(`max_wheel_delta`) dan menjadikannya baseline baru. Filter ini mencegah nilai
+revolution counter yang belum stabil saat serial driver baru hidup menggeser
+pose beberapa meter.
+
 Reset pose lokal hanya dengan sengaja. Opsi `-w 1` menunggu node reset
 terhubung sebelum mengirim pesan one-shot:
 

@@ -65,6 +65,7 @@ def generate_launch_description():
         DeclareLaunchArgument("enable_wheel_odom", default_value="true"),
         DeclareLaunchArgument("wheel_radius", default_value="0.093"),
         DeclareLaunchArgument("track_width", default_value="0.475"),
+        DeclareLaunchArgument("max_wheel_delta", default_value="1.5"),
 
         SetEnvironmentVariable("DIABLO_WEB_HOST", LaunchConfiguration("host")),
         SetEnvironmentVariable("DIABLO_WEB_PORT", LaunchConfiguration("port")),
@@ -118,6 +119,7 @@ def generate_launch_description():
                 "base_frame": LaunchConfiguration("base_frame"),
                 "wheel_radius": LaunchConfiguration("wheel_radius"),
                 "track_width": LaunchConfiguration("track_width"),
+                "max_wheel_delta": LaunchConfiguration("max_wheel_delta"),
             }],
             condition=IfCondition(LaunchConfiguration("enable_wheel_odom")),
         ),

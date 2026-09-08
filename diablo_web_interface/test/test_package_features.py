@@ -30,6 +30,9 @@ def test_diablo_motion_control_uses_native_message_and_topic():
     assert "/diablo/MotionCmd/nav" in mux
     assert "/diablo/MotionCmd" in mux
     assert "MotionCtrl" in web
+    wheel_odom = read_text("diablo_web_interface/wheel_odom.py")
+    assert 'declare_parameter("max_wheel_delta", 1.5)' in wheel_odom
+    assert "Ignored discontinuous wheel sample" in wheel_odom
 
 
 def test_nav2_launch_contains_action_stack_and_safety_bridges():

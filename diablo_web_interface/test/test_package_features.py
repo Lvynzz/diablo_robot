@@ -111,6 +111,7 @@ def test_web_ui_has_mapping_teleop_and_topic_echo_panels():
     assert 'DeclareLaunchArgument("lidar_start_service_type", default_value="empty")' in nav2_launch
     assert 'package="tf2_ros"' in web_launch
     assert 'DeclareLaunchArgument("publish_lidar_tf", default_value="true")' in web_launch
+    assert 'DeclareLaunchArgument("hardware_feedback_timeout", default_value="15.0")' in web_launch
     assert "not self.lidar_start_command" in ros_node
     assert "HardwareManager" in ros_node
     assert "def start_hardware" in ros_node

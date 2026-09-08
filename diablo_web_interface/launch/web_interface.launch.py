@@ -51,6 +51,7 @@ def generate_launch_description():
             ),
         ),
         DeclareLaunchArgument("hardware_log_directory", default_value="/tmp"),
+        DeclareLaunchArgument("hardware_feedback_timeout", default_value="15.0"),
         DeclareLaunchArgument("localization_start_command", default_value=""),
         DeclareLaunchArgument("navigation_start_command", default_value=""),
         DeclareLaunchArgument(
@@ -96,6 +97,7 @@ def generate_launch_description():
                 "lidar_start_command": LaunchConfiguration("lidar_start_command"),
                 "dynamixel_start_command": LaunchConfiguration("dynamixel_start_command"),
                 "hardware_log_directory": LaunchConfiguration("hardware_log_directory"),
+                "hardware_feedback_timeout": LaunchConfiguration("hardware_feedback_timeout"),
                 "localization_start_command": LaunchConfiguration("localization_start_command"),
                 "navigation_start_command": LaunchConfiguration("navigation_start_command"),
                 "mapping_start_command": LaunchConfiguration("mapping_start_command"),

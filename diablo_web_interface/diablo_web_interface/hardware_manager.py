@@ -29,6 +29,7 @@ class HardwareManager:
         lidar_topic="/scan",
         dynamixel_topic="/joint_states",
         log_directory="/tmp",
+        feedback_timeout=15.0,
     ):
         self._logger = logger
         self._commands = {
@@ -42,6 +43,7 @@ class HardwareManager:
             "dynamixel": {self._normalize_topic(dynamixel_topic)},
         }
         self._log_directory = str(log_directory or "/tmp").strip() or "/tmp"
+        self._feedback_timeout = max(1.0, float(feedback_timeout))
         self._lock = threading.RLock()
         self._processes = {}
         self._log_handles = {}
@@ -228,6 +230,29 @@ class HardwareManager:
                         self._close_log(component)
                     else:
                         age = time.monotonic() - self._started_at.get(component, time.monotonic())
+                        if age >= self._feedback_timeout:
+                            # A process that remains alive without publishing
+                            # its ready topic is usually a blocked hardware
+                            # probe (notably an unplugged Dynamixel bus).
+                            # Stop that process group and expose an offline
+                            # component instead of an endless warning loop.
+                            try:
+                                os.killpg(process.pid, signal.SIGTERM)
+                                process.wait(timeout=2.0)
+                            except Exception:
+                                try:
+                                    os.killpg(process.pid, signal.SIGKILL)
+                                except Exception:
+                                    pass
+                            self._close_log(component)
+                            self._processes.pop(component, None)
+                            self._started_at.pop(component, None)
+                            self._set_component(
+                                component,
+                                "offline",
+                                "No ROS feedback received before startup timeout",
+                            )
+                            continue
                         self._set_component(
                             component,
                             "starting" if age < 2.0 else "waiting",

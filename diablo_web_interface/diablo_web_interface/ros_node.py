@@ -143,6 +143,7 @@ class DiabloWebNode(Node):
             "use_local_odom:=false start_move_group:=false",
         )
         self.declare_parameter("hardware_log_directory", "/tmp")
+        self.declare_parameter("hardware_feedback_timeout", 15.0)
         self.declare_parameter("localization_start_command", "")
         self.declare_parameter("navigation_start_command", "")
         self.declare_parameter(
@@ -195,6 +196,9 @@ class DiabloWebNode(Node):
         self.hardware_log_directory = str(
             self.get_parameter("hardware_log_directory").value
         ).strip()
+        self.hardware_feedback_timeout = max(
+            1.0, float(self.get_parameter("hardware_feedback_timeout").value)
+        )
         self.localization_start_command = str(
             self.get_parameter("localization_start_command").value
         ).strip()
@@ -293,6 +297,7 @@ class DiabloWebNode(Node):
             dynamixel_command=self.dynamixel_start_command,
             lidar_topic=self.scan_topic,
             log_directory=self.hardware_log_directory,
+            feedback_timeout=self.hardware_feedback_timeout,
         )
 
         transient_qos = QoSProfile(

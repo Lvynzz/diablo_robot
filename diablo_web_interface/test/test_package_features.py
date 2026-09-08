@@ -124,6 +124,9 @@ def test_web_ui_has_mapping_teleop_and_topic_echo_panels():
     assert 'node_names": ["map_server", "amcl"]' in localization_launch
     assert 'get_package_share_directory("diablo_bringup")' in localization_launch
     assert '<exec_depend>nav2_amcl</exec_depend>' in bringup_package
+    assert '<depend>diablo_bringup</depend>' in read_text("package.xml")
+    assert not (PACKAGE_ROOT / "config" / "nav2_params.yaml").exists()
+    assert not (PACKAGE_ROOT / "config" / "slam_toolbox.yaml").exists()
     assert "localization.launch.py" in web_launch
     assert "navigation.launch.py" in web_launch
     assert "navigation.launch.py" in ros_node

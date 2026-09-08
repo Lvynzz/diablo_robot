@@ -187,6 +187,8 @@
     const grid = state.selectedMap || state.previewMap || state.map;
     $("map-empty").style.display = grid ? "none" : "flex";
     $("map-meta").textContent = grid ? `${grid.width} × ${grid.height} · ${Number(grid.resolution).toFixed(3)} m · ${state.selectedMap ? "SELECTED MAP" : state.previewMap ? "PREVIEW" : grid.frame_id || "map"}` : "Menunggu /map";
+    const sourceStatus = $("map-source-status");
+    if (sourceStatus) sourceStatus.textContent = state.selectedMap ? `SELECTED: ${state.selectedMap.name || "MAP"}` : state.previewMap ? `PREVIEW: ${state.previewMap.name || "MAP"}` : "/map → OccupancyGrid";
     $("map-select-apply").disabled = !state.previewMap;
     drawMap();
     renderJoints();
@@ -283,7 +285,44 @@
       const gy = (-Math.sin(angle) * dx + Math.cos(angle) * dy) / grid.resolution;
       return [ox + gx * cell, oy + (grid.height - gy) * cell];
     };
-    if (state.pose) {
+    const checked = (id, fallback) => {
+      const element = $(id);
+      return element ? element.checked : fallback;
+    };
+    const liveData = !state.selectedMap && !state.previewMap;
+    const drawCostmap = (costmap, layer) => {
+      if (!costmap) return;
+      const overlaySample = Math.max(1, Math.ceil(Math.sqrt((costmap.width * costmap.height) / 65000)));
+      const costOrigin = costmap.origin || { x: 0, y: 0, yaw: 0 };
+      const costAngle = costOrigin.yaw || 0;
+      for (let row = 0; row < costmap.height; row += overlaySample) {
+        for (let col = 0; col < costmap.width; col += overlaySample) {
+          const value = costmap.data[row * costmap.width + col] ?? -1;
+          if (value < 1) continue;
+          const worldX = costOrigin.x + Math.cos(costAngle) * col * costmap.resolution - Math.sin(costAngle) * row * costmap.resolution;
+          const worldY = costOrigin.y + Math.sin(costAngle) * col * costmap.resolution + Math.cos(costAngle) * row * costmap.resolution;
+          const [x, y] = toCanvas(worldX, worldY);
+          const lethal = value >= 90;
+          ctx.fillStyle = layer === "global"
+            ? `rgba(47,120,174,${lethal ? .55 : .23})`
+            : `rgba(197,83,0,${lethal ? .55 : .23})`;
+          const sizeValue = Math.max(1, cell * costmap.resolution / grid.resolution * overlaySample + .5);
+          ctx.fillRect(x, y - sizeValue, sizeValue, sizeValue);
+        }
+      }
+    };
+    if (liveData && checked("layer-global-costmap", true)) drawCostmap(state.global_costmap, "global");
+    if (liveData && checked("layer-local-costmap", true)) drawCostmap(state.local_costmap, "local");
+    if (liveData && checked("layer-lidar", false) && state.scan && state.pose) {
+      ctx.fillStyle = "rgba(36,126,164,.62)";
+      state.scan.ranges.forEach((range, index) => {
+        if (range === null || range < state.scan.range_min || range > state.scan.range_max) return;
+        const angle = state.pose.theta + state.scan.angle_min + index * state.scan.angle_increment;
+        const [x, y] = toCanvas(state.pose.x + range * Math.cos(angle), state.pose.y + range * Math.sin(angle));
+        ctx.fillRect(x - 1, y - 1, 2.5, 2.5);
+      });
+    }
+    if (liveData && checked("layer-robot", true) && state.pose) {
       const [x, y] = toCanvas(state.pose.x, state.pose.y);
       ctx.save(); ctx.translate(x, y); ctx.rotate(-state.pose.theta);
       ctx.fillStyle = "#4f925c"; ctx.strokeStyle = "#fff"; ctx.lineWidth = 2;
@@ -369,9 +408,10 @@
     $("map-select-apply").addEventListener("click", () => { if (!state.previewMap) return; state.selectedMap = state.previewMap; render(); log(`Map ${state.selectedMap.name || select.value} dipilih untuk LIVE /MAP.`, "success"); });
     [["initial", "initial-pick"], ["goal", "goal-pick"]].forEach(([kind, id]) => $(id).addEventListener("click", () => { poseTool = poseTool === kind ? null : kind; $("initial-tool").classList.toggle("active", poseTool === "initial"); $("goal-tool").classList.toggle("active", poseTool === "goal"); $("map-canvas").classList.toggle("map-interactive", Boolean(poseTool)); }));
     $("map-canvas").addEventListener("pointerdown", (event) => { if (!poseTool) return; event.currentTarget.setPointerCapture(event.pointerId); mapPointerStart = mapPoint(event); if (mapPointerStart) setPoseValues(poseTool, { ...mapPointerStart, theta: 0 }); });
-    $("map-canvas").addEventListener("pointermove", (event) => { if (!poseTool || !mapPointerStart) return; const point = mapPoint(event); if (!point) return; const distance = Math.hypot(point.x - mapPointerStart.x, point.y - mapPointerStart.y); const theta = distance > 0.03 ? Math.atan2(point.y - mapPointerStart.y, point.x - mapPointerStart.x) : 0; setPoseValues(poseTool, { ...point, theta }); });
+    $("map-canvas").addEventListener("pointermove", (event) => { if (!poseTool || !mapPointerStart) return; const point = mapPoint(event); if (!point) return; const distance = Math.hypot(point.x - mapPointerStart.x, point.y - mapPointerStart.y); const theta = distance > 0.03 ? Math.atan2(point.y - mapPointerStart.y, point.x - mapPointerStart.x) : 0; setPoseValues(poseTool, { x: mapPointerStart.x, y: mapPointerStart.y, theta }); });
     $("map-canvas").addEventListener("pointerup", () => { mapPointerStart = null; });
     $("map-canvas").addEventListener("pointercancel", () => { mapPointerStart = null; });
+    ["layer-robot", "layer-lidar", "layer-local-costmap", "layer-global-costmap"].forEach((id) => $(id)?.addEventListener("change", drawMap));
     $("initial-send").addEventListener("click", () => { const pose = poseValues("initial"); command({ type: "initial_pose", x: pose.x, y: pose.y, theta: pose.theta }, "/api/localization/initialpose").then((accepted) => log(accepted ? "Initial pose dikirim ke AMCL." : "Initial pose gagal dikirim.", accepted ? "success" : "warn")); });
     $("goal-send").addEventListener("click", () => { const pose = poseValues("goal"); command({ type: "goal_pose", x: pose.x, y: pose.y, theta: pose.theta }, "/api/goal/nav2").then((accepted) => log(accepted ? "Goal pose dikirim ke Nav2." : "Goal pose gagal dikirim.", accepted ? "success" : "warn")); });
     ["initial", "goal"].forEach((kind) => ["x", "y", "theta"].forEach((field) => $(`${kind}-${field}`).addEventListener("input", () => { const pose = poseValues(kind); if ([pose.x, pose.y, pose.theta].every(Number.isFinite)) { state[`${kind}Pose`] = { ...pose }; drawMap(); } })));

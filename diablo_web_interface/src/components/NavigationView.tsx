@@ -119,6 +119,7 @@ function MapCanvas({
 }: MapCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [size, setSize] = useState({ width: 1, height: 1 });
+  const pointerStart = useRef<{ x: number; y: number } | null>(null);
 
   useEffect(() => {
     const element = canvasRef.current;
@@ -248,10 +249,10 @@ function MapCanvas({
     if (pose) marker(pose, "#4f925c", false, 9);
   }, [globalCostmap, grid, goal, initialPose, localCostmap, path, pose, scan, showGlobalCostmap, showInflationLayer, showLidar, showLocalCostmap, showPath, size]);
 
-  const onPointerDown = (event: PointerEvent<HTMLCanvasElement>) => {
-    if (!grid) return;
+  const worldFromPointer = (event: PointerEvent<HTMLCanvasElement>) => {
+    if (!grid) return null;
     const rect = event.currentTarget.getBoundingClientRect();
-    const cell = Math.min((rect.width - 28) / grid.width, (rect.height - 28) / grid.height);
+    const cell = Math.min((rect.width - 28) / Math.max(1, grid.width), (rect.height - 28) / Math.max(1, grid.height));
     const offsetX = (rect.width - grid.width * cell) / 2;
     const offsetY = (rect.height - grid.height * cell) / 2;
     const gx = (event.clientX - rect.left - offsetX) / cell;
@@ -259,15 +260,38 @@ function MapCanvas({
     const origin = grid.origin || { x: 0, y: 0, yaw: 0 };
     const localX = gx * grid.resolution;
     const localY = gy * grid.resolution;
-    onPick({
+    return {
       x: origin.x + Math.cos(origin.yaw) * localX - Math.sin(origin.yaw) * localY,
       y: origin.y + Math.sin(origin.yaw) * localX + Math.cos(origin.yaw) * localY,
-      theta: 0,
-      source: "map click",
-    });
+    };
   };
 
-  return grid ? <canvas ref={canvasRef} className="nav-map-canvas" onPointerDown={onPointerDown} /> : <EmptyState title="Map data unavailable" detail="Start map_server or SLAM Toolbox to populate this view." />;
+  const pick = (event: PointerEvent<HTMLCanvasElement>, final = false) => {
+    const point = worldFromPointer(event);
+    if (!point) return;
+    const start = pointerStart.current || point;
+    const distance = Math.hypot(point.x - start.x, point.y - start.y);
+    const theta = distance > 0.03 ? Math.atan2(point.y - start.y, point.x - start.x) : 0;
+    onPick({ x: start.x, y: start.y, theta, source: "map click" });
+    if (final) pointerStart.current = null;
+  };
+
+  const onPointerDown = (event: PointerEvent<HTMLCanvasElement>) => {
+    if (!grid) return;
+    const point = worldFromPointer(event);
+    if (!point) return;
+    event.currentTarget.setPointerCapture(event.pointerId);
+    pointerStart.current = point;
+    pick(event);
+  };
+  const onPointerMove = (event: PointerEvent<HTMLCanvasElement>) => {
+    if (pointerStart.current) pick(event);
+  };
+  const onPointerUp = (event: PointerEvent<HTMLCanvasElement>) => {
+    if (pointerStart.current) pick(event, true);
+  };
+
+  return grid ? <canvas ref={canvasRef} className="nav-map-canvas" onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp} onPointerCancel={() => { pointerStart.current = null; }} /> : <EmptyState title="Map data unavailable" detail="Start map_server or SLAM Toolbox to populate this view." />;
 }
 
 interface Station {
@@ -311,7 +335,7 @@ export function NavigationView({ state, hardware, panels, sendCommand, events, o
   const [stationName, setStationName] = useState("");
   const [stations, setStations] = useState<Station[]>(loadStations);
   const [tool, setTool] = useState<"goal" | "initial" | "station">("goal");
-  const [showLidar, setShowLidar] = useState(true);
+  const [showLidar, setShowLidar] = useState(false);
   const [showPath, setShowPath] = useState(true);
   const [showGlobalCostmap, setShowGlobalCostmap] = useState(true);
   const [showLocalCostmap, setShowLocalCostmap] = useState(true);
@@ -357,8 +381,7 @@ export function NavigationView({ state, hardware, panels, sendCommand, events, o
   const updateStation = (field: keyof PoseDraft, value: string) => setStationDraft((previous) => updateDraft(previous, field, value));
 
   const pickPoint = (picked: Pose) => {
-    const target = tool === "goal" ? goalDraft : tool === "initial" ? initialDraft : stationDraft;
-    const next = { x: picked.x.toFixed(2), y: picked.y.toFixed(2), heading: target.heading };
+    const next = { x: picked.x.toFixed(2), y: picked.y.toFixed(2), heading: (picked.theta * 180 / Math.PI).toFixed(1) };
     if (tool === "goal") setGoalDraft(next);
     if (tool === "initial") setInitialDraft(next);
     if (tool === "station") setStationDraft(next);

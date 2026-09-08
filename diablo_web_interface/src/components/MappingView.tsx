@@ -57,13 +57,19 @@ interface OccupancyCanvasProps {
   grid: OccupancyGrid | null;
   pose: Pose | null;
   scan: DiabloState["scan"];
+  globalCostmap: OccupancyGrid | null;
+  localCostmap: OccupancyGrid | null;
+  showRobot: boolean;
+  showLidar: boolean;
+  showGlobalCostmap: boolean;
+  showLocalCostmap: boolean;
   initialPose: Pose | null;
   goalPose: Pose | null;
   onPick: (pose: Pose) => void;
   interactive: boolean;
 }
 
-function OccupancyCanvas({ grid, pose, scan, initialPose, goalPose, onPick, interactive }: OccupancyCanvasProps) {
+function OccupancyCanvas({ grid, pose, scan, globalCostmap, localCostmap, showRobot, showLidar, showGlobalCostmap, showLocalCostmap, initialPose, goalPose, onPick, interactive }: OccupancyCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [size, setSize] = useState({ width: 1, height: 1 });
   const pointerStart = useRef<{ x: number; y: number } | null>(null);
@@ -125,7 +131,32 @@ function OccupancyCanvas({ grid, pose, scan, initialPose, goalPose, onPick, inte
       return [offsetX + gx * cell, offsetY + (grid.height - gy) * cell] as const;
     };
 
-    if (scan && pose) {
+    const drawCostmap = (costmap: OccupancyGrid | null, layer: "global" | "local") => {
+      if (!costmap) return;
+      const overlaySample = Math.max(1, Math.ceil(Math.sqrt((costmap.width * costmap.height) / 65000)));
+      const costmapOrigin = costmap.origin || { x: 0, y: 0, yaw: 0 };
+      const angle = costmapOrigin.yaw || 0;
+      for (let row = 0; row < costmap.height; row += overlaySample) {
+        for (let column = 0; column < costmap.width; column += overlaySample) {
+          const value = costmap.data[row * costmap.width + column] ?? -1;
+          if (value < 1) continue;
+          const worldX = costmapOrigin.x + Math.cos(angle) * column * costmap.resolution - Math.sin(angle) * row * costmap.resolution;
+          const worldY = costmapOrigin.y + Math.sin(angle) * column * costmap.resolution + Math.cos(angle) * row * costmap.resolution;
+          const [x, y] = toCanvas(worldX, worldY);
+          const lethal = value >= 90;
+          context.fillStyle = layer === "global"
+            ? `rgba(47,120,174,${lethal ? 0.55 : 0.23})`
+            : `rgba(197,83,0,${lethal ? 0.55 : 0.23})`;
+          const sizeValue = Math.max(1, cell * costmap.resolution / grid.resolution * overlaySample + 0.5);
+          context.fillRect(x, y - sizeValue, sizeValue, sizeValue);
+        }
+      }
+    };
+
+    if (showGlobalCostmap) drawCostmap(globalCostmap, "global");
+    if (showLocalCostmap) drawCostmap(localCostmap, "local");
+
+    if (showLidar && scan && pose) {
       context.fillStyle = "rgba(36, 126, 164, .62)";
       scan.ranges.forEach((range, index) => {
         if (range === null || range < scan.range_min || range > scan.range_max) return;
@@ -138,7 +169,7 @@ function OccupancyCanvas({ grid, pose, scan, initialPose, goalPose, onPick, inte
       });
     }
 
-    if (pose) {
+    if (showRobot && pose) {
       const [x, y] = toCanvas(pose.x, pose.y);
       context.save();
       context.translate(x, y);
@@ -178,7 +209,7 @@ function OccupancyCanvas({ grid, pose, scan, initialPose, goalPose, onPick, inte
     };
     if (initialPose) marker(initialPose, "#2c83a9");
     if (goalPose) marker(goalPose, "#c55300");
-  }, [grid, goalPose, initialPose, pose, scan, size]);
+  }, [globalCostmap, grid, goalPose, initialPose, localCostmap, pose, scan, showGlobalCostmap, showLidar, showLocalCostmap, showRobot, size]);
 
   const worldFromPointer = (event: PointerEvent<HTMLCanvasElement>) => {
     if (!grid) return null;
@@ -203,7 +234,7 @@ function OccupancyCanvas({ grid, pose, scan, initialPose, goalPose, onPick, inte
     const start = pointerStart.current || point;
     const distance = Math.hypot(point.x - start.x, point.y - start.y);
     const theta = distance > 0.03 ? Math.atan2(point.y - start.y, point.x - start.x) : 0;
-    onPick({ ...point, theta, source: "map click" });
+    onPick({ x: start.x, y: start.y, theta, source: "map click" });
     if (final) pointerStart.current = null;
   };
 
@@ -249,6 +280,10 @@ export function MappingView({ state, hardware, panels, sendCommand, onEvent }: M
   const [poseTool, setPoseTool] = useState<"initial" | "goal" | null>(null);
   const [initialDraft, setInitialDraft] = useState<PoseDraft>({ ...emptyPoseDraft });
   const [goalDraft, setGoalDraft] = useState<PoseDraft>({ ...emptyPoseDraft, x: "1.00", y: "0.50" });
+  const [showRobot, setShowRobot] = useState(true);
+  const [showLidar, setShowLidar] = useState(false);
+  const [showLocalCostmap, setShowLocalCostmap] = useState(true);
+  const [showGlobalCostmap, setShowGlobalCostmap] = useState(true);
 
   const mappingActive = state.mapping.active;
   const mappingHardwareReady = hardware.mapping_ready;
@@ -412,7 +447,7 @@ export function MappingView({ state, hardware, panels, sendCommand, onEvent }: M
         <Panel title="Live Occupancy Grid" eyebrow="SLAM TOOLBOX // /MAP" accent="blue" actions={<div className="mapping-map-actions"><label className="map-choice"><span>SELECT MAP</span><select value={mapChoice} onChange={(event) => void chooseMap(event.target.value)} aria-label="Select PGM map"><option value="">LIVE /MAP</option>{mapChoices.map((name) => <option key={name} value={name}>{name}</option>)}</select></label><button className="panel-icon-action" type="button" disabled={!previewMap || mapLoading} onClick={applyMap}>{mapLoading ? "…" : "SELECT"}</button><span className="panel-chip">FRAME: {displayMap?.frame_id || "—"}</span></div>}>
           <div className="mapping-map-layout">
             <div className="mapping-map-stage">
-              <OccupancyCanvas grid={displayMap} pose={selectedMap || previewMap ? null : state.pose} scan={selectedMap || previewMap ? null : state.scan} initialPose={initialPose} goalPose={goalPose} onPick={pickPose} interactive={poseTool !== null} />
+              <OccupancyCanvas grid={displayMap} pose={selectedMap || previewMap ? null : state.pose} scan={selectedMap || previewMap ? null : state.scan} globalCostmap={selectedMap || previewMap ? null : state.global_costmap} localCostmap={selectedMap || previewMap ? null : state.local_costmap} showRobot={showRobot} showLidar={showLidar} showGlobalCostmap={showGlobalCostmap} showLocalCostmap={showLocalCostmap} initialPose={initialPose} goalPose={goalPose} onPick={pickPose} interactive={poseTool !== null} />
               <div className="map-legend"><span><i className="legend-dot green" /> Diablo</span><span><i className="legend-dot cyan" /> LiDAR</span><span><i className="legend-dot blue" /> Init</span><span><i className="legend-dot orange" /> Goal</span></div>
             </div>
             <div className="mapping-map-tools">
@@ -421,7 +456,7 @@ export function MappingView({ state, hardware, panels, sendCommand, onEvent }: M
               <div className="map-instructions"><Icon name="target" size={15} /><span>{poseTool ? `Klik-drag map untuk memilih ${poseTool === "initial" ? "initial pose" : "goal pose"}.` : "Pilih PICK MAP pada panel pose."}</span></div>
             </div>
           </div>
-          <div className="map-layer-bar"><span>RESOLUTION: {displayMap ? `${fmt(displayMap.resolution, 3)} m` : "—"}</span><span>SIZE: {displayMap ? `${displayMap.width} × ${displayMap.height}` : "—"}</span><span className="map-source-status">{selectedMap ? `SELECTED: ${selectedMap.name || mapChoice}` : previewMap ? `PREVIEW: ${previewMap.name || mapChoice}` : "/map → OccupancyGrid"}</span></div>
+          <div className="map-layer-bar"><span>RESOLUTION: {displayMap ? `${fmt(displayMap.resolution, 3)} m` : "—"}</span><span>SIZE: {displayMap ? `${displayMap.width} × ${displayMap.height}` : "—"}</span><label><input type="checkbox" checked={showRobot} onChange={(event) => setShowRobot(event.target.checked)} /> ROBOT</label><label><input type="checkbox" checked={showLidar} onChange={(event) => setShowLidar(event.target.checked)} /> LIDAR SCAN</label><label><input type="checkbox" checked={showLocalCostmap} disabled={!state.local_costmap || Boolean(selectedMap || previewMap)} onChange={(event) => setShowLocalCostmap(event.target.checked)} /> LOCAL COSTMAP</label><label><input type="checkbox" checked={showGlobalCostmap} disabled={!state.global_costmap || Boolean(selectedMap || previewMap)} onChange={(event) => setShowGlobalCostmap(event.target.checked)} /> GLOBAL COSTMAP</label><span className="map-source-status">{selectedMap ? `SELECTED: ${selectedMap.name || mapChoice}` : previewMap ? `PREVIEW: ${previewMap.name || mapChoice}` : "/map → OccupancyGrid"}</span></div>
         </Panel>
       </>}
 

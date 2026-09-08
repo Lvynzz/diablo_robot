@@ -221,7 +221,9 @@ code, kbd, time { font-family: var(--mono); }
 .mapping-view .map-readouts .stat-card strong { margin-top: 7px; font-size: 16px; }
 .mapping-view .map-legend { position: absolute; right: 8px; bottom: 8px; left: 8px; display: flex; gap: 10px; padding: 7px 9px; border: 1px solid #c4d3df; border-radius: 4px; color: var(--t2); background: rgba(248,251,253,.94); font: 7px var(--mono); }
 .mapping-view .map-legend span { display: inline-flex; align-items: center; gap: 4px; }
-.mapping-view .map-layer-bar { display: flex; align-items: center; gap: 14px; margin-top: 9px; padding: 7px 9px; border: 1px solid #c4d3df; border-radius: 4px; color: var(--t2); background: #edf3f7; font: 8px var(--mono); }
+.mapping-view .map-layer-bar { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-top: 9px; padding: 7px 9px; border: 1px solid #c4d3df; border-radius: 4px; color: var(--t2); background: #edf3f7; font: 8px var(--mono); }
+.mapping-view .map-layer-bar label { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
+.mapping-view .map-layer-bar input { accent-color: var(--blue); }
 .mapping-view .map-source-status { margin-left: auto; color: var(--t3); }
 .mapping-hardware-card { margin-bottom: 10px; }
 .mapping-wide-button { width: 100%; margin-top: 9px; }

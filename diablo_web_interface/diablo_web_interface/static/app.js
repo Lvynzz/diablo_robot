@@ -409,13 +409,31 @@
 
   function initMapTools() {
     const select = $("map-select");
-    fetch("/api/maps").then((response) => response.ok ? response.json() : Promise.reject(new Error("map catalog unavailable"))).then((items) => {
-      (Array.isArray(items) ? items : []).forEach((item) => { const name = typeof item === "string" ? item : item.name; if (!name) return; const option = document.createElement("option"); option.value = name; option.textContent = name; select.appendChild(option); });
-    }).catch(() => {});
+    const loadPreview = (name, selected = false) => fetch(`/api/maps/${encodeURIComponent(name)}`)
+      .then((response) => response.ok ? response.json() : Promise.reject(new Error("preview unavailable")))
+      .then((map) => {
+        if (selected) state.selectedMap = map;
+        else { state.previewMap = map; state.selectedMap = null; }
+        render();
+        return map;
+      });
+    fetch("/api/maps")
+      .then((response) => response.ok ? response.json() : Promise.reject(new Error("map catalog unavailable")))
+      .then((items) => {
+        (Array.isArray(items) ? items : []).forEach((item) => { const name = typeof item === "string" ? item : item.name; if (!name) return; const option = document.createElement("option"); option.value = name; option.textContent = name; select.appendChild(option); });
+        return fetch("/api/maps/selected").then((response) => response.ok ? response.json() : null);
+      })
+      .then((payload) => {
+        const name = payload && payload.map_name;
+        if (!name) return;
+        select.value = name.endsWith(".pgm") ? name : `${name.replace(/\.yaml$/i, "")}.pgm`;
+        return loadPreview(select.value, true);
+      })
+      .catch(() => {});
     select.addEventListener("change", () => {
       const name = select.value;
       if (!name) { state.previewMap = null; render(); return; }
-      fetch(`/api/maps/${encodeURIComponent(name)}`).then((response) => response.ok ? response.json() : Promise.reject(new Error("preview unavailable"))).then((map) => { state.previewMap = map; state.selectedMap = null; render(); log(`Preview map ${name} dimuat. Tekan SELECT MAP untuk menerapkan.`, "info"); }).catch((error) => log(`Preview map gagal: ${error.message}`, "warn"));
+      loadPreview(name).then(() => log(`Preview map ${name} dimuat. Tekan SELECT MAP untuk menerapkan.`, "info")).catch((error) => log(`Preview map gagal: ${error.message}`, "warn"));
     });
     $("map-select-apply").addEventListener("click", () => {
       if (!state.previewMap) return;

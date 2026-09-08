@@ -306,6 +306,15 @@ export function MappingView({ state, hardware, panels, sendCommand, onEvent }: M
       if (!active || !Array.isArray(value)) return;
       const names = value.map((item) => typeof item === "string" ? item : String((item as { name?: unknown }).name || "")).filter(Boolean);
       setMapChoices(names);
+      return fetch("/api/maps/selected").then((response) => response.ok ? response.json() : null);
+    }).then((payload: unknown) => {
+      if (!active || !payload || typeof payload !== "object") return;
+      const selectedName = String((payload as { map_name?: unknown }).map_name || "");
+      if (!selectedName) return;
+      setMapChoice(selectedName.endsWith(".pgm") ? selectedName : `${selectedName.replace(/\.yaml$/i, "")}.pgm`);
+      return fetch(`/api/maps/${encodeURIComponent(selectedName)}`).then((response) => response.ok ? response.json() : null).then((map) => {
+        if (active && map) setSelectedMap(map as OccupancyGrid);
+      });
     }).catch(() => { if (active) setMapChoices([]); });
     return () => { active = false; };
   }, []);

@@ -367,6 +367,17 @@ export function NavigationView({ state, hardware, panels, sendCommand, events, o
         if (!active || !Array.isArray(value)) return;
         const names = value.map((item) => typeof item === "string" ? item : String((item as { name?: unknown }).name || "")).filter(Boolean);
         setMapChoices(names);
+        return fetch("/api/maps/selected").then((response) => response.ok ? response.json() : null);
+      })
+      .then((payload: unknown) => {
+        if (!active || !payload || typeof payload !== "object") return;
+        const selectedName = String((payload as { map_name?: unknown }).map_name || "");
+        if (!selectedName) return;
+        const name = selectedName.endsWith(".pgm") ? selectedName : `${selectedName.replace(/\.yaml$/i, "")}.pgm`;
+        setSelectedMap(name);
+        return fetch(`/api/maps/${encodeURIComponent(name)}`).then((response) => response.ok ? response.json() : null).then((map) => {
+          if (active && map) setPreviewMap(map as OccupancyGrid);
+        });
       })
       .catch(() => {
         if (!active) return;

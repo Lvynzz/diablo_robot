@@ -195,6 +195,12 @@ async def select_map(payload: dict):
         raise HTTPException(status_code=409, detail=str(error))
 
 
+@app.get("/api/maps/selected")
+async def selected_map():
+    """Return the map persisted for the next localization launch."""
+    return {"map_name": _require_node().selected_map()}
+
+
 @app.get("/api/maps/{map_name}")
 async def map_preview(map_name: str):
     node = _require_node()

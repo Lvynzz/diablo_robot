@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type PointerEvent } from "react";
 import { Icon } from "./Icon";
 import { EmptyState, Panel, StatCard } from "./Panel";
 import { LaunchToggleButton } from "./LaunchControls";
@@ -30,15 +30,43 @@ function componentLabel(value: HardwareStatus["components"][number]) {
     : value.state.replace("_", " ").toUpperCase();
 }
 
+interface PoseDraft {
+  x: string;
+  y: string;
+  heading: string;
+}
+
+const emptyPoseDraft: PoseDraft = { x: "0.00", y: "0.00", heading: "0.0" };
+
+function poseFromDraft(draft: PoseDraft, source: string): Pose | null {
+  const x = Number(draft.x);
+  const y = Number(draft.y);
+  const theta = (Number(draft.heading) * Math.PI) / 180;
+  return Number.isFinite(x) && Number.isFinite(y) && Number.isFinite(theta)
+    ? { x, y, theta, source }
+    : null;
+}
+
+function PoseDraftFields({ draft, onChange }: { draft: PoseDraft; onChange: (field: keyof PoseDraft, value: string) => void }) {
+  return <div className="mapping-pose-fields">
+    {(["x", "y", "heading"] as const).map((field) => <label key={field}><span>{field === "heading" ? "HEADING (DEG)" : field.toUpperCase() + " (M)"}</span><input type="number" step="0.01" value={draft[field]} onChange={(event) => onChange(field, event.target.value)} /></label>)}
+  </div>;
+}
+
 interface OccupancyCanvasProps {
   grid: OccupancyGrid | null;
   pose: Pose | null;
   scan: DiabloState["scan"];
+  initialPose: Pose | null;
+  goalPose: Pose | null;
+  onPick: (pose: Pose) => void;
+  interactive: boolean;
 }
 
-function OccupancyCanvas({ grid, pose, scan }: OccupancyCanvasProps) {
+function OccupancyCanvas({ grid, pose, scan, initialPose, goalPose, onPick, interactive }: OccupancyCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [size, setSize] = useState({ width: 1, height: 1 });
+  const pointerStart = useRef<{ x: number; y: number } | null>(null);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -128,12 +156,74 @@ function OccupancyCanvas({ grid, pose, scan }: OccupancyCanvasProps) {
       context.stroke();
       context.restore();
     }
-  }, [grid, pose, scan, size]);
+    const marker = (markerPose: Pose, color: string) => {
+      const [x, y] = toCanvas(markerPose.x, markerPose.y);
+      context.save();
+      context.translate(x, y);
+      context.rotate(-markerPose.theta);
+      context.fillStyle = color;
+      context.strokeStyle = "#ffffff";
+      context.lineWidth = 2;
+      context.beginPath();
+      context.arc(0, 0, 8, 0, Math.PI * 2);
+      context.stroke();
+      context.beginPath();
+      context.moveTo(12, 0);
+      context.lineTo(-7, -5);
+      context.lineTo(-5, 0);
+      context.lineTo(-7, 5);
+      context.closePath();
+      context.fill();
+      context.restore();
+    };
+    if (initialPose) marker(initialPose, "#2c83a9");
+    if (goalPose) marker(goalPose, "#c55300");
+  }, [grid, goalPose, initialPose, pose, scan, size]);
+
+  const worldFromPointer = (event: PointerEvent<HTMLCanvasElement>) => {
+    if (!grid) return null;
+    const rect = event.currentTarget.getBoundingClientRect();
+    const cell = Math.min((rect.width - 28) / Math.max(1, grid.width), (rect.height - 28) / Math.max(1, grid.height));
+    const offsetX = (rect.width - grid.width * cell) / 2;
+    const offsetY = (rect.height - grid.height * cell) / 2;
+    const gx = (event.clientX - rect.left - offsetX) / cell;
+    const gy = grid.height - (event.clientY - rect.top - offsetY) / cell;
+    const origin = grid.origin || { x: 0, y: 0, yaw: 0 };
+    const localX = gx * grid.resolution;
+    const localY = gy * grid.resolution;
+    return {
+      x: origin.x + Math.cos(origin.yaw) * localX - Math.sin(origin.yaw) * localY,
+      y: origin.y + Math.sin(origin.yaw) * localX + Math.cos(origin.yaw) * localY,
+    };
+  };
+
+  const pick = (event: PointerEvent<HTMLCanvasElement>, final = false) => {
+    const point = worldFromPointer(event);
+    if (!point || !interactive) return;
+    const start = pointerStart.current || point;
+    const distance = Math.hypot(point.x - start.x, point.y - start.y);
+    const theta = distance > 0.03 ? Math.atan2(point.y - start.y, point.x - start.x) : 0;
+    onPick({ ...point, theta, source: "map click" });
+    if (final) pointerStart.current = null;
+  };
+
+  const onPointerDown = (event: PointerEvent<HTMLCanvasElement>) => {
+    if (!interactive || !grid) return;
+    event.currentTarget.setPointerCapture(event.pointerId);
+    pointerStart.current = worldFromPointer(event);
+    pick(event);
+  };
+  const onPointerMove = (event: PointerEvent<HTMLCanvasElement>) => {
+    if (pointerStart.current) pick(event);
+  };
+  const onPointerUp = (event: PointerEvent<HTMLCanvasElement>) => {
+    if (pointerStart.current) pick(event, true);
+  };
 
   if (!grid) {
     return <EmptyState title="Menunggu occupancy grid" detail="Nyalakan hardware, lalu mulai mapping untuk mengisi /map." />;
   }
-  return <canvas ref={canvasRef} className="mapping-canvas" aria-label="Live occupancy grid map" />;
+  return <canvas ref={canvasRef} className={`mapping-canvas ${interactive ? "map-interactive" : ""}`} aria-label="Live occupancy grid map" onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp} onPointerCancel={() => { pointerStart.current = null; }} />;
 }
 
 interface MappingViewProps {
@@ -151,12 +241,71 @@ export function MappingView({ state, hardware, panels, sendCommand, onEvent }: M
   const [activeKeys, setActiveKeys] = useState<Set<string>>(new Set());
   const keysRef = useRef<Set<string>>(new Set());
   const timerRef = useRef<number | null>(null);
+  const [mapChoices, setMapChoices] = useState<string[]>([]);
+  const [mapChoice, setMapChoice] = useState("");
+  const [previewMap, setPreviewMap] = useState<OccupancyGrid | null>(null);
+  const [selectedMap, setSelectedMap] = useState<OccupancyGrid | null>(null);
+  const [mapLoading, setMapLoading] = useState(false);
+  const [poseTool, setPoseTool] = useState<"initial" | "goal" | null>(null);
+  const [initialDraft, setInitialDraft] = useState<PoseDraft>({ ...emptyPoseDraft });
+  const [goalDraft, setGoalDraft] = useState<PoseDraft>({ ...emptyPoseDraft, x: "1.00", y: "0.50" });
 
   const mappingActive = state.mapping.active;
   const mappingHardwareReady = hardware.mapping_ready;
   // Teleoperation only needs the Diablo motor feedback.  LiDAR and SLAM are
   // independent, so the robot can be driven immediately after hardware start.
   const teleopReady = hardware.ready;
+  const displayMap = selectedMap || previewMap || state.map;
+  const initialPose = poseFromDraft(initialDraft, "initial pose draft");
+  const goalPose = poseFromDraft(goalDraft, "goal pose draft");
+
+  useEffect(() => {
+    let active = true;
+    fetch("/api/maps").then((response) => response.ok ? response.json() : Promise.reject(new Error("map catalog unavailable"))).then((value: unknown) => {
+      if (!active || !Array.isArray(value)) return;
+      const names = value.map((item) => typeof item === "string" ? item : String((item as { name?: unknown }).name || "")).filter(Boolean);
+      setMapChoices(names);
+    }).catch(() => { if (active) setMapChoices([]); });
+    return () => { active = false; };
+  }, []);
+
+  const chooseMap = async (name: string) => {
+    setMapChoice(name);
+    if (!name) { setPreviewMap(null); return; }
+    setMapLoading(true);
+    try {
+      const response = await fetch(`/api/maps/${encodeURIComponent(name)}`);
+      if (!response.ok) throw new Error("Map preview unavailable");
+      setPreviewMap(await response.json() as OccupancyGrid);
+      onEvent(`Preview map ${name} dimuat. Tekan SELECT MAP jika ingin menggunakannya.`, "info");
+    } catch (error) {
+      onEvent(`Preview map gagal: ${error instanceof Error ? error.message : "unknown error"}`, "warn");
+    } finally { setMapLoading(false); }
+  };
+
+  const applyMap = () => {
+    if (!previewMap) { onEvent("Pilih map PGM terlebih dahulu.", "warn"); return; }
+    setSelectedMap(previewMap);
+    onEvent(`Map ${previewMap.name || mapChoice} dipilih untuk LIVE /MAP.`, "success");
+  };
+
+  const updatePose = (which: "initial" | "goal", field: keyof PoseDraft, value: string) => {
+    const setter = which === "initial" ? setInitialDraft : setGoalDraft;
+    setter((previous) => ({ ...previous, [field]: value }));
+  };
+
+  const pickPose = (picked: Pose) => {
+    if (!poseTool) return;
+    const setter = poseTool === "initial" ? setInitialDraft : setGoalDraft;
+    setter({ x: picked.x.toFixed(2), y: picked.y.toFixed(2), heading: (picked.theta * 180 / Math.PI).toFixed(1) });
+  };
+
+  const publishPose = async (which: "initial" | "goal") => {
+    const pose = which === "initial" ? initialPose : goalPose;
+    if (!pose) { onEvent("Isi X, Y, dan heading yang valid terlebih dahulu.", "warn"); return; }
+    const accepted = await sendCommand(which === "initial" ? { type: "initial_pose", x: pose.x, y: pose.y, theta: pose.theta } : { type: "goal_pose", x: pose.x, y: pose.y, theta: pose.theta });
+    onEvent(accepted ? (which === "initial" ? "Initial pose dikirim ke AMCL." : "Goal pose dikirim ke Nav2.") : "Perintah pose gagal dikirim.", accepted ? "success" : "error");
+  };
 
   const sendMotion = useCallback(() => {
     if (!teleopReady) return;
@@ -252,21 +401,28 @@ export function MappingView({ state, hardware, panels, sendCommand, onEvent }: M
 
   return (
     <div className="view-stack mapping-view">
-      {panels.map && <Panel title="Live Occupancy Grid" eyebrow="SLAM TOOLBOX // /MAP" accent="blue" actions={<span className="panel-chip">FRAME: {state.map?.frame_id || "—"}</span>}>
-        <div className="mapping-map-layout">
-          <div className="mapping-map-stage">
-            <OccupancyCanvas grid={state.map} pose={state.pose} scan={state.scan} />
-            <div className="map-legend"><span><i className="legend-dot green" /> Diablo</span><span><i className="legend-dot cyan" /> LiDAR</span><span><i className="legend-dot slate" /> Unknown</span></div>
-          </div>
-          <div className="map-readouts">
-            <StatCard label="ROBOT X" value={fmt(state.pose?.x)} unit="METERS · ODOM" tone="green" />
-            <StatCard label="ROBOT Y" value={fmt(state.pose?.y)} unit="METERS · ODOM" tone="blue" />
-            <StatCard label="HEADING θ" value={degrees(state.pose?.theta)} unit="DEGREES" tone="orange" />
-            <div className="map-instructions"><Icon name="target" size={17} /><span>Gerakkan robot perlahan dengan W/A/S/D. Grid diperbarui dari topic /map.</span></div>
-          </div>
+      {panels.map && <>
+        <div className="mapping-pose-strip">
+          <StatCard label="ROBOT X" value={fmt((state.wheel_pose || state.pose)?.x)} unit="METERS · ODOM" tone="green" />
+          <StatCard label="ROBOT Y" value={fmt((state.wheel_pose || state.pose)?.y)} unit="METERS · ODOM" tone="blue" />
+          <StatCard label="HEADING θ" value={degrees((state.wheel_pose || state.pose)?.theta)} unit="DEGREES" tone="orange" />
+          <div className="mapping-reset-actions"><span>POSE RESET</span><button type="button" onClick={() => void sendCommand({ type: "reset_position" })}>RESET X/Y</button><button type="button" onClick={() => void sendCommand({ type: "reset_orientation" })}>RESET HEADING</button></div>
         </div>
-        <div className="map-layer-bar"><span>RESOLUTION: {state.map ? `${fmt(state.map.resolution, 3)} m` : "—"}</span><span>SIZE: {state.map ? `${state.map.width} × ${state.map.height}` : "—"}</span><span className="map-source-status">/map → OccupancyGrid</span></div>
-      </Panel>}
+        <Panel title="Live Occupancy Grid" eyebrow="SLAM TOOLBOX // /MAP" accent="blue" actions={<div className="mapping-map-actions"><label className="map-choice"><span>SELECT MAP</span><select value={mapChoice} onChange={(event) => void chooseMap(event.target.value)} aria-label="Select PGM map"><option value="">LIVE /MAP</option>{mapChoices.map((name) => <option key={name} value={name}>{name}</option>)}</select></label><button className="panel-icon-action" type="button" disabled={!previewMap || mapLoading} onClick={applyMap}>{mapLoading ? "…" : "SELECT"}</button><span className="panel-chip">FRAME: {displayMap?.frame_id || "—"}</span></div>}>
+          <div className="mapping-map-layout">
+            <div className="mapping-map-stage">
+              <OccupancyCanvas grid={displayMap} pose={selectedMap || previewMap ? null : state.pose} scan={selectedMap || previewMap ? null : state.scan} initialPose={initialPose} goalPose={goalPose} onPick={pickPose} interactive={poseTool !== null} />
+              <div className="map-legend"><span><i className="legend-dot green" /> Diablo</span><span><i className="legend-dot cyan" /> LiDAR</span><span><i className="legend-dot blue" /> Init</span><span><i className="legend-dot orange" /> Goal</span></div>
+            </div>
+            <div className="mapping-map-tools">
+              <div className={`mapping-pose-tool init ${poseTool === "initial" ? "active" : ""}`}><div className="pose-tool-heading"><span>SET INIT POSE</span><button type="button" onClick={() => setPoseTool(poseTool === "initial" ? null : "initial")}>{poseTool === "initial" ? "MAP ACTIVE" : "PICK MAP"}</button></div><p>Lokalisasi AMCL · drag di map untuk arah.</p><PoseDraftFields draft={initialDraft} onChange={(field, value) => updatePose("initial", field, value)} /><button className="primary-action" type="button" onClick={() => void publishPose("initial")}>SET INITIAL POSE</button></div>
+              <div className={`mapping-pose-tool goal ${poseTool === "goal" ? "active" : ""}`}><div className="pose-tool-heading"><span>SET GOAL POSE</span><button type="button" onClick={() => setPoseTool(poseTool === "goal" ? null : "goal")}>{poseTool === "goal" ? "MAP ACTIVE" : "PICK MAP"}</button></div><p>Goal Nav2 · drag di map untuk arah.</p><PoseDraftFields draft={goalDraft} onChange={(field, value) => updatePose("goal", field, value)} /><button className="primary-action" type="button" onClick={() => void publishPose("goal")}>SEND NAV2 GOAL</button></div>
+              <div className="map-instructions"><Icon name="target" size={15} /><span>{poseTool ? `Klik-drag map untuk memilih ${poseTool === "initial" ? "initial pose" : "goal pose"}.` : "Pilih PICK MAP pada panel pose."}</span></div>
+            </div>
+          </div>
+          <div className="map-layer-bar"><span>RESOLUTION: {displayMap ? `${fmt(displayMap.resolution, 3)} m` : "—"}</span><span>SIZE: {displayMap ? `${displayMap.width} × ${displayMap.height}` : "—"}</span><span className="map-source-status">{selectedMap ? `SELECTED: ${selectedMap.name || mapChoice}` : previewMap ? `PREVIEW: ${previewMap.name || mapChoice}` : "/map → OccupancyGrid"}</span></div>
+        </Panel>
+      </>}
 
       {panels.controls && <Panel title="Mapping Controls" eyebrow="HARDWARE // SLAM // TELEOP" accent="cyan">
         <div className="hardware-status-card mapping-hardware-card">

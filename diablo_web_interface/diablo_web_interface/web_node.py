@@ -180,6 +180,19 @@ async def maps():
     return _require_node().list_maps()
 
 
+@app.get("/api/maps/{map_name}")
+async def map_preview(map_name: str):
+    node = _require_node()
+    try:
+        return await asyncio.to_thread(node.load_map, map_name)
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error))
+    except FileNotFoundError as error:
+        raise HTTPException(status_code=404, detail=str(error))
+    except (OSError, RuntimeError, IndexError) as error:
+        raise HTTPException(status_code=422, detail=f"Could not read map: {error}")
+
+
 @app.post("/api/control/mode")
 @app.post("/api/drive/mode")
 async def set_control_mode(payload: dict):

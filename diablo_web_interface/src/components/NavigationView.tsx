@@ -318,9 +318,11 @@ export function NavigationView({ state, hardware, panels, sendCommand, events, o
   const [showInflationLayer, setShowInflationLayer] = useState(true);
   const [mapChoices, setMapChoices] = useState<string[]>([]);
   const [selectedMap, setSelectedMap] = useState("");
+  const [previewMap, setPreviewMap] = useState<OccupancyGrid | null>(null);
+  const [mapLoading, setMapLoading] = useState(false);
   const [mapMessage, setMapMessage] = useState("Live /map topic");
 
-  const mapGrid = state.map || state.global_costmap || state.local_costmap;
+  const mapGrid = previewMap || state.map || state.global_costmap || state.local_costmap;
   const goal = poseFromDraft(goalDraft, "nav goal draft");
   const initialPose = poseFromDraft(initialDraft, "initial pose draft");
   const stationPose = poseFromDraft(stationDraft, "station draft");
@@ -333,7 +335,6 @@ export function NavigationView({ state, hardware, panels, sendCommand, events, o
         if (!active || !Array.isArray(value)) return;
         const names = value.map((item) => typeof item === "string" ? item : String((item as { name?: unknown }).name || "")).filter(Boolean);
         setMapChoices(names);
-        if (names[0]) setSelectedMap(names[0]);
       })
       .catch(() => {
         if (!active) return;
@@ -404,18 +405,33 @@ export function NavigationView({ state, hardware, panels, sendCommand, events, o
     onEvent(accepted ? successMessage : `${successMessage} Command is not configured or backend is unavailable.`, accepted ? "success" : "warn");
   };
 
-  const chooseMap = (event: ChangeEvent<HTMLSelectElement>) => {
+  const chooseMap = async (event: ChangeEvent<HTMLSelectElement>) => {
     const name = event.target.value;
     setSelectedMap(name);
-    setMapMessage(`${name} selected · restart map_server to apply`);
-    onEvent(`Map ${name} selected in the HMI.`, "info");
+    if (!name) { setPreviewMap(null); setMapMessage("Live /map topic"); return; }
+    setMapLoading(true);
+    try {
+      const response = await fetch(`/api/maps/${encodeURIComponent(name)}`);
+      if (!response.ok) throw new Error("map preview unavailable");
+      setPreviewMap(await response.json() as OccupancyGrid);
+      setMapMessage(`${name} preview · tekan APPLY MAP`);
+      onEvent(`Preview map ${name} dimuat.`, "info");
+    } catch (error) {
+      onEvent(`Map preview gagal: ${error instanceof Error ? error.message : "unknown error"}`, "warn");
+    } finally { setMapLoading(false); }
+  };
+
+  const applyMap = () => {
+    if (!previewMap) { onEvent("Pilih map terlebih dahulu.", "warn"); return; }
+    setMapMessage(`${previewMap.name || selectedMap} selected · preview aktif`);
+    onEvent(`Map ${previewMap.name || selectedMap} dipilih.`, "success");
   };
 
   const navEvents = events.filter((event) => /hardware|localization|amcl|nav2|navigation|mapping|goal|pose|costmap/i.test(event.message)).slice(-8).reverse();
 
   return (
     <div className="view-stack navigation-view">
-      {panels.map && <Panel title="Navigation Map" eyebrow="NAV2 // PGM OCCUPANCY GRID" accent="blue" actions={<div className="navigation-map-actions"><span className="panel-chip">FRAME: {mapGrid?.frame_id || "—"}</span><label className="map-choice"><span>CHOOSE MAP</span><select value={selectedMap} onChange={chooseMap} aria-label="Choose map"><option value="">LIVE /MAP</option>{mapChoices.map((name) => <option key={name} value={name}>{name}</option>)}</select></label></div>}>
+      {panels.map && <Panel title="Navigation Map" eyebrow="NAV2 // PGM OCCUPANCY GRID" accent="blue" actions={<div className="navigation-map-actions"><span className="panel-chip">FRAME: {mapGrid?.frame_id || "—"}</span><label className="map-choice"><span>CHOOSE MAP</span><select value={selectedMap} onChange={(event) => void chooseMap(event)} aria-label="Choose map"><option value="">LIVE /MAP</option>{mapChoices.map((name) => <option key={name} value={name}>{name}</option>)}</select></label><button className="panel-icon-action" type="button" disabled={!previewMap || mapLoading} onClick={applyMap}>{mapLoading ? "…" : "APPLY MAP"}</button></div>}>
         <div className="map-layout navigation-map-layout">
           <div className="map-stage"><MapCanvas grid={mapGrid} pose={state.pose} initialPose={initialPose} path={state.path} scan={state.scan} goal={goal} globalCostmap={state.global_costmap} localCostmap={state.local_costmap} showLidar={showLidar} showPath={showPath} showGlobalCostmap={showGlobalCostmap} showLocalCostmap={showLocalCostmap} showInflationLayer={showInflationLayer} onPick={pickPoint} /><div className="map-legend"><span><i className="legend-dot green" /> Diablo</span><span><i className="legend-dot cyan" /> Init pose</span><span><i className="legend-dot orange" /> Goal</span><span><i className="legend-line blue" /> Nav2 path</span></div></div>
           <div className="map-readouts"><StatCard label="ROBOT X" value={fmt(state.pose?.x)} unit="METERS · MAP POSE" tone="green" /><StatCard label="ROBOT Y" value={fmt(state.pose?.y)} unit="METERS · MAP POSE" tone="blue" /><StatCard label="HEADING θ" value={fmtDegrees(state.pose?.theta)} unit="DEGREES" tone="orange" /><div className="map-instructions"><Icon name="target" size={17} /><span>Choose a tool below, then click the map to place an initial pose, goal, or station.</span></div></div>

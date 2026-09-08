@@ -7,6 +7,8 @@
   let state = {
     pose: null,
     map: null,
+    previewMap: null,
+    selectedMap: null,
     hardware: { ready: false, mapping_ready: false, all_ready: false, starting: false, components: [] },
     processes: {},
     joints: [],
@@ -17,6 +19,8 @@
   let topicSocket = null;
   let pendingStop = null;
   let jointMetaSignature = "";
+  let poseTool = null;
+  let mapPointerStart = null;
 
   const launchDefinitions = {
     hardware: { label: "HARDWARE", start: { type: "start_hardware" }, stop: { type: "stop_hardware" }, startPath: "/api/hardware/start", stopPath: "/api/hardware/stop" },
@@ -180,9 +184,10 @@
     $("pose-x").textContent = pose ? Number(pose.x).toFixed(3) : "—";
     $("pose-y").textContent = pose ? Number(pose.y).toFixed(3) : "—";
     $("pose-theta").textContent = pose ? (Number(pose.theta) * 180 / Math.PI).toFixed(1) : "—";
-    const grid = state.map;
+    const grid = state.selectedMap || state.previewMap || state.map;
     $("map-empty").style.display = grid ? "none" : "flex";
-    $("map-meta").textContent = grid ? `${grid.width} × ${grid.height} · ${Number(grid.resolution).toFixed(3)} m · ${grid.frame_id || "map"}` : "Menunggu /map";
+    $("map-meta").textContent = grid ? `${grid.width} × ${grid.height} · ${Number(grid.resolution).toFixed(3)} m · ${state.selectedMap ? "SELECTED MAP" : state.previewMap ? "PREVIEW" : grid.frame_id || "map"}` : "Menunggu /map";
+    $("map-select-apply").disabled = !state.previewMap;
     drawMap();
     renderJoints();
   }
@@ -249,7 +254,7 @@
 
   function drawMap() {
     const canvas = $("map-canvas");
-    const grid = state.map;
+    const grid = state.selectedMap || state.previewMap || state.map;
     if (!canvas || !grid) return;
     const rect = canvas.getBoundingClientRect();
     const ratio = window.devicePixelRatio || 1;
@@ -284,6 +289,14 @@
       ctx.fillStyle = "#4f925c"; ctx.strokeStyle = "#fff"; ctx.lineWidth = 2;
       ctx.beginPath(); ctx.moveTo(13, 0); ctx.lineTo(-9, -7); ctx.lineTo(-6, 0); ctx.lineTo(-9, 7); ctx.closePath(); ctx.fill(); ctx.stroke(); ctx.restore();
     }
+    const marker = (pose, color) => {
+      if (!pose) return;
+      const [x, y] = toCanvas(pose.x, pose.y);
+      ctx.save(); ctx.translate(x, y); ctx.rotate(-pose.theta); ctx.fillStyle = color; ctx.strokeStyle = "#fff"; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(0, 0, 8, 0, Math.PI * 2); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(12, 0); ctx.lineTo(-7, -5); ctx.lineTo(-5, 0); ctx.lineTo(-7, 5); ctx.closePath(); ctx.fill(); ctx.restore();
+    };
+    marker(state.initialPose, "#2c83a9"); marker(state.goalPose, "#c55300");
   }
 
   function isUnlocked() { return Boolean(state.hardware?.ready); }
@@ -308,6 +321,60 @@
     document.querySelector(`.keypad button[data-key="${key}"]`)?.classList.add("active");
     sendMotion();
     if (teleopTimer === null) teleopTimer = window.setInterval(sendMotion, 100);
+  }
+
+  function poseValues(kind) {
+    const prefix = kind === "initial" ? "initial" : "goal";
+    return {
+      x: Number($(`${prefix}-x`).value),
+      y: Number($(`${prefix}-y`).value),
+      theta: Number($(`${prefix}-theta`).value) * Math.PI / 180,
+    };
+  }
+
+  function setPoseValues(kind, pose) {
+    const prefix = kind === "initial" ? "initial" : "goal";
+    $(`${prefix}-x`).value = Number(pose.x).toFixed(2);
+    $(`${prefix}-y`).value = Number(pose.y).toFixed(2);
+    $(`${prefix}-theta`).value = (Number(pose.theta) * 180 / Math.PI).toFixed(1);
+    state[`${kind}Pose`] = { x: Number(pose.x), y: Number(pose.y), theta: Number(pose.theta) };
+    render();
+  }
+
+  function mapPoint(event) {
+    const grid = state.selectedMap || state.previewMap || state.map;
+    const canvas = $("map-canvas");
+    if (!grid || !canvas) return null;
+    const rect = canvas.getBoundingClientRect();
+    const cell = Math.min((rect.width - 28) / Math.max(1, grid.width), (rect.height - 28) / Math.max(1, grid.height));
+    const ox = (rect.width - grid.width * cell) / 2;
+    const oy = (rect.height - grid.height * cell) / 2;
+    const gx = (event.clientX - rect.left - ox) / cell;
+    const gy = grid.height - (event.clientY - rect.top - oy) / cell;
+    const origin = grid.origin || { x: 0, y: 0, yaw: 0 };
+    const localX = gx * grid.resolution, localY = gy * grid.resolution, angle = origin.yaw || 0;
+    return { x: origin.x + Math.cos(angle) * localX - Math.sin(angle) * localY, y: origin.y + Math.sin(angle) * localX + Math.cos(angle) * localY };
+  }
+
+  function initMapTools() {
+    const select = $("map-select");
+    fetch("/api/maps").then((response) => response.ok ? response.json() : Promise.reject(new Error("map catalog unavailable"))).then((items) => {
+      (Array.isArray(items) ? items : []).forEach((item) => { const name = typeof item === "string" ? item : item.name; if (!name) return; const option = document.createElement("option"); option.value = name; option.textContent = name; select.appendChild(option); });
+    }).catch(() => {});
+    select.addEventListener("change", () => {
+      const name = select.value;
+      if (!name) { state.previewMap = null; render(); return; }
+      fetch(`/api/maps/${encodeURIComponent(name)}`).then((response) => response.ok ? response.json() : Promise.reject(new Error("preview unavailable"))).then((map) => { state.previewMap = map; state.selectedMap = null; render(); log(`Preview map ${name} dimuat. Tekan SELECT MAP untuk menerapkan.`, "info"); }).catch((error) => log(`Preview map gagal: ${error.message}`, "warn"));
+    });
+    $("map-select-apply").addEventListener("click", () => { if (!state.previewMap) return; state.selectedMap = state.previewMap; render(); log(`Map ${state.selectedMap.name || select.value} dipilih untuk LIVE /MAP.`, "success"); });
+    [["initial", "initial-pick"], ["goal", "goal-pick"]].forEach(([kind, id]) => $(id).addEventListener("click", () => { poseTool = poseTool === kind ? null : kind; $("initial-tool").classList.toggle("active", poseTool === "initial"); $("goal-tool").classList.toggle("active", poseTool === "goal"); $("map-canvas").classList.toggle("map-interactive", Boolean(poseTool)); }));
+    $("map-canvas").addEventListener("pointerdown", (event) => { if (!poseTool) return; event.currentTarget.setPointerCapture(event.pointerId); mapPointerStart = mapPoint(event); if (mapPointerStart) setPoseValues(poseTool, { ...mapPointerStart, theta: 0 }); });
+    $("map-canvas").addEventListener("pointermove", (event) => { if (!poseTool || !mapPointerStart) return; const point = mapPoint(event); if (!point) return; const distance = Math.hypot(point.x - mapPointerStart.x, point.y - mapPointerStart.y); const theta = distance > 0.03 ? Math.atan2(point.y - mapPointerStart.y, point.x - mapPointerStart.x) : 0; setPoseValues(poseTool, { ...point, theta }); });
+    $("map-canvas").addEventListener("pointerup", () => { mapPointerStart = null; });
+    $("map-canvas").addEventListener("pointercancel", () => { mapPointerStart = null; });
+    $("initial-send").addEventListener("click", () => { const pose = poseValues("initial"); command({ type: "initial_pose", x: pose.x, y: pose.y, theta: pose.theta }, "/api/localization/initialpose").then((accepted) => log(accepted ? "Initial pose dikirim ke AMCL." : "Initial pose gagal dikirim.", accepted ? "success" : "warn")); });
+    $("goal-send").addEventListener("click", () => { const pose = poseValues("goal"); command({ type: "goal_pose", x: pose.x, y: pose.y, theta: pose.theta }, "/api/goal/nav2").then((accepted) => log(accepted ? "Goal pose dikirim ke Nav2." : "Goal pose gagal dikirim.", accepted ? "success" : "warn")); });
+    ["initial", "goal"].forEach((kind) => ["x", "y", "theta"].forEach((field) => $(`${kind}-${field}`).addEventListener("input", () => { const pose = poseValues(kind); if ([pose.x, pose.y, pose.theta].every(Number.isFinite)) { state[`${kind}Pose`] = { ...pose }; drawMap(); } })));
   }
 
   function initTeleop() {
@@ -349,6 +416,7 @@
     $("confirm-modal").addEventListener("click", (event) => { if (event.target === $("confirm-modal")) closeConfirmation(); });
     window.addEventListener("keydown", (event) => { if (event.key === "Escape" && !$("confirm-modal").hidden) closeConfirmation(); });
     window.addEventListener("resize", drawMap);
+    initMapTools();
   }
 
   function initTabs() {

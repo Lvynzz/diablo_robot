@@ -41,6 +41,81 @@ MAX_LIDAR_POINTS = 720
 MAX_MAP_CELLS = 250_000
 MAP_NAME_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$")
 
+
+def _read_pgm(path):
+    """Read a PGM image without requiring Pillow (map preview helper)."""
+    raw = Path(path).read_bytes()
+    tokens = []
+    index = 0
+    length = len(raw)
+    while index < length and len(tokens) < 4:
+        while index < length and raw[index] in b" \t\r\n":
+            index += 1
+        if index < length and raw[index] == ord("#"):
+            newline = raw.find(b"\n", index)
+            index = length if newline < 0 else newline + 1
+            continue
+        start = index
+        while index < length and raw[index] not in b" \t\r\n#":
+            index += 1
+        if index > start:
+            tokens.append(raw[start:index].decode("ascii"))
+        else:
+            index += 1
+    if len(tokens) != 4 or tokens[0] not in ("P2", "P5"):
+        raise ValueError(f"Unsupported PGM format in {Path(path).name}")
+    width, height, maximum = (int(tokens[1]), int(tokens[2]), int(tokens[3]))
+    if width <= 0 or height <= 0 or maximum <= 0 or maximum > 65535:
+        raise ValueError(f"Invalid PGM dimensions in {Path(path).name}")
+    if index < length and raw[index] in b" \t\r\n":
+        line_break = raw[index] == ord("\r")
+        index += 1
+        if line_break and index < length and raw[index] == ord("\n"):
+            index += 1
+    count = width * height
+    if tokens[0] == "P2":
+        values = []
+        for token in raw[index:].split():
+            if token.startswith(b"#"):
+                continue
+            values.append(int(token))
+            if len(values) >= count:
+                break
+    else:
+        bytes_per_value = 1 if maximum < 256 else 2
+        payload = raw[index : index + count * bytes_per_value]
+        if len(payload) < count * bytes_per_value:
+            raise ValueError(f"Truncated PGM data in {Path(path).name}")
+        if bytes_per_value == 1:
+            values = list(payload[:count])
+        else:
+            values = [payload[i] * 256 + payload[i + 1] for i in range(0, count * 2, 2)]
+    if len(values) != count:
+        raise ValueError(f"Truncated PGM data in {Path(path).name}")
+    return width, height, maximum, values
+
+
+def _read_map_yaml(path):
+    """Read the small scalar subset used by nav2 map YAML files."""
+    values = {}
+    for line in Path(path).read_text(encoding="utf-8").splitlines():
+        line = line.split("#", 1)[0].strip()
+        if not line or ":" not in line:
+            continue
+        key, value = line.split(":", 1)
+        value = value.strip()
+        if value.startswith("[") and value.endswith("]"):
+            try:
+                values[key.strip()] = [float(item.strip()) for item in value[1:-1].split(",")]
+            except ValueError:
+                continue
+        elif value:
+            try:
+                values[key.strip()] = float(value)
+            except ValueError:
+                values[key.strip()] = value.strip("'\"")
+    return values
+
 JOINT_DEFINITIONS = {
     1: {"label": "RIGHT SHOULDER PITCH", "side": "right", "name": "upper_right_shoulder_pitch_joint", "min": -math.pi, "max": math.pi},
     2: {"label": "RIGHT SHOULDER ROLL", "side": "right", "name": "upper_right_shoulder_roll_joint", "min": 0.0, "max": 2.20},
@@ -937,7 +1012,14 @@ class DiabloWebNode(Node):
             client = self._lidar_stop_client
             request = Trigger.Request()
         if client is not None:
-            client.call_async(request)
+            # The motor-stop service is handled by the driver process itself.
+            # Wait briefly for the DDS request to complete before terminating
+            # the launch group; otherwise SIGTERM can race the callback and
+            # leave the scanner motor spinning.
+            future = client.call_async(request)
+            deadline = time.monotonic() + 1.0
+            while not future.done() and time.monotonic() < deadline:
+                time.sleep(0.02)
             service_requested = True
         process_result = self._hardware.stop_process("lidar")
         return {
@@ -1126,16 +1208,69 @@ class DiabloWebNode(Node):
         }
 
     def list_maps(self):
-        """Return map assets by name without exposing filesystem paths to the browser."""
+        """Return PGM map assets by name without exposing filesystem paths."""
         try:
             names = sorted(
                 item.name
                 for item in self.maps_dir.iterdir()
-                if item.is_file() and item.suffix.lower() in (".yaml", ".yml", ".pgm")
+                if item.is_file() and item.suffix.lower() == ".pgm"
             )
         except OSError:
             names = []
         return names
+
+    def load_map(self, name):
+        """Load a saved PGM/YAML map into the same JSON shape as /map."""
+        requested = str(name or "").strip()
+        if requested.lower().endswith(".pgm"):
+            requested = requested[:-4]
+        if not MAP_NAME_PATTERN.fullmatch(requested):
+            raise ValueError("Invalid map name")
+        root = self.maps_dir.expanduser().resolve()
+        pgm_path = (root / f"{requested}.pgm").resolve()
+        yaml_path = (root / f"{requested}.yaml").resolve()
+        if root not in pgm_path.parents:
+            raise ValueError("Invalid map path")
+        if not pgm_path.is_file():
+            raise FileNotFoundError(f"Map '{requested}.pgm' was not found")
+        width, height, maximum, pixels = _read_pgm(pgm_path)
+        metadata = {}
+        if yaml_path.is_file():
+            metadata = _read_map_yaml(yaml_path)
+        resolution = float(metadata.get("resolution", 0.05))
+        origin_values = metadata.get("origin", [0.0, 0.0, 0.0])
+        if not isinstance(origin_values, list) or len(origin_values) < 3:
+            origin_values = [0.0, 0.0, 0.0]
+        negate = bool(int(float(metadata.get("negate", 0))))
+        occupied_threshold = float(metadata.get("occupied_thresh", 0.65))
+        free_threshold = float(metadata.get("free_thresh", 0.196))
+        stride = max(1, math.ceil(math.sqrt((width * height) / MAX_MAP_CELLS)))
+        parsed_width = math.ceil(width / stride)
+        parsed_height = math.ceil(height / stride)
+        data = []
+        for row in range(0, height, stride):
+            for column in range(0, width, stride):
+                value = pixels[row * width + column]
+                probability = value / maximum if negate else (maximum - value) / maximum
+                if probability >= occupied_threshold:
+                    data.append(100)
+                elif probability <= free_threshold:
+                    data.append(0)
+                else:
+                    data.append(-1)
+        return {
+            "name": f"{requested}.pgm",
+            "frame_id": self.map_frame,
+            "resolution": resolution * stride,
+            "width": parsed_width,
+            "height": parsed_height,
+            "origin": {
+                "x": float(origin_values[0]),
+                "y": float(origin_values[1]),
+                "yaw": float(origin_values[2]),
+            },
+            "data": data,
+        }
 
     def hardware_status(self):
         return self._hardware.snapshot()

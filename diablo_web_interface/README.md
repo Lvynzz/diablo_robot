@@ -1,7 +1,7 @@
 # diablo_web_interface
 
 Package web dashboard untuk hardware, mapping SLAM dan teleoperasi robot Diablo.
-Navigasi Nav2 belum menjadi bagian dari workflow web ini. Package ini dibuat di
+Localization AMCL dan navigasi Nav2 tersedia sebagai workflow opsional. Package ini dibuat di
 `diablo_ws/src` dengan pola yang sama seperti `amr_web_interface`, tetapi
 perintah teleoperasinya memakai message asli Diablo:
 

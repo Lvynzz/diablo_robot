@@ -109,6 +109,7 @@ class DiabloWebNode(Node):
         self.declare_parameter("default_up", 1.0)
         self.declare_parameter("reset_encoder_service", "/diablo/reset_encoder")
         self.declare_parameter("lidar_start_service", "/start_motor")
+        self.declare_parameter("lidar_start_service_type", "empty")
         self.declare_parameter(
             "diablo_start_command",
             "ros2 run diablo_ctrl diablo_ctrl_node "
@@ -153,6 +154,15 @@ class DiabloWebNode(Node):
         self.lidar_start_service = str(
             self.get_parameter("lidar_start_service").value
         ).strip()
+        self.lidar_start_service_type = str(
+            self.get_parameter("lidar_start_service_type").value
+        ).strip().lower()
+        if self.lidar_start_service_type not in {"empty", "trigger"}:
+            self.get_logger().warning(
+                f"Unknown lidar_start_service_type '{self.lidar_start_service_type}'; "
+                "using 'empty'"
+            )
+            self.lidar_start_service_type = "empty"
         self.diablo_start_command = str(
             self.get_parameter("diablo_start_command").value
         ).strip()
@@ -225,16 +235,22 @@ class DiabloWebNode(Node):
             if self.reset_encoder_service
             else None
         )
-        self._lidar_start_client = (
-            self.create_client(Trigger, self.lidar_start_service)
-            if self.lidar_start_service
-            else None
-        )
-        self._lidar_start_empty_client = (
-            self.create_client(Empty, self.lidar_start_service)
-            if self.lidar_start_service
-            else None
-        )
+        # Do not create both service types on the same ROS service name.  ROS 2
+        # represents the request type in the DDS topic name, so doing that
+        # causes an RCLError during startup as soon as a driver already owns
+        # the service.  The bundled sllidar driver uses Empty; Trigger remains
+        # available for drivers that expose a Trigger-based start service.
+        self._lidar_start_client = None
+        self._lidar_start_empty_client = None
+        if self.lidar_start_service and not self.lidar_start_command:
+            if self.lidar_start_service_type == "trigger":
+                self._lidar_start_client = self.create_client(
+                    Trigger, self.lidar_start_service
+                )
+            else:
+                self._lidar_start_empty_client = self.create_client(
+                    Empty, self.lidar_start_service
+                )
         self._hardware = HardwareManager(
             self.get_logger(),
             diablo_command=self.diablo_start_command,

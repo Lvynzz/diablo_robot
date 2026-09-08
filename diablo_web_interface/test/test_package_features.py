@@ -89,6 +89,9 @@ def test_web_ui_has_mapping_teleop_and_topic_echo_panels():
     assert '"/start_motor"' in ros_node
     assert 'DeclareLaunchArgument("lidar_start_service", default_value="/start_motor")' in web_launch
     assert 'DeclareLaunchArgument("lidar_start_service", default_value="/start_motor")' in nav2_launch
+    assert 'DeclareLaunchArgument("lidar_start_service_type", default_value="empty")' in web_launch
+    assert 'DeclareLaunchArgument("lidar_start_service_type", default_value="empty")' in nav2_launch
+    assert "not self.lidar_start_command" in ros_node
     assert "HardwareManager" in ros_node
     assert "def start_hardware" in ros_node
     assert "def list_maps" in ros_node

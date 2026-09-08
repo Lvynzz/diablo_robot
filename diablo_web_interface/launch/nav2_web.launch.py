@@ -28,6 +28,7 @@ def generate_launch_description():
             "reset_encoder_service", default_value="/diablo/reset_encoder"
         ),
         DeclareLaunchArgument("lidar_start_service", default_value="/start_motor"),
+        DeclareLaunchArgument("lidar_start_service_type", default_value="empty"),
         DeclareLaunchArgument("diablo_start_command", default_value="ros2 run diablo_ctrl diablo_ctrl_node"),
         DeclareLaunchArgument("lidar_start_command", default_value=""),
         DeclareLaunchArgument(
@@ -58,6 +59,7 @@ def generate_launch_description():
                 "scan_topic": LaunchConfiguration("scan_topic"),
                 "reset_encoder_service": LaunchConfiguration("reset_encoder_service"),
                 "lidar_start_service": LaunchConfiguration("lidar_start_service"),
+                "lidar_start_service_type": LaunchConfiguration("lidar_start_service_type"),
                 "diablo_start_command": LaunchConfiguration("diablo_start_command"),
                 "lidar_start_command": LaunchConfiguration("lidar_start_command"),
                 "dynamixel_start_command": LaunchConfiguration("dynamixel_start_command"),

@@ -153,10 +153,10 @@ export function MappingView({ state, hardware, panels, sendCommand, onEvent }: M
   const timerRef = useRef<number | null>(null);
 
   const mappingActive = state.mapping.active;
-  const allHardwareReady = hardware.all_ready;
+  const mappingHardwareReady = hardware.mapping_ready;
 
   const sendMotion = useCallback(() => {
-    if (!mappingActive || !allHardwareReady) return;
+    if (!mappingActive || !mappingHardwareReady) return;
     const keys = keysRef.current;
     const forward = (keys.has("w") ? forwardSpeed : 0) - (keys.has("s") ? forwardSpeed : 0);
     const left = (keys.has("a") ? turnSpeed : 0) - (keys.has("d") ? turnSpeed : 0);
@@ -172,7 +172,7 @@ export function MappingView({ state, hardware, panels, sendCommand, onEvent }: M
       up: 1,
       pitch: 0,
     });
-  }, [allHardwareReady, forwardSpeed, mappingActive, sendCommand, turnSpeed]);
+  }, [mappingHardwareReady, forwardSpeed, mappingActive, sendCommand, turnSpeed]);
 
   const stopTeleop = useCallback(() => {
     keysRef.current.clear();
@@ -218,8 +218,8 @@ export function MappingView({ state, hardware, panels, sendCommand, onEvent }: M
   }, [sendMotion, stopTeleop]);
 
   useEffect(() => {
-    if (!mappingActive || !allHardwareReady) stopTeleop();
-  }, [allHardwareReady, mappingActive, stopTeleop]);
+    if (!mappingActive || !mappingHardwareReady) stopTeleop();
+  }, [mappingHardwareReady, mappingActive, stopTeleop]);
 
   const requestHardware = async () => {
     const accepted = await sendCommand({ type: "start_hardware" });
@@ -227,8 +227,8 @@ export function MappingView({ state, hardware, panels, sendCommand, onEvent }: M
   };
 
   const requestMapping = async () => {
-    if (!allHardwareReady) {
-      onEvent("Mapping dikunci: tunggu feedback motor, LiDAR dan Dynamixel READY.", "warn");
+    if (!mappingHardwareReady) {
+      onEvent("Mapping dikunci: tunggu feedback motor Diablo dan LiDAR READY.", "warn");
       return;
     }
     const accepted = await sendCommand({ type: "start_mapping" });
@@ -267,7 +267,7 @@ export function MappingView({ state, hardware, panels, sendCommand, onEvent }: M
 
       {panels.controls && <Panel title="Mapping Controls" eyebrow="HARDWARE // SLAM // TELEOP" accent="cyan">
         <div className="hardware-status-card mapping-hardware-card">
-          <div><span>HARDWARE GATE</span><strong className={hardware.all_ready ? "hardware-status-ready" : hardware.starting ? "hardware-status-starting" : "hardware-status-idle"}>{hardware.all_ready ? "ALL READY" : hardware.starting ? "STARTING" : "LOCKED"}</strong></div>
+          <div><span>MAPPING GATE</span><strong className={mappingHardwareReady ? "hardware-status-ready" : hardware.starting ? "hardware-status-starting" : "hardware-status-idle"}>{mappingHardwareReady ? "READY" : hardware.starting ? "STARTING" : "LOCKED"}</strong></div>
           <p>{hardware.message}</p>
           <div className="hardware-components">
             {hardware.components.map((component) => <div className={`hardware-component state-${component.state}`} key={component.id}><i /><span>{component.label}</span><b>{componentLabel(component)}</b></div>)}
@@ -281,7 +281,7 @@ export function MappingView({ state, hardware, panels, sendCommand, onEvent }: M
             <div className="mapping-action-heading"><span>OCCUPANCY GRID MAPPING</span><strong className={`status-${state.mapping.active ? "ready" : state.mapping.state === "error" ? "error" : "idle"}`}>{mappingState}</strong></div>
             <p>{state.mapping.message}</p>
             <LaunchToggleButton component="mapping" state={state} hardware={hardware} sendCommand={sendCommand} onEvent={onEvent} compact />
-            <div className="mapping-action-buttons legacy-mapping-buttons"><button className="primary-action" type="button" disabled={!hardware.all_ready || state.mapping.active} onClick={() => void requestMapping()}>START MAPPING</button><button className="danger-action" type="button" disabled={!state.mapping.active} onClick={() => void sendCommand({ type: "stop_mapping" })}>STOP MAPPING</button></div>
+            <div className="mapping-action-buttons legacy-mapping-buttons"><button className="primary-action" type="button" disabled={!mappingHardwareReady || state.mapping.active} onClick={() => void requestMapping()}>START MAPPING</button><button className="danger-action" type="button" disabled={!state.mapping.active} onClick={() => void sendCommand({ type: "stop_mapping" })}>STOP MAPPING</button></div>
           </div>
           <div className="mapping-action-card save-map-card">
             <div className="mapping-action-heading"><span>SAVE MAP</span><strong>PGM + YAML</strong></div>
@@ -303,7 +303,7 @@ export function MappingView({ state, hardware, panels, sendCommand, onEvent }: M
           <div className="mapping-teleop-settings">
             <label><span>FORWARD SPEED</span><b>{forwardSpeed.toFixed(2)} m/s</b><input type="range" min="0.05" max="0.35" step="0.01" value={forwardSpeed} onChange={(event) => setForwardSpeed(Number(event.target.value))} /></label>
             <label><span>TURN SPEED</span><b>{turnSpeed.toFixed(2)} command</b><input type="range" min="0.10" max="0.70" step="0.01" value={turnSpeed} onChange={(event) => setTurnSpeed(Number(event.target.value))} /></label>
-            <div className={`teleop-lock ${mappingActive && allHardwareReady ? "unlocked" : ""}`}>{mappingActive && allHardwareReady ? "TELEOP UNLOCKED" : "START HARDWARE + MAPPING TO UNLOCK"}</div>
+            <div className={`teleop-lock ${mappingActive && mappingHardwareReady ? "unlocked" : ""}`}>{mappingActive && mappingHardwareReady ? "TELEOP UNLOCKED" : "START DIABLO + LIDAR + MAPPING TO UNLOCK"}</div>
           </div>
         </div>
       </Panel>}

@@ -137,14 +137,17 @@ Jangan menjalankan dua mux yang sama-sama mem-publish ke
 ### ON HARDWARE
 
 Tombol **ON HARDWARE** menjalankan command yang didefinisikan saat launch dan
-menunggu tiga feedback ROS nyata:
+memantau tiga feedback ROS nyata:
 
 - Diablo ROS2: `ros2 run diablo_ctrl diablo_ctrl_node --ros-args -p controller_port:=/dev/diablo_controller`.
 - LiDAR: `ros2 launch sllidar_ros2 sllidar_a2m7_launch.py serial_port:=/dev/rplidar frame_id:=laser`.
-- Dynamixel: `full_body_hardware.launch.py` dengan `/dev/u2d2_arm`, `/dev/u2d2_hand`, baudrate `1000000` dan odom lokal.
+- Dynamixel: mode upper-body `full_body_hardware.launch.py` dengan `/dev/u2d2_arm`, `/dev/u2d2_hand`, dan baudrate `1000000`.
 
-Status **ALL READY** aktif setelah `/diablo/sensor/Motors`, `/scan`, dan
-`/joint_states` diterima. Log startup disimpan di
+Gate mapping aktif setelah `/diablo/sensor/Motors` dan `/scan` diterima;
+Dynamixel dilaporkan terpisah dan tidak lagi memblokir SLAM. Status **ALL
+READY** tetap berarti ketiga feedback, termasuk joint lengan, telah diterima.
+Odometri roda standalone dijalankan oleh web launch sehingga kegagalan U2D2
+tidak menghilangkan `/diablo/odometry`. Log startup disimpan di
 `/tmp/diablo_web_interface-{diablo,lidar,dynamixel}.log`.
 
 ### START MAPPING dan SAVE MAP

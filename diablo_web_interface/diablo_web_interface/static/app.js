@@ -138,14 +138,15 @@
     const hardware = state.hardware || {};
     const mapping = state.mapping || {};
     const allReady = Boolean(hardware.all_ready);
+    const mappingReady = Boolean(hardware.mapping_ready);
     const active = Boolean(mapping.active || processActive("mapping"));
     $("mapping-dot").className = active ? "online" : "";
     $("mapping-text").textContent = active ? "MAPPING ACTIVE" : "MAPPING IDLE";
     $("mapping-state").textContent = String(mapping.state || "idle").toUpperCase();
     $("mapping-status").textContent = String(mapping.state || "idle").toUpperCase();
     $("mapping-message").textContent = mapping.message || "Mapping belum dimulai.";
-    $("hardware-status").textContent = allReady ? "ALL READY" : hardware.starting ? "STARTING" : "LOCKED";
-    $("hardware-status").className = allReady ? "ready" : hardware.starting ? "starting" : "";
+    $("hardware-status").textContent = mappingReady ? "MAPPING READY" : hardware.starting ? "STARTING" : "LOCKED";
+    $("hardware-status").className = mappingReady ? "ready" : hardware.starting ? "starting" : "";
     $("hardware-message").textContent = hardware.message || "Press ON HARDWARE to start hardware.";
     const components = Object.fromEntries((hardware.components || []).map((item) => [item.id, item]));
     [["diablo", "component-diablo", "DIABLO"], ["lidar", "component-lidar", "LIDAR"], ["dynamixel", "component-dynamixel", "DYNAMIXEL"]].forEach(([id, element, label]) => {
@@ -166,13 +167,14 @@
       button.classList.toggle("is-active", running);
       button.querySelector("span").textContent = running ? `OFF ${definition.label}` : `ON ${definition.label}`;
       button.querySelector("b").textContent = componentStatus(name);
-      button.disabled = name === "mapping" && !running && !allReady;
+      const configured = state.processes?.[name]?.state !== "not_configured";
+      button.disabled = !running && (!configured || (name === "mapping" && !mappingReady));
     });
-    $("start-mapping").disabled = !allReady || active;
+    $("start-mapping").disabled = !mappingReady || active;
     $("stop-mapping").disabled = !active;
     $("save-map").disabled = !active;
-    $("teleop-lock").textContent = active && allReady ? "TELEOP UNLOCKED" : "START HARDWARE + MAPPING TO UNLOCK";
-    $("teleop-lock").className = active && allReady ? "unlocked" : "";
+    $("teleop-lock").textContent = active && mappingReady ? "TELEOP UNLOCKED" : "START DIABLO + LIDAR + MAPPING TO UNLOCK";
+    $("teleop-lock").className = active && mappingReady ? "unlocked" : "";
     const pose = state.pose;
     $("pose-x").textContent = pose ? Number(pose.x).toFixed(3) : "—";
     $("pose-y").textContent = pose ? Number(pose.y).toFixed(3) : "—";
@@ -282,7 +284,7 @@
     }
   }
 
-  function isUnlocked() { return Boolean(state.mapping?.active && state.hardware?.all_ready); }
+  function isUnlocked() { return Boolean(state.mapping?.active && state.hardware?.mapping_ready); }
   function sendMotion() {
     if (!isUnlocked()) return;
     const forwardSpeed = Number($("forward-speed").value), turnSpeed = Number($("turn-speed").value);

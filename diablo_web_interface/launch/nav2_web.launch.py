@@ -42,8 +42,8 @@ def generate_launch_description():
         DeclareLaunchArgument("maps_dir", default_value=""),
         DeclareLaunchArgument(
             "enable_wheel_odom",
-            default_value="false",
-            description="Use only without the ros2_control/local odometry stack",
+            default_value="true",
+            description="Run one standalone wheel odometry node from the web launch",
         ),
         DeclareLaunchArgument("wheel_radius", default_value="0.093"),
         DeclareLaunchArgument("track_width", default_value="0.475"),
@@ -69,6 +69,9 @@ def generate_launch_description():
                 "mapping_start_command": LaunchConfiguration("mapping_start_command"),
                 "maps_dir": LaunchConfiguration("maps_dir"),
                 "enable_mux": "true",
+                "enable_wheel_odom": LaunchConfiguration("enable_wheel_odom"),
+                "wheel_radius": LaunchConfiguration("wheel_radius"),
+                "track_width": LaunchConfiguration("track_width"),
             }.items(),
         ),
         IncludeLaunchDescription(
@@ -80,7 +83,8 @@ def generate_launch_description():
                 "odom_topic": LaunchConfiguration("odom_topic"),
                 "odom_frame": LaunchConfiguration("odom_frame"),
                 "scan_topic": LaunchConfiguration("scan_topic"),
-                "enable_wheel_odom": LaunchConfiguration("enable_wheel_odom"),
+                # web_interface.launch.py owns the single odometry instance.
+                "enable_wheel_odom": "false",
                 "wheel_radius": LaunchConfiguration("wheel_radius"),
                 "track_width": LaunchConfiguration("track_width"),
                 "motor_topic": LaunchConfiguration("motor_topic"),

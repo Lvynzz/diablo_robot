@@ -116,6 +116,8 @@ export function LaunchToggleButton({
   const [confirming, setConfirming] = useState(false);
   const active = activeFor(component, state, hardware);
   const status = statusFor(component, state, hardware);
+  const configured = component === "hardware"
+    || state.processes?.[component]?.state !== "not_configured";
   const description = useMemo(() => {
     if (component !== "hardware" || !active) return `Status: ${status}.`;
     const dependent = (["mapping", "navigation", "localization"] as LaunchComponent[])
@@ -150,6 +152,7 @@ export function LaunchToggleButton({
         className={`${compact ? "launch-toggle compact" : "primary-action launch-toggle"} ${active ? "is-active" : ""}`}
         type="button"
         onClick={request}
+        disabled={!active && !configured}
       >
         <span>{active ? `OFF ${LABELS[component].eyebrow}` : `ON ${LABELS[component].eyebrow}`}</span>
         <b>{status}</b>

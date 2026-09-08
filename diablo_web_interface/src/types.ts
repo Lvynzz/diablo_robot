@@ -96,6 +96,7 @@ export interface HardwareComponent {
 
 export interface HardwareStatus {
   ready: boolean;
+  mapping_ready: boolean;
   all_ready: boolean;
   starting: boolean;
   message: string;

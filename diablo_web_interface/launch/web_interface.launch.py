@@ -43,11 +43,11 @@ def generate_launch_description():
             "dynamixel_start_command",
             default_value=(
                 "ros2 launch diablo_full_body_moveit_config full_body_hardware.launch.py "
-                "use_mock_hardware:=false enable_arm_hardware:=true enable_base_hardware:=true "
+                "use_mock_hardware:=false upper_only:=true "
+                "enable_arm_hardware:=true enable_base_hardware:=false "
                 "arm_port_name:=/dev/u2d2_arm hand_port_name:=/dev/u2d2_hand "
-                "baud_rate:=1000000 start_arm_controllers:=true start_base_controller:=true "
-                "track_width:=0.475 wheel_radius:=0.093 "
-                "use_ekf:=false use_local_odom:=true start_move_group:=false"
+                "baud_rate:=1000000 start_arm_controllers:=true start_base_controller:=false "
+                "use_ekf:=false use_local_odom:=false start_move_group:=false"
             ),
         ),
         DeclareLaunchArgument("hardware_log_directory", default_value="/tmp"),
@@ -62,6 +62,9 @@ def generate_launch_description():
         ),
         DeclareLaunchArgument("maps_dir", default_value=""),
         DeclareLaunchArgument("enable_mux", default_value="true"),
+        DeclareLaunchArgument("enable_wheel_odom", default_value="true"),
+        DeclareLaunchArgument("wheel_radius", default_value="0.093"),
+        DeclareLaunchArgument("track_width", default_value="0.475"),
 
         SetEnvironmentVariable("DIABLO_WEB_HOST", LaunchConfiguration("host")),
         SetEnvironmentVariable("DIABLO_WEB_PORT", LaunchConfiguration("port")),
@@ -103,5 +106,19 @@ def generate_launch_description():
                 "control_mode_topic": LaunchConfiguration("control_mode_topic"),
             }],
             condition=IfCondition(LaunchConfiguration("enable_mux")),
+        ),
+        Node(
+            package="diablo_web_interface",
+            executable="wheel_odom",
+            name="diablo_wheel_odom",
+            output="screen",
+            parameters=[{
+                "input_topic": "/diablo/sensor/Motors",
+                "odom_topic": LaunchConfiguration("odom_topic"),
+                "base_frame": LaunchConfiguration("base_frame"),
+                "wheel_radius": LaunchConfiguration("wheel_radius"),
+                "track_width": LaunchConfiguration("track_width"),
+            }],
+            condition=IfCondition(LaunchConfiguration("enable_wheel_odom")),
         ),
     ])

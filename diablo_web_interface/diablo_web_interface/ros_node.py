@@ -136,11 +136,11 @@ class DiabloWebNode(Node):
         self.declare_parameter(
             "dynamixel_start_command",
             "ros2 launch diablo_full_body_moveit_config full_body_hardware.launch.py "
-            "use_mock_hardware:=false enable_arm_hardware:=true enable_base_hardware:=true "
+            "use_mock_hardware:=false upper_only:=true "
+            "enable_arm_hardware:=true enable_base_hardware:=false "
             "arm_port_name:=/dev/u2d2_arm hand_port_name:=/dev/u2d2_hand baud_rate:=1000000 "
-            "track_width:=0.475 wheel_radius:=0.093 "
-            "start_arm_controllers:=true start_base_controller:=true use_ekf:=false "
-            "use_local_odom:=true start_move_group:=false",
+            "start_arm_controllers:=true start_base_controller:=false use_ekf:=false "
+            "use_local_odom:=false start_move_group:=false",
         )
         self.declare_parameter("hardware_log_directory", "/tmp")
         self.declare_parameter("localization_start_command", "")
@@ -496,7 +496,11 @@ class DiabloWebNode(Node):
             }
 
     def _joint_state_callback(self, message: JointState):
-        self._hardware.mark_message("dynamixel")
+        arm_joint_names = {
+            definition["name"] for definition in JOINT_DEFINITIONS.values()
+        }
+        if any(str(name) in arm_joint_names for name in message.name):
+            self._hardware.mark_message("dynamixel")
         with self._lock:
             for name, position in zip(message.name, message.position):
                 if math.isfinite(float(position)):
@@ -530,6 +534,20 @@ class DiabloWebNode(Node):
         """Build a JSON-ready state packet without exposing mutable state."""
         with self._lock:
             versions = dict(self._versions)
+            processes = self._hardware.process_snapshots()
+            configured_commands = {
+                "localization": self.localization_start_command,
+                "navigation": self.navigation_start_command,
+                "mapping": self.mapping_start_command,
+            }
+            for name, command in configured_commands.items():
+                if not command and not processes[name]["active"]:
+                    processes[name].update(
+                        {
+                            "state": "not_configured",
+                            "message": "Launch command not configured",
+                        }
+                    )
             state = {
                 "type": "state",
                 "stamp": time.time(),
@@ -540,7 +558,7 @@ class DiabloWebNode(Node):
                 "control_mode": self._control_mode,
                 "nav_goal": self.get_nav_goal_status(),
                 "hardware": self._hardware.snapshot(),
-                "processes": self._hardware.process_snapshots(),
+                "processes": processes,
                 "joints": self.joint_status(),
                 "mapping": self.mapping_status(),
                 "versions": versions,
@@ -852,13 +870,12 @@ class DiabloWebNode(Node):
         return {**result, "component": "navigation"}
 
     def start_mapping(self):
-        if not self.hardware_all_ready():
+        if not self.hardware_mapping_ready():
             return {
                 "requested": False,
                 "component": "mapping",
                 "message": (
-                    "Mapping is locked until Diablo motors, LiDAR and Dynamixel "
-                    "feedback are ready"
+                    "Mapping is locked until Diablo motors and LiDAR feedback are ready"
                 ),
                 "mapping": self.mapping_status(),
             }
@@ -945,10 +962,10 @@ class DiabloWebNode(Node):
                 "Map name must start with a letter or number and contain only "
                 "letters, numbers, '_' or '-' (max 64 characters)"
             )
-        if not self.hardware_all_ready():
+        if not self.hardware_mapping_ready():
             return {
                 "saved": False,
-                "message": "Start all hardware before saving a map",
+                "message": "Start Diablo and LiDAR before saving a map",
             }
         if self.mapping_status()["active"] is False:
             return {
@@ -1028,6 +1045,9 @@ class DiabloWebNode(Node):
 
     def hardware_all_ready(self):
         return self._hardware.is_all_ready()
+
+    def hardware_mapping_ready(self):
+        return self._hardware.is_mapping_ready()
 
     def list_ros_topics(self):
         topics = []

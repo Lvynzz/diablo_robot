@@ -18,6 +18,7 @@ class HardwareManager:
 
     COMPONENTS = ("diablo", "lidar", "dynamixel")
     OPTIONAL_PROCESSES = ("localization", "navigation", "mapping")
+    MAPPING_COMPONENTS = ("diablo", "lidar")
 
     def __init__(
         self,
@@ -170,6 +171,7 @@ class HardwareManager:
             results[component] = result
             requested = requested or bool(result.get("requested"))
         with self._lock:
+            self._refresh_summary_locked()
             self._status["message"] = (
                 "Hardware startup requested; waiting for ROS sensor topics"
                 if requested
@@ -239,39 +241,50 @@ class HardwareManager:
                 else:
                     self._set_component(component, "not_configured", "Start command not configured")
 
-            diablo = self._component("diablo")
-            ready = diablo["state"] == "ready"
-            all_ready = all(
-                item["state"] == "ready" for item in self._status["components"]
-            )
-            starting = any(
-                item["state"] in ("starting", "waiting")
-                for item in self._status["components"]
-            )
-            if ready:
-                message = "Diablo driver ready; manual motion enabled"
-            elif starting:
-                message = "Hardware is starting; waiting for Diablo motor feedback"
-            else:
-                message = "Start Hardware before using Drive Control"
-            self._status.update(
-                {
-                    "ready": ready,
-                    "all_ready": all_ready,
-                    "starting": starting,
-                    "message": (
-                        "All hardware ready: motors, LiDAR and Dynamixel feedback detected"
-                        if all_ready
-                        else message
-                    ),
-                    "updated": time.time(),
-                }
-            )
+            self._refresh_summary_locked()
+
+    def _refresh_summary_locked(self):
+        """Recompute aggregate gates while ``self._lock`` is held."""
+        states = {
+            item["id"]: item["state"] for item in self._status["components"]
+        }
+        ready = states.get("diablo") == "ready"
+        mapping_ready = all(
+            states.get(component) == "ready"
+            for component in self.MAPPING_COMPONENTS
+        )
+        all_ready = all(
+            states.get(component) == "ready" for component in self.COMPONENTS
+        )
+        starting = any(
+            state in ("starting", "waiting") for state in states.values()
+        )
+        if all_ready:
+            message = "All hardware ready: motors, LiDAR and Dynamixel feedback detected"
+        elif mapping_ready:
+            message = "Diablo and LiDAR ready; mapping enabled (Dynamixel optional)"
+        elif ready:
+            message = "Diablo driver ready; waiting for LiDAR feedback"
+        elif starting:
+            message = "Hardware is starting; waiting for Diablo motor feedback"
+        else:
+            message = "Start Hardware before using Drive Control"
+        self._status.update(
+            {
+                "ready": ready,
+                "mapping_ready": mapping_ready,
+                "all_ready": all_ready,
+                "starting": starting,
+                "message": message,
+                "updated": time.time(),
+            }
+        )
 
     def snapshot(self):
         with self._lock:
             return {
                 "ready": bool(self._status["ready"]),
+                "mapping_ready": bool(self._status.get("mapping_ready", False)),
                 "all_ready": bool(self._status["all_ready"]),
                 "starting": bool(self._status["starting"]),
                 "message": str(self._status["message"]),
@@ -293,6 +306,10 @@ class HardwareManager:
     def is_all_ready(self):
         with self._lock:
             return bool(self._status["all_ready"])
+
+    def is_mapping_ready(self):
+        with self._lock:
+            return bool(self._status.get("mapping_ready", False))
 
     def start_process(self, name, command):
         """Start an optional navigation process using a launch-time command."""
@@ -386,6 +403,10 @@ class HardwareManager:
                 except Exception:
                     pass
             self._close_log(clean_name)
+            # SIGTERM requested here is a normal stop. Drop the completed
+            # handle so a later poll cannot reinterpret it as a crash.
+            self._processes.pop(clean_name, None)
+            self._started_at.pop(clean_name, None)
             return {"requested": True, "message": f"{clean_name} stopped"}
 
     def stop_hardware(self):
@@ -400,6 +421,12 @@ class HardwareManager:
             results[component] = self.stop_process(component)
 
         with self._lock:
+            # Also clear handles that had already exited before OFF was
+            # requested. Their old SIGTERM/error return code must not leak
+            # into the next hardware state refresh.
+            for component in self.COMPONENTS:
+                self._processes.pop(component, None)
+                self._started_at.pop(component, None)
             self._service_state = {
                 component: False for component in self._service_state
             }

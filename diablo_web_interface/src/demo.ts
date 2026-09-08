@@ -111,6 +111,7 @@ export const demoState: DiabloState = {
   },
   hardware: {
     ready: false,
+    mapping_ready: false,
     all_ready: false,
     starting: false,
     message: "Preview mode — press START HARDWARE when connected to the robot",

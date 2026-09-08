@@ -1,11 +1,21 @@
 from pathlib import Path
 
+from diablo_web_interface.hardware_manager import HardwareManager
+
 
 PACKAGE_ROOT = Path(__file__).resolve().parents[1]
 
 
 def read_text(relative_path):
     return (PACKAGE_ROOT / relative_path).read_text(encoding="utf-8")
+
+
+class _Logger:
+    def info(self, _message):
+        pass
+
+    def error(self, _message):
+        pass
 
 
 def test_diablo_motion_control_uses_native_message_and_topic():
@@ -140,3 +150,45 @@ def test_web_ui_has_mapping_teleop_and_topic_echo_panels():
     assert "/dev/u2d2_arm" in web_launch
     assert "/dev/u2d2_hand" in web_launch
     assert "W A S D" in html
+
+
+def test_mapping_gate_does_not_require_optional_dynamixel_feedback():
+    manager = HardwareManager(
+        _Logger(),
+        diablo_command="diablo",
+        lidar_command="lidar",
+        dynamixel_command="dynamixel",
+    )
+    manager.mark_message("diablo")
+    manager.mark_message("lidar")
+    manager.update([])
+
+    status = manager.snapshot()
+    assert status["ready"] is True
+    assert status["mapping_ready"] is True
+    assert status["all_ready"] is False
+
+
+def test_intentional_hardware_stop_is_not_reported_as_process_error(monkeypatch):
+    class _Process:
+        pid = 12345
+
+        def __init__(self):
+            self.return_code = None
+
+        def poll(self):
+            return self.return_code
+
+        def wait(self, timeout):
+            assert timeout == 2.0
+            self.return_code = -15
+
+    manager = HardwareManager(_Logger(), diablo_command="diablo")
+    manager._processes["diablo"] = _Process()
+    manager._started_at["diablo"] = 0.0
+    monkeypatch.setattr("os.killpg", lambda _pid, _signal: None)
+
+    assert manager.stop_hardware()["requested"] is True
+    manager.update([])
+    component = manager.snapshot()["components"][0]
+    assert component["state"] == "offline"

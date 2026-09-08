@@ -118,7 +118,7 @@ export const demoState: DiabloState = {
     components: [
       { id: "diablo", label: "DIABLO ROS2", state: "offline", detail: "Waiting for robot" },
       { id: "lidar", label: "LIDAR", state: "not_configured", detail: "Configure lidar_start_command" },
-      { id: "dynamixel", label: "DYNAMIXEL U2D2", state: "offline", detail: "Waiting for robot" },
+      { id: "dynamixel", label: "DYNAMIXEL ARM U2D2", state: "offline", detail: "Waiting for robot" },
     ],
     updated: Date.now() / 1000,
   },

@@ -80,7 +80,7 @@ class HardwareManager:
                     "label": {
                         "diablo": "DIABLO ROS2",
                         "lidar": "LIDAR",
-                        "dynamixel": "DYNAMIXEL U2D2",
+                        "dynamixel": "DYNAMIXEL ARM U2D2",
                     }[component],
                     "state": state,
                     "detail": detail,

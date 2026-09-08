@@ -241,6 +241,8 @@ function JointSliderPanel({
     onEvent(accepted ? `Dynamixel ID ${id} target sent.` : `Dynamixel ID ${id} command failed.`, accepted ? "success" : "error");
   };
 
+  const optionalHandJoint = (id: number) => [4, 5, 9, 10].includes(id);
+
   return (
     <div className="joint-slider-grid">
       {state.joints.map((joint) => {
@@ -258,9 +260,9 @@ function JointSliderPanel({
               onChange={(event) => setValues((previous) => ({ ...previous, [joint.id]: Number(event.target.value) }))}
               onPointerUp={() => void commit(joint.id)}
               onKeyUp={() => void commit(joint.id)}
-              title={`${joint.name} · ${joint.available ? "feedback ready" : "waiting for /joint_states"}`}
+              title={`${joint.name} · ${joint.available ? "feedback ready" : optionalHandJoint(joint.id) ? "optional hand skipped" : "waiting for /joint_states"}`}
             />
-            <small>{joint.name} · {joint.available ? "READY" : "WAITING FOR FEEDBACK"}</small>
+            <small>{joint.name} · {joint.available ? "READY" : optionalHandJoint(joint.id) && hardwareReady ? "OPTIONAL HAND SKIPPED" : "WAITING FOR FEEDBACK"}</small>
           </label>
         );
       })}

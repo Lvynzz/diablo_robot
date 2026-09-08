@@ -149,7 +149,7 @@
     $("hardware-status").className = mappingReady || hardware.ready ? "ready" : hardware.starting ? "starting" : "";
     $("hardware-message").textContent = hardware.message || "Press ON HARDWARE to start hardware.";
     const components = Object.fromEntries((hardware.components || []).map((item) => [item.id, item]));
-    [["diablo", "component-diablo", "DIABLO"], ["lidar", "component-lidar", "LIDAR"], ["dynamixel", "component-dynamixel", "DYNAMIXEL"]].forEach(([id, element, label]) => {
+    [["diablo", "component-diablo", "DIABLO"], ["lidar", "component-lidar", "LIDAR"], ["dynamixel", "component-dynamixel", "DYNAMIXEL ARM"]].forEach(([id, element, label]) => {
       const item = components[id];
       $(element).textContent = `● ${label} · ${item ? item.state.replace("_", " ").toUpperCase() : "OFFLINE"}`;
       $(element).className = item && item.state === "ready" ? "ready" : item && item.state === "error" ? "error" : "";
@@ -241,7 +241,8 @@
       const available = Boolean(joint.available);
       input.disabled = !hardwareReady || !available;
       const detail = input.parentElement?.querySelector("small");
-      if (detail) detail.textContent = `${joint.name} · ${available ? "READY" : "WAITING FOR FEEDBACK"}`;
+      const optionalHand = [4, 5, 9, 10].includes(Number(joint.id));
+      if (detail) detail.textContent = `${joint.name} · ${available ? "READY" : optionalHand && hardwareReady ? "OPTIONAL HAND SKIPPED" : "WAITING FOR FEEDBACK"}`;
     });
     $("joint-status").textContent = hardwareReady ? "JOINTS READY" : "START HARDWARE + ARM FEEDBACK";
   }

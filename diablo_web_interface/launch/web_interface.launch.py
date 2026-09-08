@@ -15,6 +15,7 @@ def generate_launch_description():
         DeclareLaunchArgument(
             "control_mode_topic", default_value="/diablo/control_mode"
         ),
+        DeclareLaunchArgument("map_topic", default_value="/map"),
         DeclareLaunchArgument("base_frame", default_value="diablo_base_link"),
         DeclareLaunchArgument("map_frame", default_value="map"),
         DeclareLaunchArgument("odom_topic", default_value="/diablo/odometry"),
@@ -24,17 +25,40 @@ def generate_launch_description():
         ),
         DeclareLaunchArgument("lidar_start_service", default_value="/start_motor"),
         DeclareLaunchArgument(
-            "diablo_start_command", default_value="ros2 run diablo_ctrl diablo_ctrl_node"
+            "diablo_start_command",
+            default_value=(
+                "ros2 run diablo_ctrl diablo_ctrl_node "
+                "--ros-args -p controller_port:=/dev/diablo_controller"
+            ),
         ),
-        DeclareLaunchArgument("lidar_start_command", default_value=""),
+        DeclareLaunchArgument(
+            "lidar_start_command",
+            default_value=(
+                "ros2 launch sllidar_ros2 sllidar_a2m7_launch.py "
+                "serial_port:=/dev/rplidar frame_id:=laser"
+            ),
+        ),
         DeclareLaunchArgument(
             "dynamixel_start_command",
-            default_value="ros2 launch diablo_bringup six_joint_move.launch.py",
+            default_value=(
+                "ros2 launch diablo_full_body_moveit_config full_body_hardware.launch.py "
+                "use_mock_hardware:=false enable_arm_hardware:=true enable_base_hardware:=true "
+                "arm_port_name:=/dev/u2d2_arm hand_port_name:=/dev/u2d2_hand "
+                "baud_rate:=1000000 start_arm_controllers:=true start_base_controller:=true "
+                "track_width:=0.475 wheel_radius:=0.093 "
+                "use_ekf:=false use_local_odom:=true start_move_group:=false"
+            ),
         ),
         DeclareLaunchArgument("hardware_log_directory", default_value="/tmp"),
         DeclareLaunchArgument("localization_start_command", default_value=""),
         DeclareLaunchArgument("navigation_start_command", default_value=""),
-        DeclareLaunchArgument("mapping_start_command", default_value=""),
+        DeclareLaunchArgument(
+            "mapping_start_command",
+            default_value=(
+                "ros2 launch diablo_web_interface mapping.launch.py "
+                "enable_wheel_odom:=false scan_topic:=/scan"
+            ),
+        ),
         DeclareLaunchArgument("maps_dir", default_value=""),
         DeclareLaunchArgument("enable_mux", default_value="true"),
 
@@ -50,6 +74,7 @@ def generate_launch_description():
             parameters=[{
                 "manual_cmd_topic": LaunchConfiguration("manual_cmd_topic"),
                 "control_mode_topic": LaunchConfiguration("control_mode_topic"),
+                "map_topic": LaunchConfiguration("map_topic"),
                 "base_frame": LaunchConfiguration("base_frame"),
                 "map_frame": LaunchConfiguration("map_frame"),
                 "odom_topic": LaunchConfiguration("odom_topic"),

@@ -10,7 +10,7 @@ interface SidebarProps {
 
 const items: Array<{ view: AppView; label: string; detail: string; icon: IconName; badge?: string }> = [
   { view: "drive", label: "Drive Control", detail: "Manual motion", icon: "drive" },
-  { view: "navigation", label: "Navigation", detail: "Map + goal control", icon: "navigation" },
+  { view: "mapping", label: "Mapping", detail: "SLAM + occupancy grid", icon: "navigation" },
   { view: "topics", label: "ROS Topics", detail: "Live topic echo", icon: "topics", badge: "0/4" },
 ];
 

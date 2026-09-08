@@ -5,6 +5,8 @@ from collections import OrderedDict
 import copy
 import math
 from pathlib import Path
+import re
+import subprocess
 import threading
 import time
 
@@ -35,6 +37,8 @@ from .hardware_manager import HardwareManager
 MAX_ECHO_DEPTH = 5
 MAX_ECHO_ITEMS = 80
 MAX_LIDAR_POINTS = 720
+MAX_MAP_CELLS = 250_000
+MAP_NAME_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$")
 
 
 def _yaw_from_quaternion(quaternion):
@@ -106,17 +110,30 @@ class DiabloWebNode(Node):
         self.declare_parameter("reset_encoder_service", "/diablo/reset_encoder")
         self.declare_parameter("lidar_start_service", "/start_motor")
         self.declare_parameter(
-            "diablo_start_command", "ros2 run diablo_ctrl diablo_ctrl_node"
+            "diablo_start_command",
+            "ros2 run diablo_ctrl diablo_ctrl_node "
+            "--ros-args -p controller_port:=/dev/diablo_controller",
         )
-        self.declare_parameter("lidar_start_command", "")
+        self.declare_parameter(
+            "lidar_start_command",
+            "ros2 launch sllidar_ros2 sllidar_a2m7_launch.py serial_port:=/dev/rplidar frame_id:=laser",
+        )
         self.declare_parameter(
             "dynamixel_start_command",
-            "ros2 launch diablo_bringup six_joint_move.launch.py",
+            "ros2 launch diablo_full_body_moveit_config full_body_hardware.launch.py "
+            "use_mock_hardware:=false enable_arm_hardware:=true enable_base_hardware:=true "
+            "arm_port_name:=/dev/u2d2_arm hand_port_name:=/dev/u2d2_hand baud_rate:=1000000 "
+            "track_width:=0.475 wheel_radius:=0.093 "
+            "start_arm_controllers:=true start_base_controller:=true use_ekf:=false "
+            "use_local_odom:=true start_move_group:=false",
         )
         self.declare_parameter("hardware_log_directory", "/tmp")
         self.declare_parameter("localization_start_command", "")
         self.declare_parameter("navigation_start_command", "")
-        self.declare_parameter("mapping_start_command", "")
+        self.declare_parameter(
+            "mapping_start_command",
+            "ros2 launch diablo_web_interface mapping.launch.py enable_wheel_odom:=false scan_topic:=/scan",
+        )
         self.declare_parameter("maps_dir", "")
 
         self.manual_cmd_topic = str(self.get_parameter("manual_cmd_topic").value)
@@ -161,14 +178,7 @@ class DiabloWebNode(Node):
         if configured_maps_dir:
             self.maps_dir = Path(configured_maps_dir).expanduser()
         else:
-            self.maps_dir = Path(__file__).resolve().parent.parent / "maps"
-            if not self.maps_dir.is_dir():
-                try:
-                    from ament_index_python.packages import get_package_share_directory
-
-                    self.maps_dir = Path(get_package_share_directory("diablo_web_interface")) / "maps"
-                except Exception:
-                    pass
+            self.maps_dir = self._default_maps_dir()
 
         self._lock = threading.RLock()
         self._versions = {
@@ -475,6 +485,7 @@ class DiabloWebNode(Node):
                 "control_mode": self._control_mode,
                 "nav_goal": self.get_nav_goal_status(),
                 "hardware": self._hardware.snapshot(),
+                "mapping": self.mapping_status(),
                 "versions": versions,
             }
             for key, value in (
@@ -725,8 +736,106 @@ class DiabloWebNode(Node):
         return {**result, "component": "navigation"}
 
     def start_mapping(self):
+        if not self.hardware_all_ready():
+            return {
+                "requested": False,
+                "component": "mapping",
+                "message": (
+                    "Mapping is locked until Diablo motors, LiDAR and Dynamixel "
+                    "feedback are ready"
+                ),
+                "mapping": self.mapping_status(),
+            }
         result = self._hardware.start_process("mapping", self.mapping_start_command)
-        return {**result, "component": "mapping"}
+        return {**result, "component": "mapping", "mapping": self.mapping_status()}
+
+    def stop_mapping(self):
+        try:
+            self.publish_stop()
+        except Exception as error:
+            self.get_logger().warning("Could not stop robot before mapping shutdown: %s", error)
+        result = self._hardware.stop_process("mapping")
+        return {**result, "component": "mapping", "mapping": self.mapping_status()}
+
+    def mapping_status(self):
+        status = self._hardware.process_status("mapping")
+        return {
+            "state": status["state"],
+            "active": bool(status["active"]),
+            "message": status["message"],
+            "pid": status["pid"],
+        }
+
+    def save_map(self, name):
+        """Save the live SLAM Toolbox map as a PGM/YAML pair in diablo_bringup/map."""
+        clean_name = str(name or "").strip()
+        if not MAP_NAME_PATTERN.fullmatch(clean_name):
+            raise ValueError(
+                "Map name must start with a letter or number and contain only "
+                "letters, numbers, '_' or '-' (max 64 characters)"
+            )
+        if not self.hardware_all_ready():
+            return {
+                "saved": False,
+                "message": "Start all hardware before saving a map",
+            }
+        if self.mapping_status()["active"] is False:
+            return {
+                "saved": False,
+                "message": "Start mapping before saving a map",
+            }
+
+        self.maps_dir.mkdir(parents=True, exist_ok=True)
+        prefix = self.maps_dir / clean_name
+        output_files = [prefix.with_suffix(".yaml"), prefix.with_suffix(".pgm")]
+        existing = [path for path in output_files if path.exists()]
+        if existing:
+            return {
+                "saved": False,
+                "message": f"Map '{clean_name}' already exists; choose another name",
+            }
+
+        command = [
+            "ros2",
+            "run",
+            "nav2_map_server",
+            "map_saver_cli",
+            "-f",
+            str(prefix),
+            "--ros-args",
+            "-p",
+            "map_subscribe_transient_local:=true",
+            "-p",
+            "save_map_timeout:=10.0",
+        ]
+        try:
+            completed = subprocess.run(
+                command,
+                capture_output=True,
+                text=True,
+                timeout=45.0,
+                check=False,
+            )
+        except (OSError, subprocess.TimeoutExpired) as error:
+            return {"saved": False, "message": f"Map saver failed: {error}"}
+        if completed.returncode != 0:
+            details = (completed.stderr or completed.stdout or "").strip()
+            return {
+                "saved": False,
+                "message": f"Map saver exited with code {completed.returncode}: {details[-500:]}",
+            }
+        missing = [str(path.name) for path in output_files if not path.is_file()]
+        if missing:
+            return {
+                "saved": False,
+                "message": f"Map saver finished but did not create: {', '.join(missing)}",
+            }
+        return {
+            "saved": True,
+            "name": clean_name,
+            "files": [path.name for path in output_files],
+            "message": f"Map '{clean_name}' saved to diablo_bringup/map",
+        }
 
     def list_maps(self):
         """Return map assets by name without exposing filesystem paths to the browser."""
@@ -745,6 +854,9 @@ class DiabloWebNode(Node):
 
     def hardware_ready(self):
         return self._hardware.is_ready()
+
+    def hardware_all_ready(self):
+        return self._hardware.is_all_ready()
 
     def list_ros_topics(self):
         topics = []
@@ -891,18 +1003,65 @@ class DiabloWebNode(Node):
     @staticmethod
     def _parse_grid(message):
         origin = message.info.origin
+        width = int(message.info.width)
+        height = int(message.info.height)
+        source = list(message.data)
+        stride = max(1, math.ceil(math.sqrt((width * height) / MAX_MAP_CELLS)))
+        if stride == 1:
+            data = source
+            parsed_width = width
+            parsed_height = height
+        else:
+            parsed_width = math.ceil(width / stride)
+            parsed_height = math.ceil(height / stride)
+            data = []
+            for row in range(0, height, stride):
+                for column in range(0, width, stride):
+                    values = []
+                    for block_row in range(row, min(row + stride, height)):
+                        start = block_row * width + column
+                        values.extend(source[start : min(start + stride, block_row * width + width)])
+                    if any(value >= 65 for value in values):
+                        data.append(max(value for value in values if value >= 65))
+                    elif any(value < 0 for value in values):
+                        data.append(-1)
+                    else:
+                        data.append(max(values, default=0))
         return {
             "frame_id": message.header.frame_id,
-            "resolution": float(message.info.resolution),
-            "width": int(message.info.width),
-            "height": int(message.info.height),
+            "resolution": float(message.info.resolution) * stride,
+            "width": parsed_width,
+            "height": parsed_height,
             "origin": {
                 "x": float(origin.position.x),
                 "y": float(origin.position.y),
                 "yaw": _yaw_from_quaternion(origin.orientation),
             },
-            "data": list(message.data),
+            "data": data,
         }
+
+    @staticmethod
+    def _default_maps_dir():
+        """Prefer the source checkout's bringup map directory when available."""
+        source_file = Path(__file__).resolve()
+        for parent in (source_file.parent, *source_file.parents):
+            candidate = parent / "src" / "diablo_bringup" / "map"
+            if candidate.is_dir():
+                return candidate
+        try:
+            from ament_index_python.packages import get_package_share_directory
+
+            bringup_share = Path(get_package_share_directory("diablo_bringup"))
+            installed_map = bringup_share / "map"
+            if installed_map.is_dir():
+                return installed_map
+            legacy_map = bringup_share / "maps"
+            if legacy_map.is_dir():
+                return legacy_map
+        except Exception:
+            pass
+        source_map = source_file.parent.parent / "maps"
+        return source_map
 
     @staticmethod
     def _pose_from_pose_message(pose, source):

@@ -4,7 +4,7 @@ import type { ControlMode } from "../types";
 
 interface HeaderProps {
   connected: boolean;
-  nav2Ready: boolean;
+  mappingActive: boolean;
   mode: ControlMode;
   demoMode: boolean;
   onStop: () => void;
@@ -13,7 +13,7 @@ interface HeaderProps {
   onMenu: () => void;
 }
 
-export function Header({ connected, nav2Ready, mode, demoMode, onStop, onMode, onSettings, onMenu }: HeaderProps) {
+export function Header({ connected, mappingActive, mode, demoMode, onStop, onMode, onSettings, onMenu }: HeaderProps) {
   const [clock, setClock] = useState(() => new Date());
   useEffect(() => {
     const timer = window.setInterval(() => setClock(new Date()), 1000);
@@ -45,8 +45,8 @@ export function Header({ connected, nav2Ready, mode, demoMode, onStop, onMode, o
       </div>
       <div className="header-spacer" />
       {demoMode && <span className="demo-badge">LOCAL PREVIEW</span>}
-      <div className={`header-health ${nav2Ready ? "ready" : ""}`}>
-        <i /> <span>{nav2Ready ? "NAV2 READY" : "NAV2 OFFLINE"}</span>
+      <div className={`header-health ${mappingActive ? "ready" : ""}`}>
+        <i /> <span>{mappingActive ? "MAPPING ACTIVE" : "MAPPING IDLE"}</span>
       </div>
       <button className={`mode-button mode-${mode}`} type="button" onClick={onMode} title="Toggle manual/auto mode">
         {modeLabel}

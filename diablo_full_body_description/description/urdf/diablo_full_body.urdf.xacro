@@ -17,7 +17,7 @@
 <xacro:arg name="hand_port_name" default="/dev/u2d2_hand"/>
 <xacro:arg name="baud_rate" default="1000000"/>
 <xacro:arg name="wheel_radius" default="0.093"/>
-<xacro:arg name="track_width" default="0.510"/>
+<xacro:arg name="track_width" default="0.475"/>
 <xacro:arg name="left_feedback_sign" default="1.0"/>
 <xacro:arg name="right_feedback_sign" default="1.0"/>
 <!-- RPLIDAR A2 is mounted with its cable/interface toward the robot rear.

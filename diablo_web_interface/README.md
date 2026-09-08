@@ -1,6 +1,7 @@
 # diablo_web_interface
 
-Package Nav2 dan web dashboard untuk robot Diablo. Package ini dibuat di
+Package web dashboard untuk hardware, mapping SLAM dan teleoperasi robot Diablo.
+Navigasi Nav2 belum menjadi bagian dari workflow web ini. Package ini dibuat di
 `diablo_ws/src` dengan pola yang sama seperti `amr_web_interface`, tetapi
 perintah teleoperasinya memakai message asli Diablo:
 
@@ -35,12 +36,10 @@ ditampilkan pada versi ini. Setiap panel dapat ditutup dari tombol chevron di
 header; sidebar juga dapat diciutkan sehingga ikon tetap bisa dipakai untuk
 berpindah panel.
 
-Panel Navigation mengikuti layout HMI referensi: Navigation Map (map PGM dari
-`/map` dengan overlay global/local costmap dan inflation layer), Pose & Stations,
-Navigation Controls, serta Navigation Log History. Pemilihan map saat ini
-memilih asset dan memberi indikasi bahwa map_server perlu direstart untuk
-menerapkannya; startup localization/Nav2/mapping disediakan sebagai command
-yang dapat dikonfigurasi.
+Panel Mapping menampilkan occupancy grid live dari `/map`, status tiga komponen
+hardware, kontrol start/stop SLAM Toolbox, teleoperasi W/A/S/D, dan penyimpanan
+pasangan file `.pgm` + `.yaml`. Tombol mapping hanya dibuka setelah feedback
+motor Diablo, LiDAR dan Dynamixel diterima.
 
 Untuk melihat HMI dari laptop:
 
@@ -58,7 +57,7 @@ Topics, dan Settings dapat diperiksa.
 
 | Bagian | Fungsi |
 | --- | --- |
-| `web_node` | FastAPI + WebSocket: teleop, goal Nav2, initial pose, telemetry, topic echo, hardware startup, reset odom/encoder, start LiDAR |
+| `web_node` | FastAPI + WebSocket: hardware startup, SLAM mapping, teleop, save map, telemetry, topic echo dan reset odom/encoder |
 | `motion_cmd_bridge` | `Twist` Nav2 → `MotionCtrl` Diablo |
 | `motion_cmd_mux` | Pemilih manual/auto dengan command watchdog |
 | `wheel_odom` | Estimasi odom encoder legacy untuk launch yang tidak memakai ros2_control |
@@ -83,25 +82,15 @@ Laptop saat package ini dibuat belum memiliki dependency Nav2/FastAPI, jadi
 build runtime penuh perlu dilakukan setelah source dipindahkan ke robot atau
 dependency dipasang di laptop.
 
-## Menjalankan web + Nav2
+## Menjalankan web + mapping
 
-Jalankan hardware full-body dengan odom roda lokal resettable, lalu jalankan launch
-berikut pada mesin ROS. Tombol **START HARDWARE** di panel
-Navigation akan menjalankan driver Diablo dan Dynamixel yang dikonfigurasi;
-LiDAR bisa dijalankan lewat command atau service start. Jika driver sudah
-dijalankan oleh systemd/launch lain, command terkait dapat dikosongkan dan HMI
-tetap menunggu feedback ROS. Kemudian:
-
-```bash
-ros2 launch diablo_full_body_moveit_config full_body_hardware.launch.py \
-  use_mock_hardware:=false use_ekf:=false use_local_odom:=true
-```
+Jalankan web interface pada mesin ROS. Tombol **ON HARDWARE** akan menjalankan
+driver Diablo, LiDAR dan Dynamixel dengan port udev robot, lalu menunggu semua
+feedback sebelum membuka mapping dan teleoperasi:
 
 ```bash
 source ~/diablo_ws/install/setup.bash
-ros2 launch diablo_web_interface nav2_web.launch.py \
-  map:=/absolute/path/to/my_map.yaml \
-  lidar_start_command:='ros2 launch <lidar_package> <lidar_launch>.launch.py'
+ros2 launch diablo_web_interface web_interface.launch.py
 ```
 
 Buka `http://IP_MESIN_ROS:8000`. Port bisa diganti dengan
@@ -132,56 +121,51 @@ ros2 run diablo_teleop teleop_node \
 Jangan menjalankan dua mux yang sama-sama mem-publish ke
 `/diablo/MotionCmd`.
 
-### START HARDWARE
+### ON HARDWARE
 
-Tombol **START HARDWARE** menjalankan command yang didefinisikan saat launch,
-lalu menunggu feedback ROS nyata sebelum membuka Drive Control:
+Tombol **ON HARDWARE** menjalankan command yang didefinisikan saat launch dan
+menunggu tiga feedback ROS nyata:
 
-- Diablo ROS2: default `ros2 run diablo_ctrl diablo_ctrl_node`.
-- Dynamixel U2D2: default `ros2 launch diablo_bringup six_joint_move.launch.py`.
-- LiDAR: driver `sllidar_ros2` dari `amr_ws` memakai service
-  `std_srvs/srv/Empty` pada `/start_motor`; backend mencoba endpoint itu lebih
-  dulu dan juga mendukung `std_srvs/srv/Trigger` bila `lidar_start_service:=...`
-  diarahkan ke service custom. Bila node LiDAR belum dijalankan, isi
-  `lidar_start_command:=...` sesuai model dan port LiDAR robot.
+- Diablo ROS2: `ros2 run diablo_ctrl diablo_ctrl_node --ros-args -p controller_port:=/dev/diablo_controller`.
+- LiDAR: `ros2 launch sllidar_ros2 sllidar_a2m7_launch.py serial_port:=/dev/rplidar frame_id:=laser`.
+- Dynamixel: `full_body_hardware.launch.py` dengan `/dev/u2d2_arm`, `/dev/u2d2_hand`, baudrate `1000000` dan odom lokal.
 
-Status `READY` untuk gerak manual baru aktif setelah message
-`/diablo/sensor/Motors` diterima. Log proses startup disimpan di
-`/tmp/diablo_web_interface-{diablo,lidar,dynamixel}.log`. Launch Dynamixel yang
-ada memakai port `/dev/ttyUSB0` di `diablo_bringup/urdf/six_joint.urdf.xacro`;
-ubah port itu jika nama device U2D2 di robot berbeda.
+Status **ALL READY** aktif setelah `/diablo/sensor/Motors`, `/scan`, dan
+`/joint_states` diterima. Log startup disimpan di
+`/tmp/diablo_web_interface-{diablo,lidar,dynamixel}.log`.
 
-Tombol AMCL, Nav2 dan Mapping memakai command opsional berikut. Karena setup
-Nav2 belum final, default-nya kosong dan tombol hanya mencatat bahwa command
-belum dikonfigurasi:
+### START MAPPING dan SAVE MAP
 
 ```bash
-ros2 launch diablo_web_interface nav2_web.launch.py \
-  localization_start_command:='ros2 launch <package> <amcl_launch>.launch.py' \
-  navigation_start_command:='ros2 launch <package> <nav2_launch>.launch.py' \
-  mapping_start_command:='ros2 launch <package> <slam_launch>.launch.py'
+ros2 launch diablo_web_interface mapping.launch.py \
+  enable_wheel_odom:=false scan_topic:=/scan
 ```
 
-## Prasyarat Nav2 yang perlu tersedia di robot
+Tombol **START MAPPING** menjalankan command tersebut dengan occupancy grid
+default dari `config/slam_toolbox.yaml`. Setelah area selesai dipindai,
+masukkan nama map lalu klik **SAVE**. Backend menjalankan
+`nav2_map_server map_saver_cli` dan menulis pasangan `<nama>.pgm` serta
+`<nama>.yaml` ke `diablo_bringup/map/`. Nama yang sudah ada tidak ditimpa.
+
+## Prasyarat mapping yang perlu tersedia di robot
 
 Implementasi Diablo yang ada saat ini menyediakan IMU, battery, body state dan
-motor telemetry. Nav2 masih membutuhkan:
+motor telemetry. SLAM Toolbox membutuhkan:
 
 1. `sensor_msgs/LaserScan` pada `/scan` (atau set `scan_topic:=...`) dan TF
    dari frame laser ke frame robot.
-2. TF `map → odom` dari AMCL atau SLAM Toolbox. Launch standar menyediakan
-   AMCL; gunakan `mapping.launch.py` bila ingin membuat peta.
+2. TF `odom → diablo_base_link` dari local wheel odometry. Jalankan full-body
+   dengan `use_ekf:=false use_local_odom:=true`.
 3. Frame robot yang konsisten. Konfigurasi default memakai `diablo_base_link`.
    IMU driver memakai `diablo_robot`; static TF IMU hanya diperlukan bila
    EKF eksperimental diaktifkan. Ubah transform jika pemasangan sensor tidak
    sejajar.
 
-4. Package `diablo_localization` untuk odom roda lokal resettable. EKF
-   `robot_localization` hanya diperlukan bila memang diaktifkan eksplisit.
+4. TF `map → odom` akan diterbitkan SLAM Toolbox selama mapping.
 
 `wheel_odom` dan adapter base menggunakan `left_wheel_pos/right_wheel_pos`
 dalam radian serta revolution counter dari `LegMotors`. Nilai awalnya
-`wheel_radius=0.093`, `track_width=0.510`, arah kiri `+1` dan kanan `+1`
+`wheel_radius=0.093`, `track_width=0.475`, arah kiri `+1` dan kanan `+1`
 mengikuti konstanta SDK. Kalibrasikan di tempat sebelum navigasi: bila maju
 menghasilkan odom mundur, ubah `left_feedback_sign`/`right_feedback_sign` pada
 full-body launch; bila jarak tidak sesuai, ubah radius. Dalam mode default,
@@ -200,21 +184,19 @@ ros2 topic pub --once -w 1 /diablo/reset_pose std_msgs/msg/Bool "{data: true}"
 Tanpa perintah tersebut, pose odom lokal tetap berlanjut selama node tidak
 direstart.
 
-Shortcut teleoperasi default mengikuti [dokumentasi resmi Diablo](https://github.com/DDTRobot/diablo_ros2/blob/main/docs/docs_en/README_EN.md):
-`W/S` maju-mundur, `A/D` putar, `Q/E` roll, `Z` standing mode, `X` crawling
-mode, serta kontrol tinggi/pitch. Keybind dapat di-remap dari panel **Keybind
-Legend** dan tersimpan di browser.
+Teleoperasi mapping memakai `W/S` untuk maju-mundur dan `A/D` untuk berputar.
+Command dikirim berkala selama tombol ditahan dan otomatis dihentikan saat
+tombol dilepas atau halaman kehilangan fokus.
 
-Map fallback `maps/empty.yaml` hanya untuk memastikan launch dapat dimulai;
-map itu bukan peta lingkungan nyata dan tidak boleh dipakai untuk navigasi
-robot di lapangan.
+Map fallback `maps/empty.yaml` bukan peta lingkungan nyata. Hasil mapping yang
+disimpan berada di `diablo_bringup/map` dan tidak dibuat oleh UI navigasi.
 
 ## Alur kontrol
 
 Web mengirim command manual berkala. Mux menghentikan output ketika command
-terpilih diam lebih dari sekitar 0.35 detik. Saat goal dikirim, web mengganti
-mode ke `auto`; setelah goal selesai/dibatalkan, mode kembali `manual`.
-Tombol `STOP` mengirim command nol dan memaksa mode manual.
+terpilih diam lebih dari sekitar 0.35 detik. Tombol `STOP` mengirim command
+nol dan memaksa mode manual. Mapping hanya dapat dimulai setelah seluruh gate
+hardware siap.
 
 Topic echo memakai dynamic ROS subscription maksimal empat topic dan membatasi
 payload tiap message supaya tidak membebani WebSocket.

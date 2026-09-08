@@ -28,9 +28,7 @@ def generate_launch_description():
             "reset_encoder_service", default_value="/diablo/reset_encoder"
         ),
         DeclareLaunchArgument("lidar_start_service", default_value="/start_motor"),
-        DeclareLaunchArgument(
-            "diablo_start_command", default_value="ros2 run diablo_ctrl diablo_ctrl_node"
-        ),
+        DeclareLaunchArgument("diablo_start_command", default_value="ros2 run diablo_ctrl diablo_ctrl_node"),
         DeclareLaunchArgument("lidar_start_command", default_value=""),
         DeclareLaunchArgument(
             "dynamixel_start_command",
@@ -47,7 +45,7 @@ def generate_launch_description():
             description="Use only without the ros2_control/local odometry stack",
         ),
         DeclareLaunchArgument("wheel_radius", default_value="0.093"),
-        DeclareLaunchArgument("track_width", default_value="0.510"),
+        DeclareLaunchArgument("track_width", default_value="0.475"),
         DeclareLaunchArgument("motor_topic", default_value="/diablo/sensor/Motors"),
 
         IncludeLaunchDescription(

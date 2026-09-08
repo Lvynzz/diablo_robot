@@ -266,7 +266,7 @@ def generate_launch_description():
         ),
         DeclareLaunchArgument("baud_rate", default_value="1000000"),
         DeclareLaunchArgument("wheel_radius", default_value="0.093"),
-        DeclareLaunchArgument("track_width", default_value="0.510"),
+        DeclareLaunchArgument("track_width", default_value="0.475"),
         DeclareLaunchArgument(
             "left_feedback_sign",
             default_value="1.0",

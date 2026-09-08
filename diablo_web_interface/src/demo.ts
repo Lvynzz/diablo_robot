@@ -111,6 +111,7 @@ export const demoState: DiabloState = {
   },
   hardware: {
     ready: false,
+    all_ready: false,
     starting: false,
     message: "Preview mode — press START HARDWARE when connected to the robot",
     components: [
@@ -119,6 +120,12 @@ export const demoState: DiabloState = {
       { id: "dynamixel", label: "DYNAMIXEL U2D2", state: "offline", detail: "Waiting for robot" },
     ],
     updated: Date.now() / 1000,
+  },
+  mapping: {
+    state: "idle",
+    active: false,
+    message: "Start hardware and mapping to create an occupancy grid",
+    pid: null,
   },
   versions: { map: 1, local_costmap: 1, global_costmap: 1, path: 1, scan: 1 },
   map: demoMap,

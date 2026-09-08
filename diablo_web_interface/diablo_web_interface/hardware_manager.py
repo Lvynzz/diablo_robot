@@ -80,6 +80,7 @@ class HardwareManager:
             )
         return {
             "ready": False,
+            "all_ready": False,
             "starting": False,
             "message": "Press START HARDWARE to enable manual motion",
             "components": components,
@@ -239,6 +240,9 @@ class HardwareManager:
 
             diablo = self._component("diablo")
             ready = diablo["state"] == "ready"
+            all_ready = all(
+                item["state"] == "ready" for item in self._status["components"]
+            )
             starting = any(
                 item["state"] in ("starting", "waiting")
                 for item in self._status["components"]
@@ -252,8 +256,13 @@ class HardwareManager:
             self._status.update(
                 {
                     "ready": ready,
+                    "all_ready": all_ready,
                     "starting": starting,
-                    "message": message,
+                    "message": (
+                        "All hardware ready: motors, LiDAR and Dynamixel feedback detected"
+                        if all_ready
+                        else message
+                    ),
                     "updated": time.time(),
                 }
             )
@@ -262,6 +271,7 @@ class HardwareManager:
         with self._lock:
             return {
                 "ready": bool(self._status["ready"]),
+                "all_ready": bool(self._status["all_ready"]),
                 "starting": bool(self._status["starting"]),
                 "message": str(self._status["message"]),
                 "components": [dict(item) for item in self._status["components"]],
@@ -271,6 +281,10 @@ class HardwareManager:
     def is_ready(self):
         with self._lock:
             return bool(self._status["ready"])
+
+    def is_all_ready(self):
+        with self._lock:
+            return bool(self._status["all_ready"])
 
     def start_process(self, name, command):
         """Start an optional navigation process using a launch-time command."""
@@ -308,7 +322,63 @@ class HardwareManager:
                 return {"requested": False, "message": str(error)}
             self._processes[clean_name] = process
             self._log_handles[clean_name] = handle
+            self._started_at[clean_name] = time.monotonic()
             return {"requested": True, "message": f"{clean_name} start requested (PID {process.pid})"}
+
+    def process_status(self, name):
+        """Return the status of an optional process managed by this supervisor."""
+        clean_name = str(name or "process").strip().replace(" ", "_")
+        with self._lock:
+            process = self._processes.get(clean_name)
+            if process is None:
+                return {
+                    "name": clean_name,
+                    "state": "idle",
+                    "active": False,
+                    "pid": None,
+                    "message": "Not running",
+                }
+            return_code = process.poll()
+            if return_code is None:
+                return {
+                    "name": clean_name,
+                    "state": "running",
+                    "active": True,
+                    "pid": process.pid,
+                    "message": f"Running (PID {process.pid})",
+                }
+            self._close_log(clean_name)
+            return {
+                "name": clean_name,
+                "state": "stopped" if return_code == 0 else "error",
+                "active": False,
+                "pid": process.pid,
+                "message": (
+                    "Exited normally"
+                    if return_code == 0
+                    else f"Process exited with code {return_code}; see hardware log"
+                ),
+            }
+
+    def stop_process(self, name):
+        """Stop one optional process group without touching the hardware drivers."""
+        clean_name = str(name or "process").strip().replace(" ", "_")
+        with self._lock:
+            process = self._processes.get(clean_name)
+            if process is None or process.poll() is not None:
+                if process is not None:
+                    self._close_log(clean_name)
+                return {"requested": False, "message": f"{clean_name} is not running"}
+            try:
+                os.killpg(process.pid, signal.SIGTERM)
+                process.wait(timeout=2.0)
+            except Exception:
+                try:
+                    os.killpg(process.pid, signal.SIGKILL)
+                except Exception:
+                    pass
+            self._close_log(clean_name)
+            return {"requested": True, "message": f"{clean_name} stopped"}
 
     def _close_log(self, component):
         handle = self._log_handles.pop(component, None)

@@ -42,10 +42,10 @@ def test_nav2_launch_contains_action_stack_and_safety_bridges():
     assert "global_costmap:" in params
 
 
-def test_web_ui_has_teleop_navigation_and_topic_echo_panels():
+def test_web_ui_has_mapping_teleop_and_topic_echo_panels():
     app = read_text("src/App.tsx")
     drive = read_text("src/components/DriveView.tsx")
-    navigation = read_text("src/components/NavigationView.tsx")
+    mapping = read_text("src/components/MappingView.tsx")
     panel = read_text("src/components/Panel.tsx")
     sidebar = read_text("src/components/Sidebar.tsx")
     connection = read_text("src/hooks/useDiabloConnection.ts")
@@ -61,7 +61,7 @@ def test_web_ui_has_teleop_navigation_and_topic_echo_panels():
     assert '"vite"' in package_json
     assert '"react"' in package_json
     assert 'from "./components/DriveView"' in app
-    assert 'from "./components/NavigationView"' in app
+    assert 'from "./components/MappingView"' in app
     assert 'from "./components/TopicsView"' in app
     assert 'from "./components/SettingsView"' in app
     assert 'new WebSocket' in connection
@@ -77,13 +77,12 @@ def test_web_ui_has_teleop_navigation_and_topic_echo_panels():
     assert "hardwareReady" in drive
     assert "Front Obstacle Laser" not in drive
     assert "Magnetic Navigation Sensor" not in drive
-    assert "Navigation Map" in navigation
-    assert "Pose & Stations" in navigation
-    assert "Navigation Controls" in navigation
-    assert "global_costmap" in navigation
-    assert "local_costmap" in navigation
-    assert "INFLATION LAYER" in navigation
-    assert "start_hardware" in navigation
+    assert "Live Occupancy Grid" in mapping
+    assert "START MAPPING" in mapping
+    assert "SAVE MAP" in mapping
+    assert 'type: "save_map"' in mapping
+    assert 'type: "stop_mapping"' in mapping
+    assert "mapping.active" in mapping
     assert "defaultCollapsed" in panel
     assert "onToggleCollapse" in sidebar
     assert '"/diablo/reset_encoder"' in ros_node
@@ -98,15 +97,20 @@ def test_web_ui_has_teleop_navigation_and_topic_echo_panels():
     assert '"/api/hardware/start"' in web_node
     assert '"/api/navigation/start"' in web_node
     assert '"/api/mapping/start"' in web_node
+    assert '"/api/mapping/save"' in web_node
+    assert '"/api/mapping/stop"' in web_node
     assert "class HardwareManager" in hardware_manager
-    assert 'data-tab="teleop"' in html
-    assert 'data-tab="navigation"' in html
+    assert 'data-tab="mapping"' in html
     assert 'data-tab="topics"' in html
     assert 'data-tab="settings"' in html
-    assert 'id="nav-canvas"' in html
+    assert 'id="map-canvas"' in html
     assert 'id="topic-cards"' in html
-    assert 'type: "goal_pose"' in javascript
+    assert 'type: "save_map"' in javascript
+    assert 'type: "start_mapping"' in javascript
     assert 'type: "subscribe"' in javascript
-    assert "drawNavigation" in javascript
-    assert "preview-sidebar-toggle" in javascript
     assert "start-hardware" in javascript
+    assert "/dev/diablo_controller" in web_launch
+    assert "/dev/rplidar" in web_launch
+    assert "/dev/u2d2_arm" in web_launch
+    assert "/dev/u2d2_hand" in web_launch
+    assert "W A S D" in html

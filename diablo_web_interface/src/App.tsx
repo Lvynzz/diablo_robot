@@ -4,6 +4,7 @@ import { Sidebar } from "./components/Sidebar";
 import { StatusRail } from "./components/StatusRail";
 import { ViewToolbar } from "./components/ViewToolbar";
 import { DriveView } from "./components/DriveView";
+import { MappingView } from "./components/MappingView";
 import { NavigationView } from "./components/NavigationView";
 import { TopicsView } from "./components/TopicsView";
 import { SettingsView } from "./components/SettingsView";
@@ -24,7 +25,7 @@ const initialPanels: Record<PanelKey, boolean> = {
 };
 
 function App() {
-  const [view, setView] = useState<AppView>("drive");
+  const [view, setView] = useState<AppView>("mapping");
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [panels, setPanels] = useState(initialPanels);
   const [events, setEvents] = useState<EventEntry[]>([
@@ -71,9 +72,10 @@ function App() {
     if (packet.type === "goal_pose_ack") addEvent(packet.accepted ? "Nav2 goal submitted." : String(packet.message || "Nav2 goal rejected."), packet.accepted ? "success" : "error");
     if (packet.type === "goal_cancel_ack") addEvent(String(packet.message || "Navigation cancel requested."), "warn");
     if (packet.type === "initial_pose_ack") addEvent("Initial pose acknowledged by backend.", "success");
-    if (["reset_odom_ack", "reset_encoder_ack", "start_lidar_ack", "start_hardware_ack", "start_localization_ack", "start_navigation_ack", "start_mapping_ack"].includes(String(packet.type))) {
+    if (["reset_odom_ack", "reset_encoder_ack", "start_lidar_ack", "start_hardware_ack", "start_localization_ack", "start_navigation_ack", "start_mapping_ack", "stop_mapping_ack", "save_map_ack"].includes(String(packet.type))) {
       const accepted = packet.requested !== false;
-      addEvent(String(packet.message || "Control request acknowledged."), accepted ? "success" : "warn");
+      const saved = packet.type === "save_map_ack" ? packet.saved !== false : true;
+      addEvent(String(packet.message || "Control request acknowledged."), accepted && saved ? "success" : "warn");
     }
     if (packet.type === "error") addEvent(String(packet.detail || "WebSocket error"), "error");
   }, [addEvent, connection.lastPacket]);
@@ -92,7 +94,7 @@ function App() {
   }, [addEvent, connection.state.nav_goal]);
 
   useEffect(() => {
-    const ready = connection.state.hardware.ready;
+    const ready = connection.state.hardware.all_ready;
     if (lastHardwareReady.current === null) {
       lastHardwareReady.current = ready;
       return;
@@ -100,10 +102,10 @@ function App() {
     if (lastHardwareReady.current === ready) return;
     lastHardwareReady.current = ready;
     addEvent(
-      ready ? "Hardware ready: Drive Control unlocked." : "Hardware feedback lost: Drive Control locked.",
+      ready ? "All hardware ready: mapping and teleop unlocked." : "Hardware feedback incomplete: mapping remains locked.",
       ready ? "success" : "error",
     );
-  }, [addEvent, connection.state.hardware.ready]);
+  }, [addEvent, connection.state.hardware.all_ready]);
 
   const togglePanel = (panel: PanelKey) => setPanels((previous) => ({ ...previous, [panel]: !previous[panel] }));
   const stop = () => {
@@ -117,7 +119,7 @@ function App() {
   };
   return (
     <div className={`hmi-app theme-light ${sidebarCollapsed ? "sidebar-is-collapsed" : ""}`}>
-      <Header connected={connection.connected} nav2Ready={connection.nav2Ready} mode={connection.state.control_mode} demoMode={connection.demoMode} onStop={stop} onMode={toggleMode} onSettings={() => setView("settings")} onMenu={() => setSidebarCollapsed((previous) => !previous)} />
+      <Header connected={connection.connected} mappingActive={connection.state.mapping.active} mode={connection.state.control_mode} demoMode={connection.demoMode} onStop={stop} onMode={toggleMode} onSettings={() => setView("settings")} onMenu={() => setSidebarCollapsed((previous) => !previous)} />
       <div className="hmi-body">
         <Sidebar view={view} collapsed={sidebarCollapsed} onSelect={setView} onToggleCollapse={() => setSidebarCollapsed((previous) => !previous)} />
         <div className="hmi-workspace">
@@ -125,6 +127,7 @@ function App() {
           <main className={`hmi-content content-${view}`}>
             <div className="primary-view">
               {view === "drive" && <DriveView state={connection.state} hardwareReady={connection.state.hardware.ready} panels={panels} sendCommand={connection.sendCommand} onEvent={addEvent} />}
+              {view === "mapping" && <MappingView state={connection.state} hardware={connection.state.hardware} panels={panels} sendCommand={connection.sendCommand} onEvent={addEvent} />}
               {view === "navigation" && <NavigationView state={connection.state} hardware={connection.state.hardware} panels={panels} sendCommand={connection.sendCommand} events={events} onEvent={addEvent} />}
               {view === "topics" && <TopicsView catalog={topics.catalog} selected={topics.selected} packets={topics.packets} connected={topics.connected} onSubscribe={topics.subscribe} onClear={topics.clear} onRefresh={() => { void topics.refresh(); addEvent("ROS topic catalog refreshed.", "info"); }} onEvent={addEvent} />}
               {view === "settings" && <SettingsView config={config} state={connection.state} connected={connection.connected} nav2Ready={connection.nav2Ready} onReconnect={connection.reconnect} onEvent={addEvent} />}

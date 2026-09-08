@@ -60,35 +60,16 @@ Buka `http://<IP-ROBOT>:8000`.
 
 ## HMI panels
 
-- **Drive Control** — layout HMI industrial ringan dengan header `DIABLO ROBOT`,
-  sidebar panel di kiri, X/Y/heading dari `/diablo/odometry` resettable wheel odometry,
-  RESET ODOM,
-  RESET ENCODER, START LIDAR, MotionCtrl manual, max speed, body/pitch control,
-  keybind legend, wheel feedback, dan trajectory map. Panel front obstacle laser
-  dan magnetic navigation sensor tidak ditampilkan.
-- **Navigation** — map PGM/`/map`, overlay global costmap, local costmap dan
-  inflation layer, form pose/station, goal/initial pose, Navigation Controls
-  untuk hardware/AMCL/Nav2/mapping, serta navigation log history.
+- **Mapping** — occupancy grid `/map`, gate hardware untuk Diablo/LiDAR/Dynamixel,
+  start/stop SLAM Toolbox, teleoperasi W/A/S/D, dan save PGM/YAML.
 - **ROS Topics** — catalog topic, filter, dynamic echo sampai empat topic,
   dan payload JSON yang dibatasi ukuran oleh backend.
 - **Settings** — routing command Diablo, endpoint WebSocket/REST, frame map,
   serta checklist deployment.
 
-Shortcut default mengikuti dokumentasi resmi Diablo: `W/S` maju-mundur,
-`A/D` putar, `Q/E` roll, `Z` standing mode, `X` crawling mode, dan shortcut
-postur lainnya. Keycap di panel **Keybind Legend** dapat diklik lalu ditekan
-key baru; hasil remap disimpan di browser operator.
-
-Quick action memakai service ROS berikut:
-
-- `RESET ODOM` → `/diablo/reset_odom` (`std_srvs/srv/Trigger`, disediakan node
-  `diablo_local_odom`; menyimpan pose roda saat ini sebagai origin baru).
-- `RESET ENCODER` → `/diablo/reset_encoder` secara default; dapat diubah dengan
-  `reset_encoder_service:=...`.
-- `START LIDAR` → `/start_motor` (`std_srvs/Empty`) secara default, mengikuti
-  driver `sllidar_ros2` dari `amr_ws`; backend juga mencoba `Trigger` pada
-  endpoint yang sama agar driver custom dapat dipakai. Set
-  `lidar_start_service:=...` bila nama servicenya berbeda.
+Teleoperasi mapping memakai `W/S` maju-mundur dan `A/D` putar. Command dikirim
+berkala selama tombol ditahan dan dihentikan saat tombol dilepas atau halaman
+kehilangan fokus.
 
 Jika menggunakan source web statis tanpa Node.js, folder
 `diablo_web_interface/static/` menyediakan fallback preview sederhana. Untuk
@@ -96,24 +77,24 @@ HMI production gunakan `npm run build` terlebih dahulu.
 
 ## Hardware startup gate
 
-Klik **START HARDWARE** dari Navigation Controls. Backend menjalankan command
-yang dikonfigurasi dan baru mengizinkan teleop setelah feedback
-`/diablo/sensor/Motors` diterima. Default command:
+Klik **ON HARDWARE** dari panel Mapping. Backend menjalankan command yang
+dikonfigurasi dan baru mengizinkan mapping/teleop setelah feedback motor,
+LiDAR dan Dynamixel diterima. Default command:
 
 ```text
-Diablo ROS2   : ros2 run diablo_ctrl diablo_ctrl_node
-Dynamixel     : ros2 launch diablo_bringup six_joint_move.launch.py
-LiDAR         : service /start_motor atau lidar_start_command yang diisi operator
+Diablo ROS2   : ros2 run diablo_ctrl diablo_ctrl_node --ros-args -p controller_port:=/dev/diablo_controller
+LiDAR         : ros2 launch sllidar_ros2 sllidar_a2m7_launch.py serial_port:=/dev/rplidar frame_id:=laser
+Dynamixel     : full_body_hardware.launch.py dengan /dev/u2d2_arm dan /dev/u2d2_hand
 ```
 
-Contoh launch di robot:
+Mapping dijalankan dengan default:
 
 ```bash
-ros2 launch diablo_web_interface nav2_web.launch.py \
-  lidar_start_command:='ros2 launch <lidar_package> <lidar_launch>.launch.py'
+ros2 launch diablo_web_interface mapping.launch.py \
+  enable_wheel_odom:=false scan_topic:=/scan
 ```
 
-Command AMCL/Nav2/SLAM dapat diisi melalui `localization_start_command`,
-`navigation_start_command`, dan `mapping_start_command`. Bila kosong, tombolnya
-tetap tersedia untuk layout tetapi backend mengembalikan status belum
-dikonfigurasi. Log child process ada di `/tmp/diablo_web_interface-*.log`.
+Setelah selesai, tombol **SAVE MAP** menjalankan `nav2_map_server map_saver_cli`
+dan membuat `<name>.pgm` + `<name>.yaml` di `diablo_bringup/map/`. File yang
+sudah ada tidak ditimpa. Log child process ada di
+`/tmp/diablo_web_interface-*.log`.

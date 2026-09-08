@@ -30,6 +30,10 @@ function restPathFor(command: SocketCommand): string | null {
       return "/api/navigation/start";
     case "start_mapping":
       return "/api/mapping/start";
+    case "stop_mapping":
+      return "/api/mapping/stop";
+    case "save_map":
+      return "/api/mapping/save";
     case "mode":
       return "/api/control/mode";
     case "goal_pose":

@@ -185,6 +185,62 @@ code, kbd, time { font-family: var(--mono); }
 @media (max-width: 920px) { .header-system, .header-divider { display: none; }.header-menu { display: grid; }.brand-lockup { min-width: 0; }.demo-badge { display: none; }.header-health { margin-left: auto; }.hmi-sidebar { width: 64px; min-width: 64px; padding-left: 8px; padding-right: 8px; }.sidebar-label, .sidebar-copy, .sidebar-badge, .sidebar-version { display: none; }.sidebar-item { justify-content: center; padding: 11px 5px; }.hmi-content { grid-template-columns: minmax(0, 1fr); }.status-rail { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }.status-rail .panel:last-child { grid-column: 1 / -1; }.topic-layout { grid-template-columns: 1fr; }.settings-grid { grid-template-columns: 1fr; } }
 @media (max-width: 640px) { .hmi-header { gap: 7px; padding: 0 9px; }.brand-mark { width: 26px; height: 26px; }.brand-lockup strong { font-size: 10px; }.brand-lockup small { font-size: 7px; }.mode-button { padding: 0 7px; font-size: 8px; }.stop-button { padding: 0 7px; font-size: 8px; }.header-health span { display: none; }.view-toolbar { padding: 0 9px; overflow: auto; }.toolbar-label { display: none; }.hmi-content { padding: 9px; }.position-summary, .motion-control-grid, .body-command-grid, .navigation-columns, .map-layout { grid-template-columns: 1fr; }.quick-actions { grid-column: auto; }.scan-strip { grid-template-columns: repeat(5, minmax(60px, 1fr)); overflow-x: auto; }.scan-channel { min-width: 62px; }.map-stage, .nav-map-canvas { min-height: 330px; height: 330px; }.map-readouts { display: grid; grid-template-columns: repeat(3, 1fr); }.map-instructions { grid-column: 1 / -1; margin-top: 0; }.status-rail { display: flex; }.topic-card-grid, .echo-notes, .checklist { grid-template-columns: 1fr; }.architecture-flow { grid-template-columns: 1fr; }.architecture-flow i { transform: rotate(90deg); }.routing-row { grid-template-columns: 1fr; gap: 4px; }.routing-row b, .routing-head span:last-child { text-align: left; }.topic-layout .panel-body { padding: 10px; } }
 
+/* Mapping-first operator view.  Navigation controls stay out of this workflow. */
+.theme-light .mapping-view { gap: 12px; }
+.theme-light .mapping-view .panel { border-radius: 7px; }
+.theme-light .mapping-view .panel-body { padding: 13px 14px 14px; }
+.mapping-map-layout { display: grid; grid-template-columns: minmax(0, 1fr) 210px; gap: 10px; }
+.mapping-map-stage { position: relative; min-height: 430px; overflow: hidden; border: 1px solid #c4d3df; border-radius: 5px; background: #f8fbfd; }
+.mapping-canvas { display: block; width: 100%; height: 430px; min-height: 430px; }
+.mapping-map-stage .empty-state { min-height: 430px; height: 100%; border: 0; border-radius: 0; }
+.mapping-view .map-readouts { display: flex; flex-direction: column; gap: 7px; }
+.mapping-view .map-readouts .stat-card { min-height: 72px; padding: 9px 10px; }
+.mapping-view .map-readouts .stat-card strong { margin-top: 7px; font-size: 16px; }
+.mapping-view .map-legend { position: absolute; right: 8px; bottom: 8px; left: 8px; display: flex; gap: 10px; padding: 7px 9px; border: 1px solid #c4d3df; border-radius: 4px; color: var(--t2); background: rgba(248,251,253,.94); font: 7px var(--mono); }
+.mapping-view .map-legend span { display: inline-flex; align-items: center; gap: 4px; }
+.mapping-view .map-layer-bar { display: flex; align-items: center; gap: 14px; margin-top: 9px; padding: 7px 9px; border: 1px solid #c4d3df; border-radius: 4px; color: var(--t2); background: #edf3f7; font: 8px var(--mono); }
+.mapping-view .map-source-status { margin-left: auto; color: var(--t3); }
+.mapping-hardware-card { margin-bottom: 10px; }
+.mapping-wide-button { width: 100%; margin-top: 9px; }
+.mapping-control-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.mapping-action-card { display: flex; min-height: 128px; flex-direction: column; padding: 11px; border: 1px solid #c4d3df; border-radius: 5px; background: #f9fbfc; }
+.mapping-action-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; color: var(--t1); font: 700 9px var(--mono); letter-spacing: .06em; }
+.mapping-action-heading strong { color: var(--t3); font-size: 8px; }
+.mapping-action-card p { min-height: 24px; margin: 8px 0; color: var(--t2); font: 9px/1.4 var(--mono); }
+.mapping-action-card code { color: var(--blue); }
+.mapping-action-buttons { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: auto; }
+.mapping-action-buttons button { min-height: 28px; }
+.danger-action { color: var(--red); border: 1px solid #cf7777; border-radius: 3px; background: #fbeeee; font: 700 8px var(--mono); }
+.danger-action:hover:not(:disabled) { color: #fff; background: var(--red); }
+.danger-action:disabled, .mapping-action-card button:disabled, .mapping-hardware-card button:disabled { cursor: not-allowed; opacity: .45; }
+.save-map-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px; margin-top: auto; }
+.save-map-row input { min-width: 0; height: 28px; padding: 0 8px; border: 1px solid #b5c7d5; border-radius: 3px; outline: none; color: var(--t1); background: #fff; font: 9px var(--mono); }
+.save-map-row input:focus { border-color: var(--blue); }
+.save-map-row button { min-width: 66px; }
+.mapping-teleop-layout { display: grid; grid-template-columns: 250px minmax(0, 1fr); gap: 16px; align-items: center; }
+.mapping-keypad { display: grid; grid-template-columns: repeat(3, 1fr); grid-template-rows: repeat(2, 58px); gap: 6px; width: 100%; max-width: 250px; margin: auto; }
+.mapping-keypad button { display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 2px; border: 1px solid #b5c7d5; border-radius: 4px; color: var(--t1); background: #f9fbfc; font: 700 15px var(--mono); }
+.mapping-keypad button:hover, .mapping-keypad button.active { color: #fff; border-color: var(--blue); background: var(--blue); }
+.mapping-keypad button span { color: var(--t3); font: 7px var(--mono); }
+.mapping-keypad button:hover span, .mapping-keypad button.active span { color: rgba(255,255,255,.8); }
+.mapping-keypad button:nth-child(1) { grid-column: 2; }
+.mapping-keypad button:nth-child(2) { grid-column: 1; grid-row: 2; }
+.mapping-keypad button:nth-child(3) { grid-column: 2; grid-row: 2; }
+.mapping-keypad button:nth-child(4) { grid-column: 3; grid-row: 2; }
+.mapping-keypad button:nth-child(5) { grid-column: 2; grid-row: 3; }
+.mapping-keypad button.stop { color: var(--red); font-size: 9px; }
+.mapping-keypad button.stop:hover { border-color: var(--red); background: #fbeeee; }
+.mapping-teleop-settings { display: flex; flex-direction: column; gap: 16px; }
+.mapping-teleop-settings label { display: grid; grid-template-columns: 1fr auto; gap: 6px 12px; color: var(--t2); font: 8px var(--mono); }
+.mapping-teleop-settings label b { color: var(--blue); font-size: 9px; }
+.mapping-teleop-settings input { grid-column: 1 / -1; width: 100%; accent-color: var(--blue); }
+.teleop-lock { padding: 9px; border: 1px dashed #d7bf96; border-radius: 4px; color: var(--amber); background: #fbf3e5; font: 700 8px var(--mono); text-align: center; }
+.teleop-lock.unlocked { border-color: #a9c9ae; color: var(--green); background: #edf7ef; }
+.mapping-session-note { padding: 10px; border: 1px dashed #b5c7d5; border-radius: 4px; color: var(--t2); background: #edf3f7; font: 9px/1.5 var(--mono); }
+.mapping-session-note code { color: var(--blue); }
+@media (max-width: 900px) { .mapping-map-layout { grid-template-columns: minmax(0, 1fr) 180px; }.mapping-teleop-layout { grid-template-columns: 220px minmax(0, 1fr); } }
+@media (max-width: 640px) { .mapping-map-layout, .mapping-control-grid, .mapping-teleop-layout { grid-template-columns: 1fr; }.mapping-map-stage, .mapping-canvas { min-height: 330px; height: 330px; }.mapping-view .map-readouts { display: grid; grid-template-columns: repeat(3, 1fr); }.mapping-view .map-instructions { grid-column: 1 / -1; }.mapping-view .map-layer-bar { flex-wrap: wrap; }.mapping-view .map-source-status { width: 100%; margin-left: 0; }.mapping-keypad { margin: 0 auto; }.mapping-teleop-settings { gap: 10px; } }
+
 /* Diablo Robot drive-control skin: compact, pale industrial HMI palette. */
 .theme-light {
   --s0: #e8f0f6;

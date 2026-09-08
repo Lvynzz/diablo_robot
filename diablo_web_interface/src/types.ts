@@ -1,4 +1,4 @@
-export type AppView = "drive" | "navigation" | "topics" | "settings";
+export type AppView = "drive" | "mapping" | "navigation" | "topics" | "settings";
 export type ControlMode = "manual" | "auto" | "stop";
 
 export interface Pose {
@@ -96,10 +96,18 @@ export interface HardwareComponent {
 
 export interface HardwareStatus {
   ready: boolean;
+  all_ready: boolean;
   starting: boolean;
   message: string;
   components: HardwareComponent[];
   updated: number;
+}
+
+export interface MappingStatus {
+  state: "idle" | "running" | "stopped" | "error" | string;
+  active: boolean;
+  message: string;
+  pid: number | null;
 }
 
 export interface DiabloState {
@@ -112,6 +120,7 @@ export interface DiabloState {
   control_mode: ControlMode;
   nav_goal: NavGoalStatus;
   hardware: HardwareStatus;
+  mapping: MappingStatus;
   versions: Record<string, number>;
   map: OccupancyGrid | null;
   local_costmap: OccupancyGrid | null;
@@ -190,6 +199,8 @@ export type SocketCommand =
   | { type: "start_localization" }
   | { type: "start_navigation" }
   | { type: "start_mapping" }
+  | { type: "stop_mapping" }
+  | { type: "save_map"; name: string }
   | { type: "cancel_goal" }
   | { type: "mode"; mode: ControlMode }
   | { type: "ping" };

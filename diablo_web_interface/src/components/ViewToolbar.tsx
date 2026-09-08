@@ -11,7 +11,7 @@ interface ViewToolbarProps {
 }
 
 export function ViewToolbar({ view, panels, onToggle, onRefreshTopics, onClearTopics }: ViewToolbarProps) {
-  const title = view === "drive" ? "Drive Control" : view === "navigation" ? "Navigation" : view === "topics" ? "ROS Topics" : "Settings";
+  const title = view === "drive" ? "Drive Control" : view === "mapping" ? "Mapping" : view === "navigation" ? "Navigation" : view === "topics" ? "ROS Topics" : "Settings";
   return (
     <div className="view-toolbar">
       <div className="breadcrumb"><span>DIABLO HMI</span><b>›</b><strong>{title}</strong></div>
@@ -28,6 +28,12 @@ export function ViewToolbar({ view, panels, onToggle, onRefreshTopics, onClearTo
         <PanelToggle label="Stations" active={panels.poses} onClick={() => onToggle("poses")} />
         <PanelToggle label="Controls" active={panels.controls} onClick={() => onToggle("controls")} />
         <PanelToggle label="Restrictions" active={panels.costmaps} onClick={() => onToggle("costmaps")} />
+        <PanelToggle label="Log" active={panels.log} onClick={() => onToggle("log")} />
+      </>}
+      {view === "mapping" && <>
+        <span className="toolbar-label">PANELS</span>
+        <PanelToggle label="Map View" active={panels.map} onClick={() => onToggle("map")} />
+        <PanelToggle label="Controls" active={panels.controls} onClick={() => onToggle("controls")} />
         <PanelToggle label="Log" active={panels.log} onClick={() => onToggle("log")} />
       </>}
       {view === "topics" && <>

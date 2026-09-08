@@ -59,8 +59,8 @@ laptop.
 
 ## Panel dan topic utama
 
-- Drive Control: command manual `MotionCtrl`, keybind, STOP, telemetry odom.
-- Navigation: map, costmap, initial pose, goal, stations, startup controls.
+- Mapping: occupancy grid `/map`, hardware gate, SLAM Toolbox, W/A/S/D teleop,
+  dan save `.pgm` + `.yaml` ke `diablo_bringup/map`.
 - ROS Topics: dynamic topic echo terbatas.
 - Settings: endpoint dan checklist konfigurasi.
 
@@ -77,9 +77,9 @@ Topic/service default:
 /start_motor
 ```
 
-Drive Control terkunci sampai `/diablo/sensor/Motors` memberi feedback. Tombol
-**START HARDWARE** menjalankan command Diablo/Dynamixel yang dikonfigurasi dan
-memanggil service LiDAR atau menjalankan `lidar_start_command`.
+Mapping dan teleoperasi terkunci sampai `/diablo/sensor/Motors`, `/scan`, dan
+`/joint_states` memberi feedback. Tombol **ON HARDWARE** menjalankan command
+Diablo/LiDAR/Dynamixel yang dikonfigurasi.
 
 Reset pose tidak terjadi otomatis. Kirim `Bool(data=true)` ke
 `/diablo/reset_pose` atau panggil service `/diablo/reset_odom` hanya jika ingin

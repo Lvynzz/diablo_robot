@@ -22,8 +22,8 @@ logger = logging.getLogger("diablo_web_interface.web")
 logging.basicConfig(level=logging.INFO)
 
 app = FastAPI(
-    title="Diablo Nav2 Web Interface",
-    description="Browser teleoperation, Nav2 goal control and ROS topic echo for Diablo",
+    title="Diablo Mapping Web Interface",
+    description="Browser hardware control, SLAM mapping, teleoperation and ROS topic echo for Diablo",
     version="0.1.0",
 )
 
@@ -159,6 +159,7 @@ async def status():
         "wheel_trajectory": snapshot.get("wheel_trajectory"),
         "telemetry": snapshot.get("telemetry"),
         "hardware": snapshot.get("hardware"),
+        "mapping": snapshot.get("mapping"),
         "navigation": node.get_nav_goal_status(),
     }
 
@@ -251,6 +252,24 @@ async def start_navigation():
 @app.post("/api/mapping/start")
 async def start_mapping():
     return _require_node().start_mapping()
+
+
+@app.post("/api/mapping/stop")
+async def stop_mapping():
+    return _require_node().stop_mapping()
+
+
+@app.post("/api/mapping/save")
+async def save_mapping(payload: dict):
+    node = _require_node()
+    name = str(payload.get("name", "")).strip()
+    try:
+        result = await asyncio.to_thread(node.save_map, name)
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error))
+    if not result.get("saved"):
+        raise HTTPException(status_code=409, detail=result.get("message", "Map was not saved"))
+    return result
 
 
 @app.post("/api/goal/nav2")
@@ -358,6 +377,14 @@ async def _handle_ws_command(websocket: WebSocket, raw_message: str):
         )
     elif command_type in ("start_mapping", "mapping_start"):
         await websocket.send_json({"type": "start_mapping_ack", **node.start_mapping()})
+    elif command_type in ("stop_mapping", "mapping_stop"):
+        await websocket.send_json({"type": "stop_mapping_ack", **node.stop_mapping()})
+    elif command_type in ("save_map", "mapping_save"):
+        try:
+            result = await asyncio.to_thread(node.save_map, str(payload.get("name", "")))
+        except ValueError as error:
+            result = {"saved": False, "message": str(error)}
+        await websocket.send_json({"type": "save_map_ack", **result})
     elif command_type == "mode":
         node.set_control_mode(str(payload.get("mode", "manual")))
     elif command_type in ("goal_pose", "goal"):

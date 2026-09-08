@@ -271,7 +271,8 @@ export function MappingView({ state, hardware, panels, sendCommand, onEvent }: M
 
   const chooseMap = async (name: string) => {
     setMapChoice(name);
-    if (!name) { setPreviewMap(null); return; }
+    if (!name) { setPreviewMap(null); setSelectedMap(null); return; }
+    setSelectedMap(null);
     setMapLoading(true);
     try {
       const response = await fetch(`/api/maps/${encodeURIComponent(name)}`);

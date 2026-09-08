@@ -294,7 +294,6 @@
       const element = $(id);
       return element ? element.checked : fallback;
     };
-    const liveData = !state.selectedMap && !state.previewMap;
     const drawCostmap = (costmap, layer) => {
       if (!costmap) return;
       const overlaySample = Math.max(1, Math.ceil(Math.sqrt((costmap.width * costmap.height) / 65000)));
@@ -316,9 +315,9 @@
         }
       }
     };
-    if (liveData && checked("layer-global-costmap", true)) drawCostmap(state.global_costmap, "global");
-    if (liveData && checked("layer-local-costmap", true)) drawCostmap(state.local_costmap, "local");
-    if (liveData && checked("layer-lidar", false) && state.scan && state.pose) {
+    if (checked("layer-global-costmap", true)) drawCostmap(state.global_costmap, "global");
+    if (checked("layer-local-costmap", true)) drawCostmap(state.local_costmap, "local");
+    if (checked("layer-lidar", false) && state.scan && state.pose) {
       ctx.fillStyle = "rgba(36,126,164,.62)";
       const sensorX = Number(state.scan.sensor_x) || 0;
       const sensorY = Number(state.scan.sensor_y) || 0;
@@ -332,7 +331,7 @@
         ctx.fillRect(x - 1, y - 1, 2.5, 2.5);
       });
     }
-    if (liveData && checked("layer-robot", true) && state.pose) {
+    if (checked("layer-robot", true) && state.pose) {
       const [x, y] = toCanvas(state.pose.x, state.pose.y);
       ctx.save(); ctx.translate(x, y); ctx.rotate(-state.pose.theta);
       ctx.fillStyle = "#4f925c"; ctx.strokeStyle = "#fff"; ctx.lineWidth = 2;

@@ -57,6 +57,20 @@ menghentikan process group hardware yang dibuat oleh HMI.
 Process yang dijalankan dari terminal atau systemd sengaja tidak dibunuh oleh
 tombol ini.
 
+Tombol **ON LOCALIZATION** menjalankan `localization.launch.py`, yaitu
+`nav2_map_server`, `nav2_amcl`, dan lifecycle manager localization secara
+terpisah dari stack navigasi penuh. Map dapat ditentukan saat menjalankan
+launch, misalnya:
+
+```bash
+ros2 launch diablo_web_interface localization.launch.py \
+  map_file:=/home/diablo/alvin_ws/src/diablo_bringup/map/test1.yaml
+```
+
+Instalasi robot harus menyediakan paket ROS `nav2_amcl` dan
+`nav2_lifecycle_manager`; keduanya belum terpasang pada image robot saat ini,
+sehingga tombol akan melaporkan error sampai dependency tersebut tersedia.
+
 Panel Drive juga menyediakan slider posisi Dynamixel ID 1–10. Slider dimulai di
 tengah, tidak mengirim command saat halaman dibuka, dan mengirim satu target
 `trajectory_msgs/JointTrajectory` ketika dilepas setelah `/joint_states` tersedia.

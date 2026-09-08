@@ -70,6 +70,7 @@ def test_web_ui_has_mapping_teleop_and_topic_echo_panels():
     hardware_manager = read_text("diablo_web_interface/hardware_manager.py")
     web_launch = read_text("launch/web_interface.launch.py")
     nav2_launch = read_text("launch/nav2_web.launch.py")
+    localization_launch = read_text("launch/localization.launch.py")
 
     assert '"vite"' in package_json
     assert '"react"' in package_json
@@ -117,6 +118,10 @@ def test_web_ui_has_mapping_teleop_and_topic_echo_panels():
     assert 'package="tf2_ros"' in web_launch
     assert 'DeclareLaunchArgument("publish_lidar_tf", default_value="true")' in web_launch
     assert 'DeclareLaunchArgument("hardware_feedback_timeout", default_value="15.0")' in web_launch
+    assert 'package="nav2_amcl"' in localization_launch
+    assert 'package="nav2_map_server"' in localization_launch
+    assert 'node_names": ["map_server", "amcl"]' in localization_launch
+    assert "localization.launch.py" in web_launch
     assert "not self.lidar_start_command" in ros_node
     assert "HardwareManager" in ros_node
     assert "def start_hardware" in ros_node

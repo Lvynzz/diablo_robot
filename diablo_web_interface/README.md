@@ -38,14 +38,20 @@ berpindah panel.
 
 Panel Mapping menampilkan occupancy grid live dari `/map`, status tiga komponen
 hardware, kontrol start/stop SLAM Toolbox, teleoperasi W/A/S/D, dan penyimpanan
-pasangan file `.pgm` + `.yaml`. Tombol mapping hanya dibuka setelah feedback
-motor Diablo dan LiDAR diterima. Teleoperasi tersedia segera setelah feedback
-motor Diablo masuk; mapping tidak diperlukan untuk mengemudi.
+pasangan file `.pgm` + `.yaml`. Dropdown **SELECT MAP** membaca map PGM dari
+`diablo_bringup/map`, memuat preview melalui `/api/maps/{nama}`, lalu tombol
+**SELECT** menampilkannya pada LIVE /MAP. Strip pose di atas peta menyediakan
+reset X/Y dan heading. Panel **SET INIT POSE** dan **SET GOAL POSE** dapat
+diaktifkan sebagai alat klik-drag pada peta; arah drag menjadi heading dan
+nilainya dikirim ke `/initialpose` (AMCL) atau Nav2. Tombol mapping hanya dibuka
+setelah feedback motor Diablo dan LiDAR diterima. Teleoperasi tersedia segera
+setelah feedback motor Diablo masuk; mapping tidak diperlukan untuk mengemudi.
 
 Panel Navigation memakai tombol lifecycle ON/OFF untuk hardware, localization,
 navigation dan mapping. Saat komponen yang sedang aktif ditekan kembali, HMI
 meminta konfirmasi **IYA, STOP** atau **TIDAK**. Hardware OFF lebih dulu
-menghentikan teleoperasi dengan command nol, mencoba service stop motor LiDAR,
+menghentikan teleoperasi dengan command nol, menunggu service stop motor LiDAR
+selesai,
 menghentikan mapping/navigation/localization yang dijalankan oleh HMI, lalu
 menghentikan process group hardware yang dibuat oleh HMI.
 Process yang dijalankan dari terminal atau systemd sengaja tidak dibunuh oleh
@@ -205,7 +211,7 @@ Standalone `wheel_odom` mengabaikan lonjakan satu sampel di atas 1.5 radian
 revolution counter yang belum stabil saat serial driver baru hidup menggeser
 pose beberapa meter.
 
-Reset X/Y atau heading dapat dilakukan dari tombol di bawah readout pose.
+Reset X/Y atau heading dapat dilakukan dari strip tombol di atas LIVE /MAP.
 Service yang dipakai adalah `/diablo/reset_position` dan
 `/diablo/reset_orientation`. Reset pose lokal penuh tetap tersedia melalui
 `/diablo/reset_odom`. Opsi `-w 1` menunggu node reset

@@ -289,6 +289,7 @@ export function MappingView({ state, hardware, panels, sendCommand, onEvent }: M
   const [showLidar, setShowLidar] = useState(false);
   const [showLocalCostmap, setShowLocalCostmap] = useState(true);
   const [showGlobalCostmap, setShowGlobalCostmap] = useState(true);
+  const [initialPoseApplied, setInitialPoseApplied] = useState(false);
 
   const mappingActive = state.mapping.active;
   const mappingHardwareReady = hardware.mapping_ready;
@@ -354,12 +355,14 @@ export function MappingView({ state, hardware, panels, sendCommand, onEvent }: M
 
   const updatePose = (which: "initial" | "goal", field: keyof PoseDraft, value: string) => {
     const setter = which === "initial" ? setInitialDraft : setGoalDraft;
+    if (which === "initial") setInitialPoseApplied(false);
     setter((previous) => ({ ...previous, [field]: value }));
   };
 
   const pickPose = (picked: Pose) => {
     if (!poseTool) return;
     const setter = poseTool === "initial" ? setInitialDraft : setGoalDraft;
+    if (poseTool === "initial") setInitialPoseApplied(false);
     setter({ x: picked.x.toFixed(2), y: picked.y.toFixed(2), heading: (picked.theta * 180 / Math.PI).toFixed(1) });
   };
 
@@ -367,6 +370,7 @@ export function MappingView({ state, hardware, panels, sendCommand, onEvent }: M
     const pose = which === "initial" ? initialPose : goalPose;
     if (!pose) { onEvent("Isi X, Y, dan heading yang valid terlebih dahulu.", "warn"); return; }
     const accepted = await sendCommand(which === "initial" ? { type: "initial_pose", x: pose.x, y: pose.y, theta: pose.theta } : { type: "goal_pose", x: pose.x, y: pose.y, theta: pose.theta });
+    if (accepted && which === "initial") setInitialPoseApplied(true);
     onEvent(accepted ? (which === "initial" ? "Initial pose dikirim ke AMCL." : "Goal pose dikirim ke Nav2.") : "Perintah pose gagal dikirim.", accepted ? "success" : "error");
   };
 
@@ -474,7 +478,7 @@ export function MappingView({ state, hardware, panels, sendCommand, onEvent }: M
         <Panel title="Live Occupancy Grid" eyebrow="SLAM TOOLBOX // /MAP" accent="blue" actions={<div className="mapping-map-actions"><label className="map-choice"><span>SELECT MAP</span><select value={mapChoice} onChange={(event) => void chooseMap(event.target.value)} aria-label="Select PGM map"><option value="">LIVE /MAP</option>{mapChoices.map((name) => <option key={name} value={name}>{name}</option>)}</select></label><button className="panel-icon-action" type="button" disabled={!previewMap || mapLoading} onClick={applyMap}>{mapLoading ? "…" : "SELECT"}</button><span className="panel-chip">FRAME: {displayMap?.frame_id || "—"}</span></div>}>
           <div className="mapping-map-layout">
             <div className="mapping-map-stage">
-              <OccupancyCanvas grid={displayMap} pose={displayedPose} scan={state.scan} globalCostmap={state.global_costmap} localCostmap={state.local_costmap} showRobot={showRobot} showLidar={showLidar} showGlobalCostmap={showGlobalCostmap} showLocalCostmap={showLocalCostmap} initialPose={initialPose} goalPose={goalPose} onPick={pickPose} interactive={poseTool !== null} />
+              <OccupancyCanvas grid={displayMap} pose={displayedPose} scan={state.scan} globalCostmap={state.global_costmap} localCostmap={state.local_costmap} showRobot={showRobot} showLidar={showLidar} showGlobalCostmap={showGlobalCostmap} showLocalCostmap={showLocalCostmap} initialPose={initialPoseApplied ? null : initialPose} goalPose={goalPose} onPick={pickPose} interactive={poseTool !== null} />
               <div className="map-legend"><span><i className="legend-dot green" /> Diablo</span><span><i className="legend-dot cyan" /> LiDAR</span><span><i className="legend-dot blue" /> Init</span><span><i className="legend-dot orange" /> Goal</span></div>
             </div>
             <div className="mapping-map-tools">

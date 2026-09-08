@@ -37,7 +37,7 @@ def test_diablo_motion_control_uses_native_message_and_topic():
 
 def test_nav2_launch_contains_action_stack_and_safety_bridges():
     launch = read_text("launch/navigation.launch.py")
-    params = read_text("config/nav2_params.yaml")
+    params = (PACKAGE_ROOT.parent / "diablo_bringup" / "config" / "nav2_params.yaml").read_text(encoding="utf-8")
 
     for package in (
         "nav2_map_server",
@@ -71,6 +71,7 @@ def test_web_ui_has_mapping_teleop_and_topic_echo_panels():
     web_launch = read_text("launch/web_interface.launch.py")
     nav2_launch = read_text("launch/nav2_web.launch.py")
     localization_launch = read_text("launch/localization.launch.py")
+    bringup_package = (PACKAGE_ROOT.parent / "diablo_bringup" / "package.xml").read_text(encoding="utf-8")
 
     assert '"vite"' in package_json
     assert '"react"' in package_json
@@ -121,7 +122,11 @@ def test_web_ui_has_mapping_teleop_and_topic_echo_panels():
     assert 'package="nav2_amcl"' in localization_launch
     assert 'package="nav2_map_server"' in localization_launch
     assert 'node_names": ["map_server", "amcl"]' in localization_launch
+    assert 'get_package_share_directory("diablo_bringup")' in localization_launch
+    assert '<exec_depend>nav2_amcl</exec_depend>' in bringup_package
     assert "localization.launch.py" in web_launch
+    assert "navigation.launch.py" in web_launch
+    assert "navigation.launch.py" in ros_node
     assert "not self.lidar_start_command" in ros_node
     assert "HardwareManager" in ros_node
     assert "def start_hardware" in ros_node

@@ -11,7 +11,8 @@ from launch_ros.parameter_descriptions import ParameterValue
 
 def generate_launch_description():
     share = get_package_share_directory("diablo_web_interface")
-    default_params = os.path.join(share, "config", "slam_toolbox.yaml")
+    bringup_share = get_package_share_directory("diablo_bringup")
+    default_params = os.path.join(bringup_share, "config", "slam_toolbox.yaml")
     return LaunchDescription([
         DeclareLaunchArgument("params_file", default_value=default_params),
         DeclareLaunchArgument("scan_topic", default_value="/scan"),

@@ -188,7 +188,7 @@ ros2 launch diablo_web_interface mapping.launch.py \
 ```
 
 Tombol **START MAPPING** menjalankan command tersebut dengan occupancy grid
-default dari `config/slam_toolbox.yaml`. Setelah area selesai dipindai,
+default dari `diablo_bringup/config/slam_toolbox.yaml`. Setelah area selesai dipindai,
 masukkan nama map lalu klik **SAVE**. Backend menjalankan
 `nav2_map_server map_saver_cli` dan menulis pasangan `<nama>.pgm` serta
 `<nama>.yaml` ke `diablo_bringup/map/`. Nama yang sudah ada tidak ditimpa.

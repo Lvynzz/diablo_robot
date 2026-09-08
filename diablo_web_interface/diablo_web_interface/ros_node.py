@@ -226,7 +226,10 @@ class DiabloWebNode(Node):
             "localization_start_command",
             "ros2 launch diablo_web_interface localization.launch.py",
         )
-        self.declare_parameter("navigation_start_command", "")
+        self.declare_parameter(
+            "navigation_start_command",
+            "ros2 launch diablo_web_interface navigation.launch.py",
+        )
         self.declare_parameter(
             "mapping_start_command",
             "ros2 launch diablo_web_interface mapping.launch.py enable_wheel_odom:=false scan_topic:=/scan",
@@ -1085,12 +1088,19 @@ class DiabloWebNode(Node):
         return result
 
     def start_localization(self):
+        # The standalone AMCL launch and full Nav2 launch own the same
+        # map_server/amcl nodes.  Switch cleanly instead of creating duplicate
+        # lifecycle nodes when the operator presses the other button.
+        if self._hardware.process_status("navigation")["active"]:
+            self.stop_navigation()
         result = self._hardware.start_process(
             "localization", self.localization_start_command
         )
         return {**result, "component": "localization"}
 
     def start_navigation(self):
+        if self._hardware.process_status("localization")["active"]:
+            self.stop_localization()
         result = self._hardware.start_process("navigation", self.navigation_start_command)
         return {**result, "component": "navigation"}
 

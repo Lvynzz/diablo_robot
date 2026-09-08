@@ -58,7 +58,10 @@ def generate_launch_description():
             "localization_start_command",
             default_value="ros2 launch diablo_web_interface localization.launch.py",
         ),
-        DeclareLaunchArgument("navigation_start_command", default_value=""),
+        DeclareLaunchArgument(
+            "navigation_start_command",
+            default_value="ros2 launch diablo_web_interface navigation.launch.py",
+        ),
         DeclareLaunchArgument(
             "mapping_start_command",
             default_value=(

@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
@@ -7,16 +8,49 @@ from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
 
 
+def _default_map_file(bringup_share):
+    """Use the map selected by the HMI for the combined Nav2 launch."""
+    candidates = [Path(bringup_share) / "map"]
+    for workspace_root in Path(bringup_share).parents:
+        candidates.append(workspace_root / "src" / "diablo_bringup" / "map")
+    for directory in candidates:
+        marker = directory / ".selected_localization_map.txt"
+        try:
+            selected = marker.read_text(encoding="utf-8").strip()
+        except OSError:
+            selected = ""
+        if selected:
+            selected_path = Path(selected).expanduser()
+            if not selected_path.is_absolute():
+                selected_path = directory / selected_path.name
+            if selected_path.suffix.lower() == ".pgm":
+                selected_path = selected_path.with_suffix(".yaml")
+            try:
+                selected_path = selected_path.resolve()
+                if directory.resolve() in selected_path.parents and selected_path.is_file():
+                    return str(selected_path)
+            except OSError:
+                pass
+        try:
+            yaml_files = sorted(directory.glob("*.yaml"))
+        except OSError:
+            yaml_files = []
+        if yaml_files:
+            return str(yaml_files[0])
+    return str(Path(bringup_share) / "map" / "empty.yaml")
+
+
 def generate_launch_description():
     share = get_package_share_directory("diablo_web_interface")
+    bringup_share = get_package_share_directory("diablo_bringup")
     web_launch = os.path.join(share, "launch", "web_interface.launch.py")
     navigation_launch = os.path.join(share, "launch", "navigation.launch.py")
 
     return LaunchDescription([
-        DeclareLaunchArgument("map", default_value=os.path.join(share, "maps", "empty.yaml")),
+        DeclareLaunchArgument("map", default_value=_default_map_file(bringup_share)),
         DeclareLaunchArgument(
             "params_file",
-            default_value=os.path.join(share, "config", "nav2_params.yaml"),
+            default_value=os.path.join(bringup_share, "config", "nav2_params.yaml"),
         ),
         DeclareLaunchArgument("host", default_value="0.0.0.0"),
         DeclareLaunchArgument("port", default_value="8000"),

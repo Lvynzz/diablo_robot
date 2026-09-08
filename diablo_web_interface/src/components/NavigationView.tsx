@@ -336,6 +336,7 @@ function statusTone(state: string) {
 export function NavigationView({ state, hardware, panels, sendCommand, events, onEvent }: NavigationViewProps) {
   const [goalDraft, setGoalDraft] = useState<PoseDraft>({ ...emptyDraft, x: "1.20", y: "0.60" });
   const [initialDraft, setInitialDraft] = useState<PoseDraft>(emptyDraft);
+  const [initialPoseApplied, setInitialPoseApplied] = useState(false);
   const [stationDraft, setStationDraft] = useState<PoseDraft>({ ...emptyDraft, heading: "0.0" });
   const [stationName, setStationName] = useState("");
   const [stations, setStations] = useState<Station[]>(loadStations);
@@ -396,13 +397,13 @@ export function NavigationView({ state, hardware, panels, sendCommand, events, o
   }, [stations]);
 
   const updateGoal = (field: keyof PoseDraft, value: string) => setGoalDraft((previous) => updateDraft(previous, field, value));
-  const updateInitial = (field: keyof PoseDraft, value: string) => setInitialDraft((previous) => updateDraft(previous, field, value));
+  const updateInitial = (field: keyof PoseDraft, value: string) => { setInitialPoseApplied(false); setInitialDraft((previous) => updateDraft(previous, field, value)); };
   const updateStation = (field: keyof PoseDraft, value: string) => setStationDraft((previous) => updateDraft(previous, field, value));
 
   const pickPoint = (picked: Pose) => {
     const next = { x: picked.x.toFixed(2), y: picked.y.toFixed(2), heading: (picked.theta * 180 / Math.PI).toFixed(1) };
     if (tool === "goal") setGoalDraft(next);
-    if (tool === "initial") setInitialDraft(next);
+    if (tool === "initial") { setInitialDraft(next); setInitialPoseApplied(false); }
     if (tool === "station") setStationDraft(next);
     onEvent(`${tool === "goal" ? "Goal" : tool === "initial" ? "Initial pose" : "Station"} point selected at ${fmt(picked.x)}, ${fmt(picked.y)}.`, "info");
   };
@@ -422,6 +423,7 @@ export function NavigationView({ state, hardware, panels, sendCommand, events, o
       return;
     }
     const accepted = await sendCommand({ type: "initial_pose", x: initialPose.x, y: initialPose.y, theta: initialPose.theta });
+    if (accepted) setInitialPoseApplied(true);
     onEvent(accepted ? "Initial pose published to AMCL." : "Initial pose could not be published.", accepted ? "success" : "error");
   };
 
@@ -487,7 +489,7 @@ export function NavigationView({ state, hardware, panels, sendCommand, events, o
     <div className="view-stack navigation-view">
       {panels.map && <Panel title="Navigation Map" eyebrow="NAV2 // PGM OCCUPANCY GRID" accent="blue" actions={<div className="navigation-map-actions"><span className="panel-chip">FRAME: {mapGrid?.frame_id || "—"}</span><label className="map-choice"><span>CHOOSE MAP</span><select value={selectedMap} onChange={(event) => void chooseMap(event)} aria-label="Choose map"><option value="">LIVE /MAP</option>{mapChoices.map((name) => <option key={name} value={name}>{name}</option>)}</select></label><button className="panel-icon-action" type="button" disabled={!previewMap || mapLoading} onClick={applyMap}>{mapLoading ? "…" : "APPLY MAP"}</button></div>}>
         <div className="map-layout navigation-map-layout">
-          <div className="map-stage"><MapCanvas grid={mapGrid} pose={displayedPose} initialPose={initialPose} path={state.path} scan={state.scan} goal={goal} globalCostmap={state.global_costmap} localCostmap={state.local_costmap} showLidar={showLidar} showPath={showPath} showGlobalCostmap={showGlobalCostmap} showLocalCostmap={showLocalCostmap} showInflationLayer={showInflationLayer} onPick={pickPoint} /><div className="map-legend"><span><i className="legend-dot green" /> Diablo</span><span><i className="legend-dot cyan" /> Init pose</span><span><i className="legend-dot orange" /> Goal</span><span><i className="legend-line blue" /> Nav2 path</span></div></div>
+          <div className="map-stage"><MapCanvas grid={mapGrid} pose={displayedPose} initialPose={initialPoseApplied ? null : initialPose} path={state.path} scan={state.scan} goal={goal} globalCostmap={state.global_costmap} localCostmap={state.local_costmap} showLidar={showLidar} showPath={showPath} showGlobalCostmap={showGlobalCostmap} showLocalCostmap={showLocalCostmap} showInflationLayer={showInflationLayer} onPick={pickPoint} /><div className="map-legend"><span><i className="legend-dot green" /> Diablo</span><span><i className="legend-dot cyan" /> Init pose</span><span><i className="legend-dot orange" /> Goal</span><span><i className="legend-line blue" /> Nav2 path</span></div></div>
           <div className="map-readouts"><StatCard label="ROBOT X" value={fmt(displayedPose?.x)} unit={displayedPose?.source === "amcl" || displayedPose?.source === "map" || displayedPose?.source === "amcl_initial" ? "METERS · AMCL / MAP" : "METERS · ODOM"} tone="green" /><StatCard label="ROBOT Y" value={fmt(displayedPose?.y)} unit={displayedPose?.source === "amcl" || displayedPose?.source === "map" || displayedPose?.source === "amcl_initial" ? "METERS · AMCL / MAP" : "METERS · ODOM"} tone="blue" /><StatCard label="HEADING θ" value={fmtDegrees(displayedPose?.theta)} unit={displayedPose?.source === "amcl" || displayedPose?.source === "map" || displayedPose?.source === "amcl_initial" ? "DEGREES · AMCL / MAP" : "DEGREES · ODOM"} tone="orange" /><div className="map-instructions"><Icon name="target" size={17} /><span>Choose a tool below, then click the map to place an initial pose, goal, or station.</span></div></div>
         </div>
         <div className="map-layer-bar"><label><input type="checkbox" checked={showLidar} onChange={(event) => setShowLidar(event.target.checked)} /> LiDAR</label><label><input type="checkbox" checked={showPath} onChange={(event) => setShowPath(event.target.checked)} /> NAV2 PATH</label><span className="map-source-status">{mapMessage}</span></div>

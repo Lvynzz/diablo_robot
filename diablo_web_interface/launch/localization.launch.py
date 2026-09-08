@@ -20,6 +20,7 @@ from launch_ros.parameter_descriptions import ParameterValue
 def _default_map_file(web_share):
     """Choose a real bringup map when one is installed, else bundled empty map."""
     candidates = []
+    bringup_share = None
     try:
         bringup_share = Path(get_package_share_directory("diablo_bringup"))
         candidates.append(bringup_share / "map")
@@ -57,12 +58,15 @@ def _default_map_file(web_share):
             yaml_files = []
         if yaml_files:
             return str(yaml_files[0])
+    if bringup_share is not None:
+        return str(bringup_share / "map" / "empty.yaml")
     return str(Path(web_share) / "maps" / "empty.yaml")
 
 
 def generate_launch_description():
     web_share = get_package_share_directory("diablo_web_interface")
-    default_params = os.path.join(web_share, "config", "nav2_params.yaml")
+    bringup_share = get_package_share_directory("diablo_bringup")
+    default_params = os.path.join(bringup_share, "config", "nav2_params.yaml")
     default_map = _default_map_file(web_share)
 
     use_sim_time = LaunchConfiguration("use_sim_time")

@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
@@ -10,10 +11,43 @@ from launch_ros.parameter_descriptions import ParameterValue
 from nav2_common.launch import RewrittenYaml
 
 
+def _default_map_file(bringup_share):
+    """Use the web-selected bringup map, then the first available map."""
+    candidates = [Path(bringup_share) / "map"]
+    for workspace_root in Path(bringup_share).parents:
+        candidates.append(workspace_root / "src" / "diablo_bringup" / "map")
+    for directory in candidates:
+        marker = directory / ".selected_localization_map.txt"
+        try:
+            selected = marker.read_text(encoding="utf-8").strip()
+        except OSError:
+            selected = ""
+        if selected:
+            selected_path = Path(selected).expanduser()
+            if not selected_path.is_absolute():
+                selected_path = directory / selected_path.name
+            if selected_path.suffix.lower() == ".pgm":
+                selected_path = selected_path.with_suffix(".yaml")
+            try:
+                selected_path = selected_path.resolve()
+                if directory.resolve() in selected_path.parents and selected_path.is_file():
+                    return str(selected_path)
+            except OSError:
+                pass
+        try:
+            yaml_files = sorted(directory.glob("*.yaml"))
+        except OSError:
+            yaml_files = []
+        if yaml_files:
+            return str(yaml_files[0])
+    return str(Path(bringup_share) / "map" / "empty.yaml")
+
+
 def generate_launch_description():
     share = get_package_share_directory("diablo_web_interface")
-    default_params = os.path.join(share, "config", "nav2_params.yaml")
-    default_map = os.path.join(share, "maps", "empty.yaml")
+    bringup_share = get_package_share_directory("diablo_bringup")
+    default_params = os.path.join(bringup_share, "config", "nav2_params.yaml")
+    default_map = _default_map_file(bringup_share)
 
     params_file = LaunchConfiguration("params_file")
     map_file = LaunchConfiguration("map")

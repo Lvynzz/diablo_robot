@@ -454,7 +454,13 @@
     $("map-canvas").addEventListener("pointerup", () => { mapPointerStart = null; });
     $("map-canvas").addEventListener("pointercancel", () => { mapPointerStart = null; });
     ["layer-robot", "layer-lidar", "layer-local-costmap", "layer-global-costmap"].forEach((id) => $(id)?.addEventListener("change", render));
-    $("initial-send").addEventListener("click", () => { const pose = poseValues("initial"); command({ type: "initial_pose", x: pose.x, y: pose.y, theta: pose.theta }, "/api/localization/initialpose").then((accepted) => log(accepted ? "Initial pose dikirim ke AMCL." : "Initial pose gagal dikirim.", accepted ? "success" : "warn")); });
+    $("initial-send").addEventListener("click", () => {
+      const pose = poseValues("initial");
+      command({ type: "initial_pose", x: pose.x, y: pose.y, theta: pose.theta }, "/api/localization/initialpose").then((accepted) => {
+        if (accepted) { state.initialPose = null; render(); }
+        log(accepted ? "Initial pose dikirim ke AMCL; marker digantikan panah robot." : "Initial pose gagal dikirim.", accepted ? "success" : "warn");
+      });
+    });
     $("goal-send").addEventListener("click", () => { const pose = poseValues("goal"); command({ type: "goal_pose", x: pose.x, y: pose.y, theta: pose.theta }, "/api/goal/nav2").then((accepted) => log(accepted ? "Goal pose dikirim ke Nav2." : "Goal pose gagal dikirim.", accepted ? "success" : "warn")); });
     ["initial", "goal"].forEach((kind) => ["x", "y", "theta"].forEach((field) => $(`${kind}-${field}`).addEventListener("input", () => { const pose = poseValues(kind); if ([pose.x, pose.y, pose.theta].every(Number.isFinite)) { state[`${kind}Pose`] = { ...pose }; drawMap(); } })));
   }

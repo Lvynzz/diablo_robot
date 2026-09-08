@@ -437,6 +437,12 @@ class DiabloWebNode(Node):
                 LaserScan, self.scan_topic, self._scan_callback, qos_profile_sensor_data
             ),
             self.create_subscription(
+                PoseWithCovarianceStamped,
+                "/amcl_pose",
+                self._amcl_pose_callback,
+                qos_profile_sensor_data,
+            ),
+            self.create_subscription(
                 BatteryState,
                 "/diablo/sensor/Battery",
                 self._battery_callback,
@@ -544,9 +550,25 @@ class DiabloWebNode(Node):
             round(float(value), 3) if math.isfinite(float(value)) else None
             for value in sampled
         ]
+        sensor_x = sensor_y = sensor_theta = 0.0
+        try:
+            scan_frame = message.header.frame_id or "laser"
+            transform = self._tf_buffer.lookup_transform(
+                self.base_frame, scan_frame, Time()
+            )
+            sensor_x = float(transform.transform.translation.x)
+            sensor_y = float(transform.transform.translation.y)
+            sensor_theta = _yaw_from_quaternion(transform.transform.rotation)
+        except Exception:
+            # The static laser TF may not have arrived during the first scan.
+            # Keep a base-frame fallback; subsequent scans retry the lookup.
+            pass
         with self._lock:
             self._scan = {
                 "frame_id": message.header.frame_id,
+                "sensor_x": sensor_x,
+                "sensor_y": sensor_y,
+                "sensor_theta": sensor_theta,
                 "angle_min": float(message.angle_min),
                 "angle_increment": float(message.angle_increment) * stride,
                 "range_min": float(message.range_min),
@@ -554,6 +576,12 @@ class DiabloWebNode(Node):
                 "ranges": clean_ranges,
             }
             self._versions["scan"] += 1
+
+    def _amcl_pose_callback(self, message: PoseWithCovarianceStamped):
+        """Use AMCL's filtered map pose as the robot pose shown by the HMI."""
+        pose = self._pose_from_pose_message(message.pose.pose, "amcl")
+        with self._lock:
+            self._pose = pose
 
     def _battery_callback(self, message: BatteryState):
         with self._lock:
@@ -623,7 +651,11 @@ class DiabloWebNode(Node):
             )
         except Exception:
             with self._lock:
-                if self._odom_pose is not None:
+                if self._odom_pose is not None and (
+                    self._pose is None
+                    or self._pose.get("source")
+                    in ("odom", "wheel_odom", "filtered_odom")
+                ):
                     self._pose = self._odom_pose
             return
 
@@ -837,6 +869,11 @@ class DiabloWebNode(Node):
         message.pose.covariance[7] = 0.25
         message.pose.covariance[35] = 0.20
         self._initial_pose_publisher.publish(message)
+        # Show the operator's requested AMCL seed immediately.  Once AMCL
+        # processes the laser scan, /amcl_pose (or map->base TF) replaces this
+        # pending value with its corrected map pose.
+        with self._lock:
+            self._pose = {"x": x, "y": y, "theta": theta, "source": "amcl_initial"}
         return {"published": True, "x": x, "y": y, "theta": theta}
 
     def reset_odom(self):

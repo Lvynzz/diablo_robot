@@ -215,10 +215,15 @@ function MapCanvas({
 
     if (showLidar && scan && pose) {
       context.fillStyle = "rgba(44,131,169,.62)";
+      const sensorX = scan.sensor_x || 0;
+      const sensorY = scan.sensor_y || 0;
+      const sensorTheta = scan.sensor_theta || 0;
+      const laserX = pose.x + Math.cos(pose.theta) * sensorX - Math.sin(pose.theta) * sensorY;
+      const laserY = pose.y + Math.sin(pose.theta) * sensorX + Math.cos(pose.theta) * sensorY;
       scan.ranges.forEach((range, index) => {
         if (range === null || range < scan.range_min || range > scan.range_max) return;
-        const angle = pose.theta + scan.angle_min + index * scan.angle_increment;
-        const [x, y] = toCanvas(pose.x + range * Math.cos(angle), pose.y + range * Math.sin(angle));
+        const angle = pose.theta + sensorTheta + scan.angle_min + index * scan.angle_increment;
+        const [x, y] = toCanvas(laserX + range * Math.cos(angle), laserY + range * Math.sin(angle));
         context.fillRect(x - 1, y - 1, 2.5, 2.5);
       });
     }

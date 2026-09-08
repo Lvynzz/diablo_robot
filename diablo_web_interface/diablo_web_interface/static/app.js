@@ -184,11 +184,16 @@
     $("pose-x").textContent = pose ? Number(pose.x).toFixed(3) : "—";
     $("pose-y").textContent = pose ? Number(pose.y).toFixed(3) : "—";
     $("pose-theta").textContent = pose ? (Number(pose.theta) * 180 / Math.PI).toFixed(1) : "—";
+    const mapPose = pose && ["amcl", "map", "amcl_initial"].includes(String(pose.source || ""));
+    ["pose-x-source", "pose-y-source"].forEach((id) => { const element = $(id); if (element) element.textContent = mapPose ? "METERS · MAP / AMCL" : "METERS · ODOM"; });
+    const thetaSource = $("pose-theta-source");
+    if (thetaSource) thetaSource.textContent = mapPose ? "DEGREES · MAP / AMCL" : "DEGREES · ODOM";
     const grid = state.selectedMap || state.previewMap || state.map;
     $("map-empty").style.display = grid ? "none" : "flex";
     $("map-meta").textContent = grid ? `${grid.width} × ${grid.height} · ${Number(grid.resolution).toFixed(3)} m · ${state.selectedMap ? "SELECTED MAP" : state.previewMap ? "PREVIEW" : grid.frame_id || "map"}` : "Menunggu /map";
     const sourceStatus = $("map-source-status");
-    if (sourceStatus) sourceStatus.textContent = state.selectedMap ? `SELECTED: ${state.selectedMap.name || "MAP"}` : state.previewMap ? `PREVIEW: ${state.previewMap.name || "MAP"}` : "/map → OccupancyGrid";
+    const lidarLayer = $("layer-lidar");
+    if (sourceStatus) sourceStatus.textContent = `LIDAR: ${lidarLayer?.checked ? (state.scan ? "LIVE" : "WAITING") : "OFF"} · ${state.selectedMap ? `SELECTED: ${state.selectedMap.name || "MAP"}` : state.previewMap ? `PREVIEW: ${state.previewMap.name || "MAP"}` : "/map → OccupancyGrid"}`;
     $("map-select-apply").disabled = !state.previewMap;
     drawMap();
     renderJoints();
@@ -315,10 +320,15 @@
     if (liveData && checked("layer-local-costmap", true)) drawCostmap(state.local_costmap, "local");
     if (liveData && checked("layer-lidar", false) && state.scan && state.pose) {
       ctx.fillStyle = "rgba(36,126,164,.62)";
+      const sensorX = Number(state.scan.sensor_x) || 0;
+      const sensorY = Number(state.scan.sensor_y) || 0;
+      const sensorTheta = Number(state.scan.sensor_theta) || 0;
+      const laserX = state.pose.x + Math.cos(state.pose.theta) * sensorX - Math.sin(state.pose.theta) * sensorY;
+      const laserY = state.pose.y + Math.sin(state.pose.theta) * sensorX + Math.cos(state.pose.theta) * sensorY;
       state.scan.ranges.forEach((range, index) => {
         if (range === null || range < state.scan.range_min || range > state.scan.range_max) return;
-        const angle = state.pose.theta + state.scan.angle_min + index * state.scan.angle_increment;
-        const [x, y] = toCanvas(state.pose.x + range * Math.cos(angle), state.pose.y + range * Math.sin(angle));
+        const angle = state.pose.theta + sensorTheta + state.scan.angle_min + index * state.scan.angle_increment;
+        const [x, y] = toCanvas(laserX + range * Math.cos(angle), laserY + range * Math.sin(angle));
         ctx.fillRect(x - 1, y - 1, 2.5, 2.5);
       });
     }
@@ -411,7 +421,7 @@
     $("map-canvas").addEventListener("pointermove", (event) => { if (!poseTool || !mapPointerStart) return; const point = mapPoint(event); if (!point) return; const distance = Math.hypot(point.x - mapPointerStart.x, point.y - mapPointerStart.y); const theta = distance > 0.03 ? Math.atan2(point.y - mapPointerStart.y, point.x - mapPointerStart.x) : 0; setPoseValues(poseTool, { x: mapPointerStart.x, y: mapPointerStart.y, theta }); });
     $("map-canvas").addEventListener("pointerup", () => { mapPointerStart = null; });
     $("map-canvas").addEventListener("pointercancel", () => { mapPointerStart = null; });
-    ["layer-robot", "layer-lidar", "layer-local-costmap", "layer-global-costmap"].forEach((id) => $(id)?.addEventListener("change", drawMap));
+    ["layer-robot", "layer-lidar", "layer-local-costmap", "layer-global-costmap"].forEach((id) => $(id)?.addEventListener("change", render));
     $("initial-send").addEventListener("click", () => { const pose = poseValues("initial"); command({ type: "initial_pose", x: pose.x, y: pose.y, theta: pose.theta }, "/api/localization/initialpose").then((accepted) => log(accepted ? "Initial pose dikirim ke AMCL." : "Initial pose gagal dikirim.", accepted ? "success" : "warn")); });
     $("goal-send").addEventListener("click", () => { const pose = poseValues("goal"); command({ type: "goal_pose", x: pose.x, y: pose.y, theta: pose.theta }, "/api/goal/nav2").then((accepted) => log(accepted ? "Goal pose dikirim ke Nav2." : "Goal pose gagal dikirim.", accepted ? "success" : "warn")); });
     ["initial", "goal"].forEach((kind) => ["x", "y", "theta"].forEach((field) => $(`${kind}-${field}`).addEventListener("input", () => { const pose = poseValues(kind); if ([pose.x, pose.y, pose.theta].every(Number.isFinite)) { state[`${kind}Pose`] = { ...pose }; drawMap(); } })));

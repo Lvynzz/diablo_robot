@@ -26,6 +26,9 @@ export interface OccupancyGrid {
 
 export interface ScanData {
   frame_id: string;
+  sensor_x?: number;
+  sensor_y?: number;
+  sensor_theta?: number;
   angle_min: number;
   angle_increment: number;
   range_min: number;

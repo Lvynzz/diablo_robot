@@ -158,12 +158,17 @@ function OccupancyCanvas({ grid, pose, scan, globalCostmap, localCostmap, showRo
 
     if (showLidar && scan && pose) {
       context.fillStyle = "rgba(36, 126, 164, .62)";
+      const sensorX = scan.sensor_x || 0;
+      const sensorY = scan.sensor_y || 0;
+      const sensorTheta = scan.sensor_theta || 0;
+      const laserX = pose.x + Math.cos(pose.theta) * sensorX - Math.sin(pose.theta) * sensorY;
+      const laserY = pose.y + Math.sin(pose.theta) * sensorX + Math.cos(pose.theta) * sensorY;
       scan.ranges.forEach((range, index) => {
         if (range === null || range < scan.range_min || range > scan.range_max) return;
-        const angle = pose.theta + scan.angle_min + index * scan.angle_increment;
+        const angle = pose.theta + sensorTheta + scan.angle_min + index * scan.angle_increment;
         const [x, y] = toCanvas(
-          pose.x + range * Math.cos(angle),
-          pose.y + range * Math.sin(angle),
+          laserX + range * Math.cos(angle),
+          laserY + range * Math.sin(angle),
         );
         context.fillRect(x - 1, y - 1, 2.5, 2.5);
       });
@@ -291,6 +296,7 @@ export function MappingView({ state, hardware, panels, sendCommand, onEvent }: M
   // independent, so the robot can be driven immediately after hardware start.
   const teleopReady = hardware.ready;
   const displayMap = selectedMap || previewMap || state.map;
+  const displayedPose = state.pose || state.wheel_pose;
   const initialPose = poseFromDraft(initialDraft, "initial pose draft");
   const goalPose = poseFromDraft(goalDraft, "goal pose draft");
 
@@ -439,9 +445,9 @@ export function MappingView({ state, hardware, panels, sendCommand, onEvent }: M
     <div className="view-stack mapping-view">
       {panels.map && <>
         <div className="mapping-pose-strip">
-          <StatCard label="ROBOT X" value={fmt((state.wheel_pose || state.pose)?.x)} unit="METERS · ODOM" tone="green" />
-          <StatCard label="ROBOT Y" value={fmt((state.wheel_pose || state.pose)?.y)} unit="METERS · ODOM" tone="blue" />
-          <StatCard label="HEADING θ" value={degrees((state.wheel_pose || state.pose)?.theta)} unit="DEGREES" tone="orange" />
+          <StatCard label="ROBOT X" value={fmt(displayedPose?.x)} unit={state.pose?.source === "amcl" || state.pose?.source === "map" || state.pose?.source === "amcl_initial" ? "METERS · AMCL / MAP" : "METERS · ODOM"} tone="green" />
+          <StatCard label="ROBOT Y" value={fmt(displayedPose?.y)} unit={state.pose?.source === "amcl" || state.pose?.source === "map" || state.pose?.source === "amcl_initial" ? "METERS · AMCL / MAP" : "METERS · ODOM"} tone="blue" />
+          <StatCard label="HEADING θ" value={degrees(displayedPose?.theta)} unit={state.pose?.source === "amcl" || state.pose?.source === "map" || state.pose?.source === "amcl_initial" ? "DEGREES · AMCL / MAP" : "DEGREES · ODOM"} tone="orange" />
           <div className="mapping-reset-actions"><span>POSE RESET</span><button type="button" onClick={() => void sendCommand({ type: "reset_position" })}>RESET X/Y</button><button type="button" onClick={() => void sendCommand({ type: "reset_orientation" })}>RESET HEADING</button></div>
         </div>
         <Panel title="Live Occupancy Grid" eyebrow="SLAM TOOLBOX // /MAP" accent="blue" actions={<div className="mapping-map-actions"><label className="map-choice"><span>SELECT MAP</span><select value={mapChoice} onChange={(event) => void chooseMap(event.target.value)} aria-label="Select PGM map"><option value="">LIVE /MAP</option>{mapChoices.map((name) => <option key={name} value={name}>{name}</option>)}</select></label><button className="panel-icon-action" type="button" disabled={!previewMap || mapLoading} onClick={applyMap}>{mapLoading ? "…" : "SELECT"}</button><span className="panel-chip">FRAME: {displayMap?.frame_id || "—"}</span></div>}>
@@ -456,7 +462,7 @@ export function MappingView({ state, hardware, panels, sendCommand, onEvent }: M
               <div className="map-instructions"><Icon name="target" size={15} /><span>{poseTool ? `Klik-drag map untuk memilih ${poseTool === "initial" ? "initial pose" : "goal pose"}.` : "Pilih PICK MAP pada panel pose."}</span></div>
             </div>
           </div>
-          <div className="map-layer-bar"><span>RESOLUTION: {displayMap ? `${fmt(displayMap.resolution, 3)} m` : "—"}</span><span>SIZE: {displayMap ? `${displayMap.width} × ${displayMap.height}` : "—"}</span><label><input type="checkbox" checked={showRobot} onChange={(event) => setShowRobot(event.target.checked)} /> ROBOT</label><label><input type="checkbox" checked={showLidar} onChange={(event) => setShowLidar(event.target.checked)} /> LIDAR SCAN</label><label><input type="checkbox" checked={showLocalCostmap} disabled={!state.local_costmap || Boolean(selectedMap || previewMap)} onChange={(event) => setShowLocalCostmap(event.target.checked)} /> LOCAL COSTMAP</label><label><input type="checkbox" checked={showGlobalCostmap} disabled={!state.global_costmap || Boolean(selectedMap || previewMap)} onChange={(event) => setShowGlobalCostmap(event.target.checked)} /> GLOBAL COSTMAP</label><span className="map-source-status">{selectedMap ? `SELECTED: ${selectedMap.name || mapChoice}` : previewMap ? `PREVIEW: ${previewMap.name || mapChoice}` : "/map → OccupancyGrid"}</span></div>
+          <div className="map-layer-bar"><span>RESOLUTION: {displayMap ? `${fmt(displayMap.resolution, 3)} m` : "—"}</span><span>SIZE: {displayMap ? `${displayMap.width} × ${displayMap.height}` : "—"}</span><label><input type="checkbox" checked={showRobot} onChange={(event) => setShowRobot(event.target.checked)} /> ROBOT</label><label><input type="checkbox" checked={showLidar} onChange={(event) => setShowLidar(event.target.checked)} /> LIDAR SCAN</label><label><input type="checkbox" checked={showLocalCostmap} disabled={!state.local_costmap || Boolean(selectedMap || previewMap)} onChange={(event) => setShowLocalCostmap(event.target.checked)} /> LOCAL COSTMAP</label><label><input type="checkbox" checked={showGlobalCostmap} disabled={!state.global_costmap || Boolean(selectedMap || previewMap)} onChange={(event) => setShowGlobalCostmap(event.target.checked)} /> GLOBAL COSTMAP</label><span className="map-source-status">LIDAR: {showLidar ? state.scan ? "LIVE" : "WAITING" : "OFF"} · {selectedMap ? `SELECTED: ${selectedMap.name || mapChoice}` : previewMap ? `PREVIEW: ${previewMap.name || mapChoice}` : "/map → OccupancyGrid"}</span></div>
         </Panel>
       </>}
 

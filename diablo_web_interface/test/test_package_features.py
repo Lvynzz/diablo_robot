@@ -112,6 +112,8 @@ def test_web_ui_has_mapping_teleop_and_topic_echo_panels():
     assert 'type: "start_mapping"' in javascript
     assert 'type: "subscribe"' in javascript
     assert "start-hardware" in javascript
+    assert "relative_asset.is_absolute()" in web_node
+    assert '".." in relative_asset.parts' in web_node
     assert "/dev/diablo_controller" in web_launch
     assert "/dev/rplidar" in web_launch
     assert "/dev/u2d2_arm" in web_launch

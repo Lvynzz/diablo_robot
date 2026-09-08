@@ -543,8 +543,15 @@ async def index():
 @app.get("/static/{asset_path:path}")
 async def static_asset(asset_path: str):
     root = _static_dir().resolve()
-    candidate = (root / asset_path).resolve()
-    if root not in candidate.parents or not candidate.is_file():
+    relative_asset = Path(asset_path)
+    # With --symlink-install, the files inside install/share/.../static may be
+    # symlinks into build/. Validate the requested path lexically, then let
+    # FileResponse follow the package-managed symlink. Resolving the candidate
+    # before this check incorrectly rejected every installed CSS/JS asset.
+    if relative_asset.is_absolute() or ".." in relative_asset.parts:
+        raise HTTPException(status_code=404, detail="Asset not found")
+    candidate = root / relative_asset
+    if not candidate.is_file():
         raise HTTPException(status_code=404, detail="Asset not found")
     return FileResponse(candidate)
 

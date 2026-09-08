@@ -335,8 +335,8 @@
   function initControls() {
     $("stop-button").addEventListener("click", () => { stopTeleop(); command({ type: "stop" }, "/api/control/stop"); log("STOP command sent.", "warn"); });
     $("start-hardware").addEventListener("click", () => requestLaunch("hardware"));
-    $("reset-position").addEventListener("click", () => { command({ type: "reset_position" }, "/api/odom/reset-position"); log("Reset X/Y position requested.", "success"); });
-    $("reset-orientation").addEventListener("click", () => { command({ type: "reset_orientation" }, "/api/odom/reset-orientation"); log("Reset heading requested.", "success"); });
+    $("reset-position").addEventListener("click", () => { command({ type: "reset_position" }, "/api/odom/reset-position").then((accepted) => log("Reset X/Y position requested.", accepted ? "success" : "warn")); });
+    $("reset-orientation").addEventListener("click", () => { command({ type: "reset_orientation" }, "/api/odom/reset-orientation").then((accepted) => log("Reset heading requested.", accepted ? "success" : "warn")); });
     $("launch-localization").addEventListener("click", () => requestLaunch("localization"));
     $("launch-navigation").addEventListener("click", () => requestLaunch("navigation"));
     $("launch-mapping").addEventListener("click", () => requestLaunch("mapping"));

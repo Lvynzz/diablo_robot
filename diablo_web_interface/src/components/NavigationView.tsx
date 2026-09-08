@@ -449,10 +449,22 @@ export function NavigationView({ state, hardware, panels, sendCommand, events, o
     } finally { setMapLoading(false); }
   };
 
-  const applyMap = () => {
+  const applyMap = async () => {
     if (!previewMap) { onEvent("Pilih map terlebih dahulu.", "warn"); return; }
-    setMapMessage(`${previewMap.name || selectedMap} selected · preview aktif`);
-    onEvent(`Map ${previewMap.name || selectedMap} dipilih.`, "success");
+    const name = previewMap.name || selectedMap;
+    try {
+      const response = await fetch("/api/maps/select", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ map_name: name }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(String(payload.detail || "select map gagal"));
+      setMapMessage(`${name} selected · AMCL berikutnya memakai map ini`);
+      onEvent(String(payload.message || `Map ${name} dipilih untuk localization.`), "success");
+    } catch (error) {
+      onEvent(`Map selection gagal: ${error instanceof Error ? error.message : "unknown error"}`, "warn");
+    }
   };
 
   const navEvents = events.filter((event) => /hardware|localization|amcl|nav2|navigation|mapping|goal|pose|costmap/i.test(event.message)).slice(-8).reverse();

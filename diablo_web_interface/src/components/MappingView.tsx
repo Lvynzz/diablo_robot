@@ -325,10 +325,22 @@ export function MappingView({ state, hardware, panels, sendCommand, onEvent }: M
     } finally { setMapLoading(false); }
   };
 
-  const applyMap = () => {
+  const applyMap = async () => {
     if (!previewMap) { onEvent("Pilih map PGM terlebih dahulu.", "warn"); return; }
-    setSelectedMap(previewMap);
-    onEvent(`Map ${previewMap.name || mapChoice} dipilih untuk LIVE /MAP.`, "success");
+    const name = previewMap.name || mapChoice;
+    try {
+      const response = await fetch("/api/maps/select", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ map_name: name }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(String(payload.detail || "select map gagal"));
+      setSelectedMap(previewMap);
+      onEvent(String(payload.message || `Map ${name} dipilih untuk localization.`), "success");
+    } catch (error) {
+      onEvent(`Map selection gagal: ${error instanceof Error ? error.message : "unknown error"}`, "warn");
+    }
   };
 
   const updatePose = (which: "initial" | "goal", field: keyof PoseDraft, value: string) => {

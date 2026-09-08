@@ -180,6 +180,21 @@ async def maps():
     return _require_node().list_maps()
 
 
+@app.post("/api/maps/select")
+async def select_map(payload: dict):
+    """Persist the map used by the next AMCL/localization launch."""
+    node = _require_node()
+    name = payload.get("map_name", payload.get("name", ""))
+    try:
+        return node.select_map(name)
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error))
+    except FileNotFoundError as error:
+        raise HTTPException(status_code=404, detail=str(error))
+    except RuntimeError as error:
+        raise HTTPException(status_code=409, detail=str(error))
+
+
 @app.get("/api/maps/{map_name}")
 async def map_preview(map_name: str):
     node = _require_node()

@@ -40,6 +40,7 @@ MAX_ECHO_ITEMS = 80
 MAX_LIDAR_POINTS = 720
 MAX_MAP_CELLS = 250_000
 MAP_NAME_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$")
+MAP_SELECTION_FILENAME = ".selected_localization_map.txt"
 
 
 def _read_pgm(path):
@@ -1262,6 +1263,68 @@ class DiabloWebNode(Node):
         except OSError:
             names = []
         return names
+
+    def select_map(self, name):
+        """Persist the map that the next AMCL launch should load.
+
+        The selected-map marker lives beside the map assets so a robot checkout
+        remains self-contained.  Selecting a map does not restart AMCL; the UI
+        can safely preview it first and the next localization launch consumes
+        this marker.
+        """
+        requested = str(name or "").strip()
+        for suffix in (".pgm", ".yaml"):
+            if requested.lower().endswith(suffix):
+                requested = requested[: -len(suffix)]
+                break
+        if not MAP_NAME_PATTERN.fullmatch(requested):
+            raise ValueError("Invalid map name")
+
+        root = self.maps_dir.expanduser().resolve()
+        pgm_path = (root / f"{requested}.pgm").resolve()
+        yaml_path = (root / f"{requested}.yaml").resolve()
+        if root not in pgm_path.parents or root not in yaml_path.parents:
+            raise ValueError("Invalid map path")
+        if not pgm_path.is_file() or not yaml_path.is_file():
+            raise FileNotFoundError(f"Map '{requested}' requires both .pgm and .yaml")
+
+        marker = root / MAP_SELECTION_FILENAME
+        try:
+            root.mkdir(parents=True, exist_ok=True)
+            marker.write_text(f"{yaml_path.name}\n", encoding="utf-8")
+        except OSError as error:
+            raise RuntimeError(f"Could not persist selected map: {error}") from error
+        return {
+            "selected": True,
+            "map_name": yaml_path.name,
+            "message": (
+                f"Map '{yaml_path.name}' disimpan untuk launch AMCL berikutnya. "
+                "Restart localization bila AMCL sedang berjalan."
+            ),
+        }
+
+    def selected_map(self):
+        """Return the persisted map name, if it still exists."""
+        marker = self.maps_dir / MAP_SELECTION_FILENAME
+        try:
+            raw = marker.read_text(encoding="utf-8").strip()
+        except OSError:
+            return None
+        if not raw:
+            return None
+        candidate = Path(raw)
+        if not candidate.is_absolute():
+            candidate = self.maps_dir / candidate.name
+        if candidate.suffix.lower() == ".pgm":
+            candidate = candidate.with_suffix(".yaml")
+        try:
+            candidate = candidate.resolve()
+            root = self.maps_dir.expanduser().resolve()
+            if root not in candidate.parents or not candidate.is_file():
+                return None
+        except OSError:
+            return None
+        return candidate.name
 
     def load_map(self, name):
         """Load a saved PGM/YAML map into the same JSON shape as /map."""

@@ -414,7 +414,19 @@
       if (!name) { state.previewMap = null; render(); return; }
       fetch(`/api/maps/${encodeURIComponent(name)}`).then((response) => response.ok ? response.json() : Promise.reject(new Error("preview unavailable"))).then((map) => { state.previewMap = map; state.selectedMap = null; render(); log(`Preview map ${name} dimuat. Tekan SELECT MAP untuk menerapkan.`, "info"); }).catch((error) => log(`Preview map gagal: ${error.message}`, "warn"));
     });
-    $("map-select-apply").addEventListener("click", () => { if (!state.previewMap) return; state.selectedMap = state.previewMap; render(); log(`Map ${state.selectedMap.name || select.value} dipilih untuk LIVE /MAP.`, "success"); });
+    $("map-select-apply").addEventListener("click", () => {
+      if (!state.previewMap) return;
+      const name = state.previewMap.name || select.value;
+      fetch("/api/maps/select", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ map_name: name }) })
+        .then((response) => response.json().then((payload) => ({ response, payload })))
+        .then(({ response, payload }) => {
+          if (!response.ok) throw new Error(payload.detail || "select map gagal");
+          state.selectedMap = state.previewMap;
+          render();
+          log(payload.message || `Map ${name} dipilih untuk localization.`, "success");
+        })
+        .catch((error) => log(`Map selection gagal: ${error.message}`, "warn"));
+    });
     [["initial", "initial-pick"], ["goal", "goal-pick"]].forEach(([kind, id]) => $(id).addEventListener("click", () => { poseTool = poseTool === kind ? null : kind; $("initial-tool").classList.toggle("active", poseTool === "initial"); $("goal-tool").classList.toggle("active", poseTool === "goal"); $("map-canvas").classList.toggle("map-interactive", Boolean(poseTool)); }));
     $("map-canvas").addEventListener("pointerdown", (event) => { if (!poseTool) return; event.currentTarget.setPointerCapture(event.pointerId); mapPointerStart = mapPoint(event); if (mapPointerStart) setPoseValues(poseTool, { ...mapPointerStart, theta: 0 }); });
     $("map-canvas").addEventListener("pointermove", (event) => { if (!poseTool || !mapPointerStart) return; const point = mapPoint(event); if (!point) return; const distance = Math.hypot(point.x - mapPointerStart.x, point.y - mapPointerStart.y); const theta = distance > 0.03 ? Math.atan2(point.y - mapPointerStart.y, point.x - mapPointerStart.x) : 0; setPoseValues(poseTool, { x: mapPointerStart.x, y: mapPointerStart.y, theta }); });

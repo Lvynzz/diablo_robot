@@ -31,6 +31,26 @@ def _default_map_file(web_share):
         pass
     candidates.append(Path(web_share) / "maps")
     for directory in candidates:
+        # Match the AMR HMI behavior: the map selected in the web UI is the
+        # map consumed by the next localization launch.  Ignore stale markers
+        # and continue with the normal deterministic fallback.
+        marker = directory / ".selected_localization_map.txt"
+        try:
+            selected = marker.read_text(encoding="utf-8").strip()
+        except OSError:
+            selected = ""
+        if selected:
+            selected_path = Path(selected).expanduser()
+            if not selected_path.is_absolute():
+                selected_path = directory / selected_path.name
+            if selected_path.suffix.lower() == ".pgm":
+                selected_path = selected_path.with_suffix(".yaml")
+            try:
+                selected_path = selected_path.resolve()
+                if directory.resolve() in selected_path.parents and selected_path.is_file():
+                    return str(selected_path)
+            except OSError:
+                pass
         try:
             yaml_files = sorted(directory.glob("*.yaml"))
         except OSError:

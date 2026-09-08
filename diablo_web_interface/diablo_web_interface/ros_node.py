@@ -327,6 +327,7 @@ class DiabloWebNode(Node):
         self._scan = None
         self._pose = None
         self._odom_pose = None
+        self._last_amcl_pose_time = 0.0
         self._wheel_trajectory = []
         self._telemetry = {
             "battery": None,
@@ -582,6 +583,7 @@ class DiabloWebNode(Node):
         pose = self._pose_from_pose_message(message.pose.pose, "amcl")
         with self._lock:
             self._pose = pose
+            self._last_amcl_pose_time = time.monotonic()
 
     def _battery_callback(self, message: BatteryState):
         with self._lock:
@@ -651,10 +653,12 @@ class DiabloWebNode(Node):
             )
         except Exception:
             with self._lock:
+                localization_running = self._hardware.process_status("localization")["active"]
+                amcl_recent = time.monotonic() - self._last_amcl_pose_time <= 3.0
                 if self._odom_pose is not None and (
                     self._pose is None
-                    or self._pose.get("source")
-                    in ("odom", "wheel_odom", "filtered_odom")
+                    or self._pose.get("source") in ("odom", "wheel_odom", "filtered_odom")
+                    or (not localization_running and not amcl_recent)
                 ):
                     self._pose = self._odom_pose
             return

@@ -221,7 +221,10 @@ class DiabloWebNode(Node):
         )
         self.declare_parameter("hardware_log_directory", "/tmp")
         self.declare_parameter("hardware_feedback_timeout", 15.0)
-        self.declare_parameter("localization_start_command", "")
+        self.declare_parameter(
+            "localization_start_command",
+            "ros2 launch diablo_web_interface localization.launch.py",
+        )
         self.declare_parameter("navigation_start_command", "")
         self.declare_parameter(
             "mapping_start_command",

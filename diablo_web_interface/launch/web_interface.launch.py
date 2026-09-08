@@ -54,7 +54,10 @@ def generate_launch_description():
         ),
         DeclareLaunchArgument("hardware_log_directory", default_value="/tmp"),
         DeclareLaunchArgument("hardware_feedback_timeout", default_value="15.0"),
-        DeclareLaunchArgument("localization_start_command", default_value=""),
+        DeclareLaunchArgument(
+            "localization_start_command",
+            default_value="ros2 launch diablo_web_interface localization.launch.py",
+        ),
         DeclareLaunchArgument("navigation_start_command", default_value=""),
         DeclareLaunchArgument(
             "mapping_start_command",

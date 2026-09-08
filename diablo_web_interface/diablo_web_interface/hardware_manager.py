@@ -17,6 +17,7 @@ class HardwareManager:
     """Start configured hardware commands and expose a JSON-safe status object."""
 
     COMPONENTS = ("diablo", "lidar", "dynamixel")
+    OPTIONAL_PROCESSES = ("localization", "navigation", "mapping")
 
     def __init__(
         self,
@@ -118,7 +119,7 @@ class HardwareManager:
                     handle.close()
             except Exception:
                 pass
-            self._logger.error("Could not start %s hardware: %s", component, error)
+            self._logger.error(f"Could not start {component} hardware: {error}")
             self._set_component(component, "error", str(error))
             return False
 
@@ -126,7 +127,7 @@ class HardwareManager:
         self._log_handles[component] = handle
         self._started_at[component] = time.monotonic()
         self._set_component(component, "starting", f"Command started (PID {process.pid})")
-        self._logger.info("Started %s hardware command (PID %s)", component, process.pid)
+        self._logger.info(f"Started {component} hardware command (PID {process.pid})")
         return True
 
     def start_component(self, component, command=None):
@@ -278,6 +279,13 @@ class HardwareManager:
                 "updated": float(self._status["updated"]),
             }
 
+    def process_snapshots(self):
+        """Return statuses for optional launch groups owned by the web UI."""
+        return {
+            name: self.process_status(name)
+            for name in self.OPTIONAL_PROCESSES
+        }
+
     def is_ready(self):
         with self._lock:
             return bool(self._status["ready"])
@@ -379,6 +387,47 @@ class HardwareManager:
                     pass
             self._close_log(clean_name)
             return {"requested": True, "message": f"{clean_name} stopped"}
+
+    def stop_hardware(self):
+        """Stop only hardware process groups created by this manager.
+
+        Drivers that were already running before the web button was pressed are
+        deliberately left alone. This prevents the web UI from killing an
+        operator-owned or systemd-owned process unexpectedly.
+        """
+        results = {}
+        for component in reversed(self.COMPONENTS):
+            results[component] = self.stop_process(component)
+
+        with self._lock:
+            self._service_state = {
+                component: False for component in self._service_state
+            }
+            self._last_messages = {
+                component: 0.0 for component in self._last_messages
+            }
+            for component in self.COMPONENTS:
+                if self._commands[component]:
+                    self._set_component(component, "offline", "Hardware stopped")
+                else:
+                    self._set_component(
+                        component, "not_configured", "Start command not configured"
+                    )
+            self._status.update(
+                {
+                    "ready": False,
+                    "all_ready": False,
+                    "starting": False,
+                    "message": "Hardware stopped",
+                    "updated": time.time(),
+                }
+            )
+        requested = any(item.get("requested") for item in results.values())
+        return {
+            "requested": requested,
+            "message": "Hardware stop requested",
+            "results": results,
+        }
 
     def _close_log(self, component):
         handle = self._log_handles.pop(component, None)

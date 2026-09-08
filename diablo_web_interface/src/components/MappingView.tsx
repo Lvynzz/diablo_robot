@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Icon } from "./Icon";
 import { EmptyState, Panel, StatCard } from "./Panel";
+import { LaunchToggleButton } from "./LaunchControls";
 import type {
   DiabloState,
   EventEntry,
@@ -271,14 +272,16 @@ export function MappingView({ state, hardware, panels, sendCommand, onEvent }: M
           <div className="hardware-components">
             {hardware.components.map((component) => <div className={`hardware-component state-${component.state}`} key={component.id}><i /><span>{component.label}</span><b>{componentLabel(component)}</b></div>)}
           </div>
-          <button className="primary-action mapping-wide-button" type="button" disabled={hardware.all_ready || hardware.starting} onClick={() => void requestHardware()}>{hardware.all_ready ? "HARDWARE READY" : hardware.starting ? "STARTING…" : "ON HARDWARE"}</button>
+          <LaunchToggleButton component="hardware" state={state} hardware={hardware} sendCommand={sendCommand} onEvent={onEvent} compact />
+          <button className="primary-action mapping-wide-button legacy-hardware-button" type="button" disabled={hardware.all_ready || hardware.starting} onClick={() => void requestHardware()}>{hardware.all_ready ? "HARDWARE READY" : hardware.starting ? "STARTING…" : "ON HARDWARE"}</button>
         </div>
 
         <div className="mapping-control-grid">
           <div className="mapping-action-card">
             <div className="mapping-action-heading"><span>OCCUPANCY GRID MAPPING</span><strong className={`status-${state.mapping.active ? "ready" : state.mapping.state === "error" ? "error" : "idle"}`}>{mappingState}</strong></div>
             <p>{state.mapping.message}</p>
-            <div className="mapping-action-buttons"><button className="primary-action" type="button" disabled={!hardware.all_ready || state.mapping.active} onClick={() => void requestMapping()}>START MAPPING</button><button className="danger-action" type="button" disabled={!state.mapping.active} onClick={() => void sendCommand({ type: "stop_mapping" })}>STOP MAPPING</button></div>
+            <LaunchToggleButton component="mapping" state={state} hardware={hardware} sendCommand={sendCommand} onEvent={onEvent} compact />
+            <div className="mapping-action-buttons legacy-mapping-buttons"><button className="primary-action" type="button" disabled={!hardware.all_ready || state.mapping.active} onClick={() => void requestMapping()}>START MAPPING</button><button className="danger-action" type="button" disabled={!state.mapping.active} onClick={() => void sendCommand({ type: "stop_mapping" })}>STOP MAPPING</button></div>
           </div>
           <div className="mapping-action-card save-map-card">
             <div className="mapping-action-heading"><span>SAVE MAP</span><strong>PGM + YAML</strong></div>

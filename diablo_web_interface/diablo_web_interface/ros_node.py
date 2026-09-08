@@ -29,6 +29,7 @@ from rosidl_runtime_py.utilities import get_message
 from sensor_msgs.msg import BatteryState, Imu, JointState, LaserScan
 from std_msgs.msg import String
 from std_srvs.srv import Empty, Trigger
+from trajectory_msgs.msg import JointTrajectory, JointTrajectoryPoint
 from tf2_ros import Buffer, TransformListener
 
 from .hardware_manager import HardwareManager
@@ -39,6 +40,19 @@ MAX_ECHO_ITEMS = 80
 MAX_LIDAR_POINTS = 720
 MAX_MAP_CELLS = 250_000
 MAP_NAME_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$")
+
+JOINT_DEFINITIONS = {
+    1: {"label": "RIGHT SHOULDER PITCH", "side": "right", "name": "upper_right_shoulder_pitch_joint", "min": -math.pi, "max": math.pi},
+    2: {"label": "RIGHT SHOULDER ROLL", "side": "right", "name": "upper_right_shoulder_roll_joint", "min": 0.0, "max": 2.20},
+    3: {"label": "RIGHT ELBOW", "side": "right", "name": "upper_right_elbow_joint", "min": -0.0872, "max": 2.35},
+    4: {"label": "RIGHT WRIST", "side": "right", "name": "upper_right_wrist_joint", "min": -1.57, "max": 1.57},
+    5: {"label": "RIGHT THUMB BASE", "side": "right", "name": "upper_right_thumb_base", "min": -0.785, "max": 0.785},
+    6: {"label": "LEFT SHOULDER PITCH", "side": "left", "name": "upper_left_shoulder_pitch_joint", "min": -math.pi, "max": math.pi},
+    7: {"label": "LEFT SHOULDER ROLL", "side": "left", "name": "upper_left_shoulder_roll_joint", "min": 0.0, "max": 2.20},
+    8: {"label": "LEFT ELBOW", "side": "left", "name": "upper_left_elbow_joint", "min": -0.0872, "max": 2.35},
+    9: {"label": "LEFT WRIST", "side": "left", "name": "upper_left_wrist_joint", "min": -1.57, "max": 1.57},
+    10: {"label": "LEFT THUMB BASE", "side": "left", "name": "upper_left_thumb_base", "min": -0.785, "max": 0.785},
+}
 
 
 def _yaw_from_quaternion(quaternion):
@@ -136,6 +150,12 @@ class DiabloWebNode(Node):
             "ros2 launch diablo_web_interface mapping.launch.py enable_wheel_odom:=false scan_topic:=/scan",
         )
         self.declare_parameter("maps_dir", "")
+        self.declare_parameter(
+            "left_arm_trajectory_topic", "/left_arm_controller/joint_trajectory"
+        )
+        self.declare_parameter(
+            "right_arm_trajectory_topic", "/right_arm_controller/joint_trajectory"
+        )
 
         self.manual_cmd_topic = str(self.get_parameter("manual_cmd_topic").value)
         self.control_mode_topic = str(self.get_parameter("control_mode_topic").value)
@@ -184,6 +204,12 @@ class DiabloWebNode(Node):
         self.mapping_start_command = str(
             self.get_parameter("mapping_start_command").value
         ).strip()
+        self.left_arm_trajectory_topic = str(
+            self.get_parameter("left_arm_trajectory_topic").value
+        ).strip()
+        self.right_arm_trajectory_topic = str(
+            self.get_parameter("right_arm_trajectory_topic").value
+        ).strip()
         configured_maps_dir = str(self.get_parameter("maps_dir").value).strip()
         if configured_maps_dir:
             self.maps_dir = Path(configured_maps_dir).expanduser()
@@ -212,6 +238,7 @@ class DiabloWebNode(Node):
             "imu": None,
             "motors": None,
         }
+        self._joint_positions = {}
         self._control_mode = "manual"
 
         self._nav_goal_lock = threading.RLock()
@@ -229,6 +256,14 @@ class DiabloWebNode(Node):
         self._initial_pose_publisher = self.create_publisher(
             PoseWithCovarianceStamped, "/initialpose", 10
         )
+        self._joint_publishers = {
+            "left": self.create_publisher(
+                JointTrajectory, self.left_arm_trajectory_topic, 10
+            ),
+            "right": self.create_publisher(
+                JointTrajectory, self.right_arm_trajectory_topic, 10
+            ),
+        }
         self._reset_odom_client = self.create_client(Trigger, "/diablo/reset_odom")
         self._reset_encoder_client = (
             self.create_client(Trigger, self.reset_encoder_service)
@@ -460,8 +495,12 @@ class DiabloWebNode(Node):
                 "right_leg_length": float(message.right_leg_length),
             }
 
-    def _joint_state_callback(self, _message: JointState):
+    def _joint_state_callback(self, message: JointState):
         self._hardware.mark_message("dynamixel")
+        with self._lock:
+            for name, position in zip(message.name, message.position):
+                if math.isfinite(float(position)):
+                    self._joint_positions[str(name)] = float(position)
 
     def _update_tf_pose(self):
         try:
@@ -501,6 +540,8 @@ class DiabloWebNode(Node):
                 "control_mode": self._control_mode,
                 "nav_goal": self.get_nav_goal_status(),
                 "hardware": self._hardware.snapshot(),
+                "processes": self._hardware.process_snapshots(),
+                "joints": self.joint_status(),
                 "mapping": self.mapping_status(),
                 "versions": versions,
             }
@@ -698,6 +739,65 @@ class DiabloWebNode(Node):
             "message": "Wheel encoder reference reset requested",
         }
 
+    def joint_status(self):
+        """Return the ten arm joints exposed by the full-body controllers."""
+        with self._lock:
+            status = []
+            for motor_id, definition in JOINT_DEFINITIONS.items():
+                current = self._joint_positions.get(definition["name"])
+                status.append(
+                    {
+                        "id": motor_id,
+                        "label": definition["label"],
+                        "side": definition["side"],
+                        "name": definition["name"],
+                        "min": definition["min"],
+                        "max": definition["max"],
+                        "position": current,
+                        "available": current is not None,
+                    }
+                )
+            return status
+
+    def set_joint_position(self, motor_id, position):
+        """Send one validated joint target to the corresponding arm controller."""
+        try:
+            clean_id = int(motor_id)
+            target = float(position)
+        except (TypeError, ValueError) as error:
+            raise ValueError(f"Invalid Dynamixel target: {error}")
+        if clean_id not in JOINT_DEFINITIONS:
+            raise ValueError("Only Dynamixel IDs 1 through 10 are web-controlled")
+        if not math.isfinite(target):
+            raise ValueError("Joint position must be finite")
+        if not self.hardware_ready():
+            raise RuntimeError(
+                "Joint motion is locked. Start Hardware and wait for feedback first."
+            )
+
+        definition = JOINT_DEFINITIONS[clean_id]
+        with self._lock:
+            if definition["name"] not in self._joint_positions:
+                raise RuntimeError(
+                    f"Dynamixel ID {clean_id} has no /joint_states feedback yet"
+                )
+        target = max(definition["min"], min(definition["max"], target))
+        message = JointTrajectory()
+        message.joint_names = [definition["name"]]
+        point = JointTrajectoryPoint()
+        point.positions = [target]
+        point.time_from_start.sec = 0
+        point.time_from_start.nanosec = 500_000_000
+        message.points = [point]
+        self._joint_publishers[definition["side"]].publish(message)
+        return {
+            "requested": True,
+            "id": clean_id,
+            "joint": definition["name"],
+            "position": target,
+            "message": f"{definition['label']} target sent",
+        }
+
     def start_lidar(self):
         """Start LiDAR using a configured command or Empty/Trigger service."""
         if self.lidar_start_command:
@@ -769,9 +869,64 @@ class DiabloWebNode(Node):
         try:
             self.publish_stop()
         except Exception as error:
-            self.get_logger().warning("Could not stop robot before mapping shutdown: %s", error)
+            self.get_logger().warning(
+                f"Could not stop robot before mapping shutdown: {error}"
+            )
         result = self._hardware.stop_process("mapping")
         return {**result, "component": "mapping", "mapping": self.mapping_status()}
+
+    def stop_localization(self):
+        try:
+            self.publish_stop()
+        except Exception as error:
+            self.get_logger().warning(
+                f"Could not stop robot before localization shutdown: {error}"
+            )
+        result = self._hardware.stop_process("localization")
+        return {
+            **result,
+            "component": "localization",
+            "process": self._hardware.process_status("localization"),
+        }
+
+    def stop_navigation(self):
+        cancel = self.cancel_nav_goal()
+        try:
+            self.publish_stop()
+        except Exception as error:
+            self.get_logger().warning(
+                f"Could not stop robot before navigation shutdown: {error}"
+            )
+        result = self._hardware.stop_process("navigation")
+        return {
+            **result,
+            "component": "navigation",
+            "cancel": cancel,
+            "process": self._hardware.process_status("navigation"),
+        }
+
+    def stop_hardware(self):
+        """Stop dependent web launches before stopping web-owned hardware."""
+        stopped = {}
+        for component, stopper in (
+            ("mapping", self.stop_mapping),
+            ("navigation", self.stop_navigation),
+            ("localization", self.stop_localization),
+        ):
+            if self._hardware.process_status(component)["active"]:
+                stopped[component] = stopper()
+        try:
+            self.publish_stop()
+        except Exception as error:
+            self.get_logger().warning(f"Could not publish hardware stop: {error}")
+        hardware = self._hardware.stop_hardware()
+        return {
+            "requested": bool(hardware.get("requested") or stopped),
+            "message": "Hardware and dependent web launches stopped",
+            "hardware": self._hardware.snapshot(),
+            "stopped": stopped,
+            "results": hardware.get("results", {}),
+        }
 
     def mapping_status(self):
         status = self._hardware.process_status("mapping")
@@ -926,7 +1081,7 @@ class DiabloWebNode(Node):
             topic_names = [name for name, _types in self.get_topic_names_and_types()]
             self._hardware.update(topic_names)
         except Exception as error:
-            self.get_logger().debug("Hardware status refresh failed: %s", error)
+            self.get_logger().debug(f"Hardware status refresh failed: {error}")
 
     def destroy_node(self):
         try:
@@ -936,7 +1091,7 @@ class DiabloWebNode(Node):
         try:
             self._hardware.stop()
         except Exception as error:
-            self.get_logger().warning("Could not stop HMI hardware processes: %s", error)
+            self.get_logger().warning(f"Could not stop HMI hardware processes: {error}")
         return super().destroy_node()
 
     # -------------------- Internal helpers --------------------

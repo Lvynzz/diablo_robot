@@ -72,7 +72,7 @@ function App() {
     if (packet.type === "goal_pose_ack") addEvent(packet.accepted ? "Nav2 goal submitted." : String(packet.message || "Nav2 goal rejected."), packet.accepted ? "success" : "error");
     if (packet.type === "goal_cancel_ack") addEvent(String(packet.message || "Navigation cancel requested."), "warn");
     if (packet.type === "initial_pose_ack") addEvent("Initial pose acknowledged by backend.", "success");
-    if (["reset_odom_ack", "reset_encoder_ack", "start_lidar_ack", "start_hardware_ack", "start_localization_ack", "start_navigation_ack", "start_mapping_ack", "stop_mapping_ack", "save_map_ack"].includes(String(packet.type))) {
+    if (["reset_odom_ack", "reset_encoder_ack", "start_lidar_ack", "start_hardware_ack", "stop_hardware_ack", "start_localization_ack", "stop_localization_ack", "start_navigation_ack", "stop_navigation_ack", "start_mapping_ack", "stop_mapping_ack", "joint_position_ack", "save_map_ack"].includes(String(packet.type))) {
       const accepted = packet.requested !== false;
       const saved = packet.type === "save_map_ack" ? packet.saved !== false : true;
       addEvent(String(packet.message || "Control request acknowledged."), accepted && saved ? "success" : "warn");

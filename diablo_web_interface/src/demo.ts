@@ -121,6 +121,23 @@ export const demoState: DiabloState = {
     ],
     updated: Date.now() / 1000,
   },
+  processes: {
+    localization: { name: "localization", state: "idle", active: false, pid: null, message: "Not running" },
+    navigation: { name: "navigation", state: "idle", active: false, pid: null, message: "Not running" },
+    mapping: { name: "mapping", state: "idle", active: false, pid: null, message: "Not running" },
+  },
+  joints: ([
+    [1, "RIGHT SHOULDER PITCH", "right", "upper_right_shoulder_pitch_joint", -Math.PI, Math.PI],
+    [2, "RIGHT SHOULDER ROLL", "right", "upper_right_shoulder_roll_joint", 0, 2.2],
+    [3, "RIGHT ELBOW", "right", "upper_right_elbow_joint", -0.0872, 2.35],
+    [4, "RIGHT WRIST", "right", "upper_right_wrist_joint", -1.57, 1.57],
+    [5, "RIGHT THUMB BASE", "right", "upper_right_thumb_base", -0.785, 0.785],
+    [6, "LEFT SHOULDER PITCH", "left", "upper_left_shoulder_pitch_joint", -Math.PI, Math.PI],
+    [7, "LEFT SHOULDER ROLL", "left", "upper_left_shoulder_roll_joint", 0, 2.2],
+    [8, "LEFT ELBOW", "left", "upper_left_elbow_joint", -0.0872, 2.35],
+    [9, "LEFT WRIST", "left", "upper_left_wrist_joint", -1.57, 1.57],
+    [10, "LEFT THUMB BASE", "left", "upper_left_thumb_base", -0.785, 0.785],
+  ] as const).map(([id, label, side, name, min, max]) => ({ id, label, side, name, min, max, position: 0, available: false })),
   mapping: {
     state: "idle",
     active: false,

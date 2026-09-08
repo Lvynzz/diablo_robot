@@ -342,6 +342,15 @@ code, kbd, time { font-family: var(--mono); }
 .theme-light .keybind-row small { grid-column: 1 / -1; overflow: hidden; color: var(--t3); font: 7px var(--mono); text-overflow: ellipsis; white-space: nowrap; }
 .theme-light .keybind-note { margin: 8px 0 0; color: var(--t3); font: 8px/1.4 var(--mono); }
 .theme-light .keybind-note kbd { padding: 2px 4px; border: 1px solid #a9bfce; border-radius: 2px; color: var(--blue); background: #edf4f8; }
+.joint-slider-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 18px; }
+.joint-slider-row { display: flex; flex-direction: column; gap: 5px; padding: 8px 0; border-bottom: 1px solid #d7e1e8; color: var(--t2); font: 8px var(--mono); }
+.joint-slider-heading { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 7px; align-items: center; }
+.joint-slider-heading b { color: var(--orange); }
+.joint-slider-heading strong { overflow: hidden; color: var(--t1); font-size: 8px; text-overflow: ellipsis; white-space: nowrap; }
+.joint-slider-heading em { color: var(--blue); font-style: normal; }
+.joint-slider-row input { width: 100%; accent-color: var(--orange); }
+.joint-slider-row small { overflow: hidden; color: var(--t3); font-size: 7px; text-overflow: ellipsis; white-space: nowrap; }
+.joint-slider-row input:disabled { cursor: not-allowed; opacity: .45; }
 
 @media (max-width: 1250px) {
   .theme-light .drive-main-grid { grid-template-columns: 1fr; }
@@ -349,7 +358,7 @@ code, kbd, time { font-family: var(--mono); }
 }
 
 @media (max-width: 640px) {
-  .theme-light .position-summary, .theme-light .motion-control-grid, .theme-light .drive-secondary-grid { grid-template-columns: 1fr; }
+  .theme-light .position-summary, .theme-light .motion-control-grid, .theme-light .drive-secondary-grid, .joint-slider-grid { grid-template-columns: 1fr; }
   .theme-light .motion-action-row, .theme-light .keybind-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .theme-light .drive-secondary-grid { display: grid; }
 }
@@ -378,6 +387,25 @@ code, kbd, time { font-family: var(--mono); }
 .theme-light .navigation-view .panel { border-radius: 7px; }
 .theme-light .navigation-view .panel-body { padding: 13px 14px 14px; }
 .theme-light .navigation-map-actions { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+
+/* Launch toggles keep the existing HMI cards, but add the AMR-style
+   start/stop state and confirmation flow. */
+.legacy-nav-start-grid, .legacy-hardware-button, .legacy-mapping-buttons { display: none !important; }
+.launch-toggle { display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; }
+.launch-toggle b { color: var(--t3); font-size: 7px; }
+.launch-toggle.is-active { color: #fff !important; border-color: var(--green) !important; background: var(--green) !important; }
+.launch-toggle.is-active b { color: rgba(255,255,255,.78); }
+.launch-toggle.compact { min-height: 28px; margin-top: 9px; padding: 0 8px; border: 1px solid #b5c7d5; border-radius: 3px; color: var(--t2); background: #f9fbfc; font: 700 8px var(--mono); }
+.launch-toggle.compact:hover { color: var(--blue); border-color: var(--blue); background: #e7f1f8; }
+.launch-toggle.compact.is-active { color: #fff; }
+.confirm-backdrop { position: fixed; z-index: 1000; inset: 0; display: grid; place-items: center; padding: 18px; background: rgba(24,42,55,.36); }
+.confirm-modal { width: min(420px, 100%); padding: 18px; border: 1px solid #9cb6ca; border-radius: 6px; background: #f7fbfd; box-shadow: 0 16px 48px rgba(28,58,78,.26); }
+.confirm-modal h2 { margin: 7px 0 9px; color: var(--t1); font: 800 15px var(--mono); letter-spacing: .04em; }
+.confirm-modal p { margin: 0; color: var(--t2); font: 10px/1.5 var(--mono); }
+.confirm-actions { display: flex; justify-content: flex-end; gap: 7px; margin-top: 17px; }
+.confirm-actions button { min-height: 29px; padding: 0 12px; border: 1px solid #b5c7d5; border-radius: 3px; color: var(--t2); background: #fff; font: 700 8px var(--mono); }
+.confirm-actions button:hover { color: var(--blue); border-color: var(--blue); }
+.confirm-actions .danger-action { color: var(--red); border-color: #cf7777; background: #fbeeee; }
 .theme-light .map-choice { display: inline-flex; align-items: center; gap: 6px; color: var(--t3); font: 700 7px var(--mono); letter-spacing: .08em; }
 .theme-light .map-choice select { height: 24px; max-width: 160px; padding: 0 6px; border: 1px solid #a5bacb; border-radius: 3px; outline: none; color: var(--blue); background: #edf4f8; font: 700 8px var(--mono); }
 .theme-light .navigation-map-layout { grid-template-columns: minmax(0, 1fr) 210px; gap: 10px; }

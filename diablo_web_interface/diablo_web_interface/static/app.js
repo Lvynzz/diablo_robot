@@ -4,10 +4,26 @@
   const $ = (id) => document.getElementById(id);
   let socket = null;
   let retryTimer = null;
-  let state = { pose: null, map: null, hardware: { ready: false, all_ready: false, starting: false, components: [] }, mapping: { active: false, state: "idle", message: "" } };
+  let state = {
+    pose: null,
+    map: null,
+    hardware: { ready: false, all_ready: false, starting: false, components: [] },
+    processes: {},
+    joints: [],
+    mapping: { active: false, state: "idle", message: "" },
+  };
   const keys = new Set();
   let teleopTimer = null;
   let topicSocket = null;
+  let pendingStop = null;
+  let jointMetaSignature = "";
+
+  const launchDefinitions = {
+    hardware: { label: "HARDWARE", start: { type: "start_hardware" }, stop: { type: "stop_hardware" }, startPath: "/api/hardware/start", stopPath: "/api/hardware/stop" },
+    localization: { label: "LOCALIZATION", start: { type: "start_localization" }, stop: { type: "stop_localization" }, startPath: "/api/navigation/start-localization", stopPath: "/api/navigation/stop-localization" },
+    navigation: { label: "NAVIGATION", start: { type: "start_navigation" }, stop: { type: "stop_navigation" }, startPath: "/api/navigation/start", stopPath: "/api/navigation/stop" },
+    mapping: { label: "MAPPING", start: { type: "start_mapping" }, stop: { type: "stop_mapping" }, startPath: "/api/mapping/start", stopPath: "/api/mapping/stop" },
+  };
 
   function log(message, kind = "info") {
     const row = document.createElement("div");
@@ -27,6 +43,73 @@
     return fetch(fallbackPath, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) })
       .then((response) => response.ok)
       .catch(() => false);
+  }
+
+  function processActive(name) {
+    if (name === "mapping" && state.mapping?.active) return true;
+    return Boolean(state.processes?.[name]?.active);
+  }
+
+  function componentActive(name) {
+    if (name === "hardware") {
+      const hardware = state.hardware || {};
+      return Boolean(hardware.ready || hardware.starting || hardware.all_ready);
+    }
+    return processActive(name);
+  }
+
+  function componentStatus(name) {
+    if (name === "hardware") {
+      const hardware = state.hardware || {};
+      if (hardware.all_ready) return "ALL READY";
+      if (hardware.ready) return "READY";
+      if (hardware.starting) return "STARTING";
+      return "OFFLINE";
+    }
+    if (name === "mapping" && state.mapping?.active) return "RUNNING";
+    return String(state.processes?.[name]?.state || "idle").replaceAll("_", " ").toUpperCase();
+  }
+
+  function closeConfirmation() {
+    pendingStop = null;
+    $("confirm-modal").hidden = true;
+  }
+
+  function openConfirmation(name) {
+    const definition = launchDefinitions[name];
+    if (!definition) return;
+    pendingStop = name;
+    const dependencies = name === "hardware"
+      ? ["mapping", "navigation", "localization"].filter(componentActive).map((item) => launchDefinitions[item].label)
+      : [];
+    $("confirm-title").textContent = `OFF ${definition.label}?`;
+    $("confirm-message").textContent = dependencies.length
+      ? `Hardware OFF akan menghentikan ${dependencies.join(", ")} lebih dulu, lalu mengirim command stop.`
+      : `Tekan IYA untuk menghentikan ${definition.label}. Tekan TIDAK untuk membatalkan.`;
+    $("confirm-modal").hidden = false;
+  }
+
+  function requestLaunch(name) {
+    const definition = launchDefinitions[name];
+    if (!definition) return;
+    if (componentActive(name)) {
+      openConfirmation(name);
+      return;
+    }
+    command(definition.start, definition.startPath).then((accepted) => {
+      log(`${definition.label} startup requested.`, accepted ? "success" : "error");
+    });
+  }
+
+  function stopConfirmedComponent() {
+    const name = pendingStop;
+    const definition = launchDefinitions[name];
+    closeConfirmation();
+    if (!definition) return;
+    stopTeleop();
+    command(definition.stop, definition.stopPath).then((accepted) => {
+      log(`${definition.label} stop requested.`, accepted ? "warn" : "error");
+    });
   }
 
   function connect() {
@@ -55,7 +138,7 @@
     const hardware = state.hardware || {};
     const mapping = state.mapping || {};
     const allReady = Boolean(hardware.all_ready);
-    const active = Boolean(mapping.active);
+    const active = Boolean(mapping.active || processActive("mapping"));
     $("mapping-dot").className = active ? "online" : "";
     $("mapping-text").textContent = active ? "MAPPING ACTIVE" : "MAPPING IDLE";
     $("mapping-state").textContent = String(mapping.state || "idle").toUpperCase();
@@ -70,8 +153,21 @@
       $(element).textContent = `● ${label} · ${item ? item.state.replace("_", " ").toUpperCase() : "OFFLINE"}`;
       $(element).className = item && item.state === "ready" ? "ready" : item && item.state === "error" ? "error" : "";
     });
-    $("start-hardware").disabled = allReady || Boolean(hardware.starting);
-    $("start-hardware").textContent = allReady ? "HARDWARE READY" : hardware.starting ? "STARTING…" : "ON HARDWARE";
+    const hardwareActive = componentActive("hardware");
+    const hardwareButton = $("start-hardware");
+    hardwareButton.disabled = false;
+    hardwareButton.classList.toggle("is-active", hardwareActive);
+    hardwareButton.textContent = hardwareActive ? `OFF HARDWARE · ${componentStatus("hardware")}` : "ON HARDWARE";
+    ["localization", "navigation", "mapping"].forEach((name) => {
+      const button = $(`launch-${name}`);
+      if (!button) return;
+      const running = componentActive(name);
+      const definition = launchDefinitions[name];
+      button.classList.toggle("is-active", running);
+      button.querySelector("span").textContent = running ? `OFF ${definition.label}` : `ON ${definition.label}`;
+      button.querySelector("b").textContent = componentStatus(name);
+      button.disabled = name === "mapping" && !running && !allReady;
+    });
     $("start-mapping").disabled = !allReady || active;
     $("stop-mapping").disabled = !active;
     $("save-map").disabled = !active;
@@ -85,6 +181,66 @@
     $("map-empty").style.display = grid ? "none" : "flex";
     $("map-meta").textContent = grid ? `${grid.width} × ${grid.height} · ${Number(grid.resolution).toFixed(3)} m · ${grid.frame_id || "map"}` : "Menunggu /map";
     drawMap();
+    renderJoints();
+  }
+
+  function renderJoints() {
+    const container = $("joint-sliders");
+    if (!container) return;
+    const joints = Array.isArray(state.joints) ? state.joints : [];
+    const signature = joints.map((joint) => `${joint.id}:${joint.name}:${joint.min}:${joint.max}`).join("|");
+    if (signature !== jointMetaSignature) {
+      jointMetaSignature = signature;
+      container.innerHTML = "";
+      if (!joints.length) {
+        container.innerHTML = '<p class="joint-empty">Menunggu /joint_states. Slider tidak mengirim command saat halaman dibuka.</p>';
+      } else {
+        joints.forEach((joint) => {
+          const row = document.createElement("label");
+          row.className = "joint-slider-row";
+          const heading = document.createElement("span");
+          heading.className = "joint-slider-heading";
+          heading.innerHTML = `<b>ID ${joint.id}</b><strong></strong><em></em>`;
+          heading.querySelector("strong").textContent = joint.label;
+          const input = document.createElement("input");
+          input.type = "range";
+          input.min = joint.min;
+          input.max = joint.max;
+          input.step = "0.01";
+          input.value = String((Number(joint.min) + Number(joint.max)) / 2);
+          input.dataset.lastSent = "";
+          input.dataset.jointId = String(joint.id);
+          const detail = document.createElement("small");
+          detail.textContent = `${joint.name} · WAITING FOR FEEDBACK`;
+          const updateValue = () => { heading.querySelector("em").textContent = `${Number(input.value).toFixed(3)} rad`; };
+          const commit = () => {
+            if (input.disabled || input.dataset.lastSent === input.value) return;
+            input.dataset.lastSent = input.value;
+            const id = Number(input.dataset.jointId);
+            command({ type: "joint_position", id, position: Number(input.value) }, `/api/joints/${id}/position`).then((accepted) => {
+              log(accepted ? `Dynamixel ID ${id} target sent.` : `Dynamixel ID ${id} command failed.`, accepted ? "success" : "error");
+            });
+          };
+          input.addEventListener("input", updateValue);
+          input.addEventListener("pointerup", commit);
+          input.addEventListener("touchend", commit);
+          input.addEventListener("keyup", commit);
+          row.append(heading, input, detail);
+          container.appendChild(row);
+          updateValue();
+        });
+      }
+    }
+    const hardwareReady = Boolean(state.hardware?.all_ready);
+    joints.forEach((joint) => {
+      const input = container.querySelector(`input[data-joint-id="${joint.id}"]`);
+      if (!input) return;
+      const available = Boolean(joint.available);
+      input.disabled = !hardwareReady || !available;
+      const detail = input.parentElement?.querySelector("small");
+      if (detail) detail.textContent = `${joint.name} · ${available ? "READY" : "WAITING FOR FEEDBACK"}`;
+    });
+    $("joint-status").textContent = hardwareReady ? "JOINTS READY" : "START HARDWARE + ARM FEEDBACK";
   }
 
   function drawMap() {
@@ -175,10 +331,17 @@
 
   function initControls() {
     $("stop-button").addEventListener("click", () => { stopTeleop(); command({ type: "stop" }, "/api/control/stop"); log("STOP command sent.", "warn"); });
-    $("start-hardware").addEventListener("click", () => { command({ type: "start_hardware" }, "/api/hardware/start"); log("Hardware startup requested."); });
-    $("start-mapping").addEventListener("click", () => { command({ type: "start_mapping" }, "/api/mapping/start"); log("Mapping startup requested."); });
+    $("start-hardware").addEventListener("click", () => requestLaunch("hardware"));
+    $("launch-localization").addEventListener("click", () => requestLaunch("localization"));
+    $("launch-navigation").addEventListener("click", () => requestLaunch("navigation"));
+    $("launch-mapping").addEventListener("click", () => requestLaunch("mapping"));
+    $("start-mapping").addEventListener("click", () => requestLaunch("mapping"));
     $("stop-mapping").addEventListener("click", () => { stopTeleop(); command({ type: "stop_mapping" }, "/api/mapping/stop"); log("Mapping stop requested.", "warn"); });
     $("save-map").addEventListener("click", () => { const name = $("map-name").value.trim(); if (!name) { log("Masukkan nama map terlebih dahulu.", "warn"); return; } command({ type: "save_map", name }, "/api/mapping/save"); });
+    $("confirm-no").addEventListener("click", closeConfirmation);
+    $("confirm-yes").addEventListener("click", stopConfirmedComponent);
+    $("confirm-modal").addEventListener("click", (event) => { if (event.target === $("confirm-modal")) closeConfirmation(); });
+    window.addEventListener("keydown", (event) => { if (event.key === "Escape" && !$("confirm-modal").hidden) closeConfirmation(); });
     window.addEventListener("resize", drawMap);
   }
 

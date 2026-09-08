@@ -136,6 +136,8 @@ async def config():
         "localization_start_command": node.localization_start_command,
         "navigation_start_command": node.navigation_start_command,
         "mapping_start_command": node.mapping_start_command,
+        "left_arm_trajectory_topic": node.left_arm_trajectory_topic,
+        "right_arm_trajectory_topic": node.right_arm_trajectory_topic,
         "maps_dir": str(node.maps_dir),
         "limits": {
             "forward": node.max_forward,
@@ -159,6 +161,8 @@ async def status():
         "wheel_trajectory": snapshot.get("wheel_trajectory"),
         "telemetry": snapshot.get("telemetry"),
         "hardware": snapshot.get("hardware"),
+        "processes": snapshot.get("processes"),
+        "joints": snapshot.get("joints"),
         "mapping": snapshot.get("mapping"),
         "navigation": node.get_nav_goal_status(),
     }
@@ -238,15 +242,32 @@ async def start_hardware():
     return _require_node().start_hardware()
 
 
+@app.post("/api/hardware/stop")
+@app.post("/api/control/stop_hardware")
+async def stop_hardware():
+    return _require_node().stop_hardware()
+
+
 @app.post("/api/navigation/start-localization")
 @app.post("/api/localization/start")
 async def start_localization():
     return _require_node().start_localization()
 
 
+@app.post("/api/navigation/stop-localization")
+@app.post("/api/localization/stop")
+async def stop_localization():
+    return _require_node().stop_localization()
+
+
 @app.post("/api/navigation/start")
 async def start_navigation():
     return _require_node().start_navigation()
+
+
+@app.post("/api/navigation/stop")
+async def stop_navigation():
+    return _require_node().stop_navigation()
 
 
 @app.post("/api/mapping/start")
@@ -257,6 +278,17 @@ async def start_mapping():
 @app.post("/api/mapping/stop")
 async def stop_mapping():
     return _require_node().stop_mapping()
+
+
+@app.post("/api/joints/{motor_id}/position")
+async def set_joint_position(motor_id: int, payload: dict):
+    node = _require_node()
+    try:
+        return node.set_joint_position(motor_id, _number(payload, "position"))
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error))
+    except RuntimeError as error:
+        raise HTTPException(status_code=409, detail=str(error))
 
 
 @app.post("/api/mapping/save")
@@ -367,18 +399,33 @@ async def _handle_ws_command(websocket: WebSocket, raw_message: str):
         await websocket.send_json({"type": "start_lidar_ack", **node.start_lidar()})
     elif command_type in ("start_hardware", "hardware_start"):
         await websocket.send_json({"type": "start_hardware_ack", **node.start_hardware()})
+    elif command_type in ("stop_hardware", "hardware_stop"):
+        await websocket.send_json({"type": "stop_hardware_ack", **node.stop_hardware()})
     elif command_type in ("start_localization", "localization_start"):
         await websocket.send_json(
             {"type": "start_localization_ack", **node.start_localization()}
+        )
+    elif command_type in ("stop_localization", "localization_stop"):
+        await websocket.send_json(
+            {"type": "stop_localization_ack", **node.stop_localization()}
         )
     elif command_type in ("start_navigation", "navigation_start"):
         await websocket.send_json(
             {"type": "start_navigation_ack", **node.start_navigation()}
         )
+    elif command_type in ("stop_navigation", "navigation_stop"):
+        await websocket.send_json(
+            {"type": "stop_navigation_ack", **node.stop_navigation()}
+        )
     elif command_type in ("start_mapping", "mapping_start"):
         await websocket.send_json({"type": "start_mapping_ack", **node.start_mapping()})
     elif command_type in ("stop_mapping", "mapping_stop"):
         await websocket.send_json({"type": "stop_mapping_ack", **node.stop_mapping()})
+    elif command_type in ("joint_position", "set_joint_position"):
+        result = node.set_joint_position(
+            payload.get("id"), _number(payload, "position")
+        )
+        await websocket.send_json({"type": "joint_position_ack", **result})
     elif command_type in ("save_map", "mapping_save"):
         try:
             result = await asyncio.to_thread(node.save_map, str(payload.get("name", "")))

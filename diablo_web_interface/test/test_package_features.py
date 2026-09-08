@@ -82,6 +82,11 @@ def test_web_ui_has_mapping_teleop_and_topic_echo_panels():
     assert "SAVE MAP" in mapping
     assert 'type: "save_map"' in mapping
     assert 'type: "stop_mapping"' in mapping
+    assert 'LaunchToggleButton' in mapping
+    assert 'LaunchControls' in read_text("src/components/LaunchControls.tsx")
+    assert 'type: "stop_hardware"' in read_text("src/components/LaunchControls.tsx")
+    assert 'type: "joint_position"' in drive
+    assert 'Dynamixel Joint Control' in drive
     assert "mapping.active" in mapping
     assert "defaultCollapsed" in panel
     assert "onToggleCollapse" in sidebar
@@ -102,14 +107,30 @@ def test_web_ui_has_mapping_teleop_and_topic_echo_panels():
     assert '"/api/mapping/start"' in web_node
     assert '"/api/mapping/save"' in web_node
     assert '"/api/mapping/stop"' in web_node
+    assert '"/api/hardware/stop"' in web_node
+    assert '"/api/navigation/stop-localization"' in web_node
+    assert '"/api/navigation/stop"' in web_node
+    assert '"/api/joints/{motor_id}/position"' in web_node
     assert "class HardwareManager" in hardware_manager
+    assert "def stop_hardware" in hardware_manager
+    assert "JOINT_DEFINITIONS" in ros_node
+    assert "Only Dynamixel IDs 1 through 10" in ros_node
+    assert "trajectory_msgs" in read_text("package.xml")
     assert 'data-tab="mapping"' in html
     assert 'data-tab="topics"' in html
     assert 'data-tab="settings"' in html
     assert 'id="map-canvas"' in html
     assert 'id="topic-cards"' in html
+    assert 'id="launch-localization"' in html
+    assert 'id="launch-navigation"' in html
+    assert 'id="launch-mapping"' in html
+    assert 'id="confirm-modal"' in html
+    assert 'id="joint-sliders"' in html
     assert 'type: "save_map"' in javascript
     assert 'type: "start_mapping"' in javascript
+    assert 'stop_hardware' in javascript
+    assert 'confirm-modal' in javascript
+    assert 'joint_position' in javascript
     assert 'type: "subscribe"' in javascript
     assert "start-hardware" in javascript
     assert "relative_asset.is_absolute()" in web_node

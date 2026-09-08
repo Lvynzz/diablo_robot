@@ -203,6 +203,71 @@ function WheelTelemetry({ motors }: { motors: DiabloState["telemetry"]["motors"]
   );
 }
 
+function JointSliderPanel({
+  state,
+  hardwareReady,
+  sendCommand,
+  onEvent,
+}: {
+  state: DiabloState;
+  hardwareReady: boolean;
+  sendCommand: (command: SocketCommand) => Promise<boolean>;
+  onEvent: (message: string, kind?: EventEntry["kind"]) => void;
+}) {
+  const [values, setValues] = useState<Record<number, number>>({});
+
+  useEffect(() => {
+    setValues((previous) => {
+      const next = { ...previous };
+      let changed = false;
+      state.joints.forEach((joint) => {
+        if (next[joint.id] === undefined) {
+          next[joint.id] = (joint.min + joint.max) / 2;
+          changed = true;
+        }
+      });
+      return changed ? next : previous;
+    });
+  }, [state.joints]);
+
+  const commit = async (id: number) => {
+    const value = values[id];
+    if (value === undefined) return;
+    if (!hardwareReady) {
+      onEvent("Start Hardware and wait for Dynamixel feedback first.", "warn");
+      return;
+    }
+    const accepted = await sendCommand({ type: "joint_position", id, position: value });
+    onEvent(accepted ? `Dynamixel ID ${id} target sent.` : `Dynamixel ID ${id} command failed.`, accepted ? "success" : "error");
+  };
+
+  return (
+    <div className="joint-slider-grid">
+      {state.joints.map((joint) => {
+        const value = values[joint.id] ?? (joint.min + joint.max) / 2;
+        return (
+          <label className="joint-slider-row" key={joint.id}>
+            <span className="joint-slider-heading"><b>ID {joint.id}</b><strong>{joint.label}</strong><em>{value.toFixed(3)} rad</em></span>
+            <input
+              type="range"
+              min={joint.min}
+              max={joint.max}
+              step="0.01"
+              value={value}
+              disabled={!hardwareReady || !joint.available}
+              onChange={(event) => setValues((previous) => ({ ...previous, [joint.id]: Number(event.target.value) }))}
+              onPointerUp={() => void commit(joint.id)}
+              onKeyUp={() => void commit(joint.id)}
+              title={`${joint.name} · ${joint.available ? "feedback ready" : "waiting for /joint_states"}`}
+            />
+            <small>{joint.name} · {joint.available ? "READY" : "WAITING FOR FEEDBACK"}</small>
+          </label>
+        );
+      })}
+    </div>
+  );
+}
+
 function TrajectoryMiniMap({ state }: { state: DiabloState }) {
   const map = state.map;
   const trajectory = state.wheel_trajectory || [];
@@ -474,6 +539,16 @@ export function DriveView({ state, hardwareReady, panels, sendCommand, onEvent }
           <p className="keybind-note">Official defaults include <kbd>Z</kbd> STANDING MODE and <kbd>X</kbd> CRAWLING MODE. Remapping is saved in this browser only.</p>
         </Panel>}
       </div>
+
+      {panels.motion && <Panel title="Dynamixel Joint Control" eyebrow="U2D2 // POSITION TARGETS" accent="orange" actions={<span className={`panel-chip ${state.hardware.all_ready ? "hardware-ready-chip" : "hardware-locked-chip"}`}><i className={`dot ${state.hardware.all_ready ? "green" : "amber"}`} /> {state.hardware.all_ready ? "JOINTS READY" : "START HARDWARE"}</span>}>
+        <JointSliderPanel
+          state={state}
+          hardwareReady={hardwareReady && state.hardware.all_ready}
+          sendCommand={sendCommand}
+          onEvent={onEvent}
+        />
+        <p className="keybind-note">Slider dimulai di posisi tengah dan command posisi dikirim saat slider dilepas. ID 11–12 tidak tersedia karena masih digunakan human detection.</p>
+      </Panel>}
     </div>
   );
 }

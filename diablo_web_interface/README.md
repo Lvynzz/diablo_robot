@@ -41,6 +41,19 @@ hardware, kontrol start/stop SLAM Toolbox, teleoperasi W/A/S/D, dan penyimpanan
 pasangan file `.pgm` + `.yaml`. Tombol mapping hanya dibuka setelah feedback
 motor Diablo, LiDAR dan Dynamixel diterima.
 
+Panel Navigation memakai tombol lifecycle ON/OFF untuk hardware, localization,
+navigation dan mapping. Saat komponen yang sedang aktif ditekan kembali, HMI
+meminta konfirmasi **IYA, STOP** atau **TIDAK**. Hardware OFF lebih dulu
+menghentikan mapping/navigation/localization yang dijalankan oleh HMI, mengirim
+command berhenti, lalu menghentikan process group hardware yang dibuat oleh HMI.
+Process yang dijalankan dari terminal atau systemd sengaja tidak dibunuh oleh
+tombol ini.
+
+Panel Drive juga menyediakan slider posisi Dynamixel ID 1–10. Slider dimulai di
+tengah, tidak mengirim command saat halaman dibuka, dan mengirim satu target
+`trajectory_msgs/JointTrajectory` ketika dilepas setelah `/joint_states` tersedia.
+ID 11–12 tidak ditampilkan karena dipakai untuk human detection.
+
 Untuk melihat HMI dari laptop:
 
 ```bash

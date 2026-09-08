@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type ChangeEvent, type PointerEvent } from "react";
 import { Icon } from "./Icon";
 import { EmptyState, Panel, StatCard } from "./Panel";
+import { LaunchControls } from "./LaunchControls";
 import type {
   DiabloState,
   EventEntry,
@@ -433,7 +434,8 @@ export function NavigationView({ state, hardware, panels, sendCommand, events, o
 
       {panels.controls && <Panel title="Navigation Controls" eyebrow="ROS LAUNCH CONTROL" accent="orange" actions={<span className={`panel-chip ${hardware.ready ? "hardware-ready-chip" : "hardware-locked-chip"}`}><i className={`dot ${hardware.ready ? "green" : "amber"}`} /> {hardware.ready ? "HARDWARE READY" : hardware.starting ? "STARTING" : "IDLE"}</span>}>
         <div className="hardware-status-card"><div><span>HARDWARE GATE</span><strong className={`hardware-status-${hardware.ready ? "ready" : hardware.starting ? "starting" : "idle"}`}>{hardware.ready ? "READY" : hardware.starting ? "STARTING" : "IDLE"}</strong></div><p>{hardware.message}</p><div className="hardware-components">{hardware.components.map((component) => <span className={`hardware-component state-${component.state}`} key={component.id}><i />{component.label}<b>{componentStateLabel(component.state)}</b></span>)}</div></div>
-        <div className="nav-start-grid">
+        <LaunchControls state={state} hardware={hardware} sendCommand={sendCommand} onEvent={onEvent} />
+        <div className="legacy-nav-start-grid">
           <div className="nav-start-card hardware-start-card"><div className="nav-start-card-heading"><span>HARDWARE</span><b>DIABLO + LIDAR + U2D2</b></div><small>Start Diablo ROS2 driver, configured LiDAR and Dynamixel U2D2 launch.</small><button className="primary-action" disabled={hardware.ready || hardware.starting} type="button" onClick={() => void runStartup({ type: "start_hardware" }, "Hardware startup requested.")}>{hardware.starting ? "STARTING HARDWARE…" : hardware.ready ? "HARDWARE READY" : "START HARDWARE"}</button></div>
           <div className="nav-start-card"><div className="nav-start-card-heading"><span>LOCALIZATION</span><b>AMCL</b></div><small>Start the configured AMCL/localization command.</small><button type="button" onClick={() => void runStartup({ type: "start_localization" }, "Localization startup requested.")}>START AMCL LOCAL</button></div>
           <div className="nav-start-card"><div className="nav-start-card-heading"><span>NAVIGATION</span><b>NAV2</b></div><small>Start the configured Nav2 navigation stack.</small><button type="button" onClick={() => void runStartup({ type: "start_navigation" }, "Nav2 startup requested.")}>START NAV2 (PURE)</button></div>

@@ -24,14 +24,22 @@ function restPathFor(command: SocketCommand): string | null {
       return "/api/sensors/lidar/start";
     case "start_hardware":
       return "/api/hardware/start";
+    case "stop_hardware":
+      return "/api/hardware/stop";
     case "start_localization":
       return "/api/navigation/start-localization";
+    case "stop_localization":
+      return "/api/navigation/stop-localization";
     case "start_navigation":
       return "/api/navigation/start";
+    case "stop_navigation":
+      return "/api/navigation/stop";
     case "start_mapping":
       return "/api/mapping/start";
     case "stop_mapping":
       return "/api/mapping/stop";
+    case "joint_position":
+      return `/api/joints/${command.id}/position`;
     case "save_map":
       return "/api/mapping/save";
     case "mode":

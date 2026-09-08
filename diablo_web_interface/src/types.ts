@@ -110,6 +110,25 @@ export interface MappingStatus {
   pid: number | null;
 }
 
+export interface ManagedProcessStatus {
+  name: string;
+  state: string;
+  active: boolean;
+  pid: number | null;
+  message: string;
+}
+
+export interface JointStatus {
+  id: number;
+  label: string;
+  side: "left" | "right";
+  name: string;
+  min: number;
+  max: number;
+  position: number | null;
+  available: boolean;
+}
+
 export interface DiabloState {
   type: "state";
   stamp: number;
@@ -120,6 +139,8 @@ export interface DiabloState {
   control_mode: ControlMode;
   nav_goal: NavGoalStatus;
   hardware: HardwareStatus;
+  processes: Record<string, ManagedProcessStatus>;
+  joints: JointStatus[];
   mapping: MappingStatus;
   versions: Record<string, number>;
   map: OccupancyGrid | null;
@@ -161,6 +182,8 @@ export interface WebConfig {
   localization_start_command?: string;
   navigation_start_command?: string;
   mapping_start_command?: string;
+  left_arm_trajectory_topic?: string;
+  right_arm_trajectory_topic?: string;
   limits: { forward: number; turn: number; roll: number };
 }
 
@@ -196,10 +219,14 @@ export type SocketCommand =
   | { type: "reset_encoder" }
   | { type: "start_lidar" }
   | { type: "start_hardware" }
+  | { type: "stop_hardware" }
   | { type: "start_localization" }
+  | { type: "stop_localization" }
   | { type: "start_navigation" }
+  | { type: "stop_navigation" }
   | { type: "start_mapping" }
   | { type: "stop_mapping" }
+  | { type: "joint_position"; id: number; position: number }
   | { type: "save_map"; name: string }
   | { type: "cancel_goal" }
   | { type: "mode"; mode: ControlMode }

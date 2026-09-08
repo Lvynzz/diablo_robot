@@ -256,8 +256,12 @@ class HardwareManager:
         all_ready = all(
             states.get(component) == "ready" for component in self.COMPONENTS
         )
+        # Only components required for drive/mapping contribute to the global
+        # startup gate. An optional arm bus may remain in ``waiting`` when the
+        # robot has no connected Dynamixel, without blocking SLAM readiness.
         starting = any(
-            state in ("starting", "waiting") for state in states.values()
+            states.get(component) in ("starting", "waiting")
+            for component in self.MAPPING_COMPONENTS
         )
         if all_ready:
             message = "All hardware ready: motors, LiDAR and Dynamixel feedback detected"

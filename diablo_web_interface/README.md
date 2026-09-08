@@ -149,6 +149,10 @@ READY** tetap berarti ketiga feedback, termasuk joint lengan, telah diterima.
 Odometri roda standalone dijalankan oleh web launch sehingga kegagalan U2D2
 tidak menghilangkan `/diablo/odometry`. Log startup disimpan di
 `/tmp/diablo_web_interface-{diablo,lidar,dynamixel}.log`.
+Launch yang sama menerbitkan TF statis `diablo_base_link → laser` pada pose
+LiDAR default `(x=0, y=0.08, z=0.17, yaw=π)`, sehingga SLAM tidak menunggu TF
+yang hanya tersedia saat full-body hardware aktif. Pose dapat dikalibrasi
+melalui argumen `lidar_x`, `lidar_y`, `lidar_z`, dan `lidar_yaw`.
 
 ### START MAPPING dan SAVE MAP
 

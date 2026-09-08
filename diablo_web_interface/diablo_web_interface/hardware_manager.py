@@ -443,6 +443,7 @@ class HardwareManager:
             self._status.update(
                 {
                     "ready": False,
+                    "mapping_ready": False,
                     "all_ready": False,
                     "starting": False,
                     "message": "Hardware stopped",

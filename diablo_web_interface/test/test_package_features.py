@@ -191,7 +191,9 @@ def test_intentional_hardware_stop_is_not_reported_as_process_error(monkeypatch)
     manager._started_at["diablo"] = 0.0
     monkeypatch.setattr("os.killpg", lambda _pid, _signal: None)
 
-    assert manager.stop_hardware()["requested"] is True
+    result = manager.stop_hardware()
+    assert result["requested"] is True
+    assert manager.snapshot()["mapping_ready"] is False
     manager.update([])
     component = manager.snapshot()["components"][0]
     assert component["state"] == "offline"

@@ -17,6 +17,10 @@ class HardwareManager:
     """Start configured hardware commands and expose a JSON-safe status object."""
 
     COMPONENTS = ("diablo", "lidar", "dynamixel")
+    # Arm feedback is useful when the U2D2 bus is present, but it must not
+    # prevent the mobile base and LiDAR from being used when an optional hand
+    # bus is unplugged or its probe fails.
+    OPTIONAL_COMPONENTS = ("dynamixel",)
     OPTIONAL_PROCESSES = ("localization", "navigation", "mapping")
     MAPPING_COMPONENTS = ("diablo", "lidar")
 
@@ -151,6 +155,12 @@ class HardwareManager:
             if process is not None and process.poll() is None:
                 self._set_component(component, "starting", f"Already running (PID {process.pid})")
                 return {"requested": True, "message": f"{component} start already in progress"}
+            if process is not None:
+                # A previous failed/timeout attempt must not leave a stale
+                # Popen handle or file descriptor attached to the next try.
+                self._processes.pop(component, None)
+                self._started_at.pop(component, None)
+                self._close_log(component)
             if not selected_command:
                 self._set_component(component, "not_configured", "Start command not configured")
                 return {"requested": False, "message": f"{component} start command is not configured"}
@@ -224,10 +234,16 @@ class HardwareManager:
                     if return_code is not None:
                         self._set_component(
                             component,
-                            "error",
-                            f"Process exited with code {return_code}; see hardware log",
+                            "offline" if component in self.OPTIONAL_COMPONENTS else "error",
+                            (
+                                "Optional hardware skipped after startup failure; see hardware log"
+                                if component in self.OPTIONAL_COMPONENTS
+                                else f"Process exited with code {return_code}; see hardware log"
+                            ),
                         )
                         self._close_log(component)
+                        self._processes.pop(component, None)
+                        self._started_at.pop(component, None)
                     else:
                         age = time.monotonic() - self._started_at.get(component, time.monotonic())
                         if age >= self._feedback_timeout:

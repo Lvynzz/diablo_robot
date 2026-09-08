@@ -25,6 +25,8 @@ def generate_launch_description():
         ),
         DeclareLaunchArgument("lidar_start_service", default_value="/start_motor"),
         DeclareLaunchArgument("lidar_start_service_type", default_value="empty"),
+        DeclareLaunchArgument("lidar_stop_service", default_value="/stop_motor"),
+        DeclareLaunchArgument("lidar_stop_service_type", default_value="empty"),
         DeclareLaunchArgument(
             "diablo_start_command",
             default_value=(
@@ -44,7 +46,7 @@ def generate_launch_description():
             default_value=(
                 "ros2 launch diablo_full_body_moveit_config full_body_hardware.launch.py "
                 "use_mock_hardware:=false upper_only:=true "
-                "enable_arm_hardware:=true enable_base_hardware:=false "
+                "enable_arm_hardware:=true enable_hand_hardware:=false enable_base_hardware:=false "
                 "arm_port_name:=/dev/u2d2_arm hand_port_name:=/dev/u2d2_hand "
                 "baud_rate:=1000000 start_arm_controllers:=true start_base_controller:=false "
                 "use_ekf:=false use_local_odom:=false start_move_group:=false"
@@ -93,6 +95,8 @@ def generate_launch_description():
                 "reset_encoder_service": LaunchConfiguration("reset_encoder_service"),
                 "lidar_start_service": LaunchConfiguration("lidar_start_service"),
                 "lidar_start_service_type": LaunchConfiguration("lidar_start_service_type"),
+                "lidar_stop_service": LaunchConfiguration("lidar_stop_service"),
+                "lidar_stop_service_type": LaunchConfiguration("lidar_stop_service_type"),
                 "diablo_start_command": LaunchConfiguration("diablo_start_command"),
                 "lidar_start_command": LaunchConfiguration("lidar_start_command"),
                 "dynamixel_start_command": LaunchConfiguration("dynamixel_start_command"),

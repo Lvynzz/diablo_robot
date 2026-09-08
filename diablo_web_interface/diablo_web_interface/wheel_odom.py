@@ -72,6 +72,12 @@ class DiabloWheelOdom(Node):
         self._reset_encoder_service = self.create_service(
             Trigger, "/diablo/reset_encoder", self._reset_encoder_callback
         )
+        self._reset_position_service = self.create_service(
+            Trigger, "/diablo/reset_position", self._reset_position_callback
+        )
+        self._reset_orientation_service = self.create_service(
+            Trigger, "/diablo/reset_orientation", self._reset_orientation_callback
+        )
 
         self.get_logger().info(
             f"Wheel odom: {input_topic} -> {odom_topic}, "
@@ -173,6 +179,25 @@ class DiabloWheelOdom(Node):
         self._initialized = False
         response.success = True
         response.message = "Diablo wheel encoder reference reset"
+        return response
+
+    def _reset_position_callback(self, _request, response):
+        """Set x/y to zero while preserving the current heading."""
+        self.x = 0.0
+        self.y = 0.0
+        # Re-baseline encoders so the next sample cannot recreate the old
+        # origin as a displacement.  The current yaw is intentionally kept.
+        self._initialized = False
+        response.success = True
+        response.message = "Diablo wheel odometry position reset"
+        return response
+
+    def _reset_orientation_callback(self, _request, response):
+        """Set heading to zero while preserving the current x/y position."""
+        self.yaw = 0.0
+        self._initialized = False
+        response.success = True
+        response.message = "Diablo wheel odometry orientation reset"
         return response
 
     def _absolute_wheel_angle(self, position, revolutions):

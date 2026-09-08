@@ -84,6 +84,8 @@ def test_web_ui_has_mapping_teleop_and_topic_echo_panels():
     assert 'Trajectory Map' in drive
     assert 'Keybind Legend' in drive
     assert 'RESET ENCODER' in drive
+    assert 'RESET X/Y' in drive
+    assert 'RESET HEADING' in drive
     assert 'START LIDAR' in drive
     assert 'key: "z"' in drive
     assert 'key: "x"' in drive
@@ -104,10 +106,13 @@ def test_web_ui_has_mapping_teleop_and_topic_echo_panels():
     assert "defaultCollapsed" in panel
     assert "onToggleCollapse" in sidebar
     assert '"/diablo/reset_encoder"' in ros_node
+    assert '"/diablo/reset_position"' in ros_node
+    assert '"/diablo/reset_orientation"' in ros_node
     assert '"/start_motor"' in ros_node
     assert 'DeclareLaunchArgument("lidar_start_service", default_value="/start_motor")' in web_launch
     assert 'DeclareLaunchArgument("lidar_start_service", default_value="/start_motor")' in nav2_launch
     assert 'DeclareLaunchArgument("lidar_start_service_type", default_value="empty")' in web_launch
+    assert 'DeclareLaunchArgument("lidar_stop_service", default_value="/stop_motor")' in web_launch
     assert 'DeclareLaunchArgument("lidar_start_service_type", default_value="empty")' in nav2_launch
     assert 'package="tf2_ros"' in web_launch
     assert 'DeclareLaunchArgument("publish_lidar_tf", default_value="true")' in web_launch
@@ -118,6 +123,9 @@ def test_web_ui_has_mapping_teleop_and_topic_echo_panels():
     assert "def list_maps" in ros_node
     assert 'reset_encoder' in web_node
     assert 'start_lidar' in web_node
+    assert 'reset-position' in web_node
+    assert 'reset-orientation' in web_node
+    assert 'sensors/lidar/stop' in web_node
     assert '"/api/hardware/start"' in web_node
     assert '"/api/navigation/start"' in web_node
     assert '"/api/mapping/start"' in web_node
@@ -155,6 +163,7 @@ def test_web_ui_has_mapping_teleop_and_topic_echo_panels():
     assert "/dev/rplidar" in web_launch
     assert "/dev/u2d2_arm" in web_launch
     assert "/dev/u2d2_hand" in web_launch
+    assert "enable_hand_hardware:=false" in web_launch
     assert "W A S D" in html
 
 
@@ -200,3 +209,19 @@ def test_intentional_hardware_stop_is_not_reported_as_process_error(monkeypatch)
     manager.update([])
     component = manager.snapshot()["components"][0]
     assert component["state"] == "offline"
+
+
+def test_failed_optional_dynamixel_is_skipped(monkeypatch):
+    class _Process:
+        pid = 321
+
+        def poll(self):
+            return -6
+
+    manager = HardwareManager(_Logger(), dynamixel_command="dynamixel")
+    manager._processes["dynamixel"] = _Process()
+    manager._started_at["dynamixel"] = 0.0
+    manager.update([])
+    component = next(item for item in manager.snapshot()["components"] if item["id"] == "dynamixel")
+    assert component["state"] == "offline"
+    assert "optional" in component["detail"].lower()

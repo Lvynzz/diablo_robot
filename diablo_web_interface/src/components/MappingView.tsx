@@ -154,9 +154,12 @@ export function MappingView({ state, hardware, panels, sendCommand, onEvent }: M
 
   const mappingActive = state.mapping.active;
   const mappingHardwareReady = hardware.mapping_ready;
+  // Teleoperation only needs the Diablo motor feedback.  LiDAR and SLAM are
+  // independent, so the robot can be driven immediately after hardware start.
+  const teleopReady = hardware.ready;
 
   const sendMotion = useCallback(() => {
-    if (!mappingActive || !mappingHardwareReady) return;
+    if (!teleopReady) return;
     const keys = keysRef.current;
     const forward = (keys.has("w") ? forwardSpeed : 0) - (keys.has("s") ? forwardSpeed : 0);
     const left = (keys.has("a") ? turnSpeed : 0) - (keys.has("d") ? turnSpeed : 0);
@@ -172,7 +175,7 @@ export function MappingView({ state, hardware, panels, sendCommand, onEvent }: M
       up: 1,
       pitch: 0,
     });
-  }, [mappingHardwareReady, forwardSpeed, mappingActive, sendCommand, turnSpeed]);
+  }, [forwardSpeed, sendCommand, teleopReady, turnSpeed]);
 
   const stopTeleop = useCallback(() => {
     keysRef.current.clear();
@@ -218,12 +221,12 @@ export function MappingView({ state, hardware, panels, sendCommand, onEvent }: M
   }, [sendMotion, stopTeleop]);
 
   useEffect(() => {
-    if (!mappingActive || !mappingHardwareReady) stopTeleop();
-  }, [mappingHardwareReady, mappingActive, stopTeleop]);
+    if (!teleopReady) stopTeleop();
+  }, [stopTeleop, teleopReady]);
 
   const requestHardware = async () => {
     const accepted = await sendCommand({ type: "start_hardware" });
-    onEvent(accepted ? "Hardware startup requested: Diablo, LiDAR and Dynamixel." : "Hardware startup request failed.", accepted ? "success" : "error");
+    onEvent(accepted ? "Hardware startup requested: Diablo, LiDAR and optional Dynamixel arm." : "Hardware startup request failed.", accepted ? "success" : "error");
   };
 
   const requestMapping = async () => {
@@ -267,7 +270,7 @@ export function MappingView({ state, hardware, panels, sendCommand, onEvent }: M
 
       {panels.controls && <Panel title="Mapping Controls" eyebrow="HARDWARE // SLAM // TELEOP" accent="cyan">
         <div className="hardware-status-card mapping-hardware-card">
-          <div><span>MAPPING GATE</span><strong className={mappingHardwareReady ? "hardware-status-ready" : hardware.starting ? "hardware-status-starting" : "hardware-status-idle"}>{mappingHardwareReady ? "READY" : hardware.starting ? "STARTING" : "LOCKED"}</strong></div>
+          <div><span>HARDWARE GATE</span><strong className={mappingHardwareReady || hardware.ready ? "hardware-status-ready" : hardware.starting ? "hardware-status-starting" : "hardware-status-idle"}>{mappingHardwareReady ? "MAPPING READY" : hardware.ready ? "TELEOP READY" : hardware.starting ? "STARTING" : "LOCKED"}</strong></div>
           <p>{hardware.message}</p>
           <div className="hardware-components">
             {hardware.components.map((component) => <div className={`hardware-component state-${component.state}`} key={component.id}><i /><span>{component.label}</span><b>{componentLabel(component)}</b></div>)}
@@ -303,7 +306,7 @@ export function MappingView({ state, hardware, panels, sendCommand, onEvent }: M
           <div className="mapping-teleop-settings">
             <label><span>FORWARD SPEED</span><b>{forwardSpeed.toFixed(2)} m/s</b><input type="range" min="0.05" max="0.35" step="0.01" value={forwardSpeed} onChange={(event) => setForwardSpeed(Number(event.target.value))} /></label>
             <label><span>TURN SPEED</span><b>{turnSpeed.toFixed(2)} command</b><input type="range" min="0.10" max="0.70" step="0.01" value={turnSpeed} onChange={(event) => setTurnSpeed(Number(event.target.value))} /></label>
-            <div className={`teleop-lock ${mappingActive && mappingHardwareReady ? "unlocked" : ""}`}>{mappingActive && mappingHardwareReady ? "TELEOP UNLOCKED" : "START DIABLO + LIDAR + MAPPING TO UNLOCK"}</div>
+            <div className={`teleop-lock ${teleopReady ? "unlocked" : ""}`}>{teleopReady ? "TELEOP UNLOCKED · MAPPING OPTIONAL" : "START HARDWARE TO UNLOCK TELEOP"}</div>
           </div>
         </div>
       </Panel>}

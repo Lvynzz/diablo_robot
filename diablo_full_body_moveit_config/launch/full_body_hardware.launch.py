@@ -28,6 +28,7 @@ def _launch_setup(context):
         "use_mock_hardware": LaunchConfiguration("use_mock_hardware").perform(context),
         "enable_base_hardware": LaunchConfiguration("enable_base_hardware").perform(context),
         "enable_arm_hardware": LaunchConfiguration("enable_arm_hardware").perform(context),
+        "enable_hand_hardware": LaunchConfiguration("enable_hand_hardware").perform(context),
         "upper_only": LaunchConfiguration("upper_only").perform(context),
         "arm_port_name": LaunchConfiguration("arm_port_name").perform(context),
         "hand_port_name": LaunchConfiguration("hand_port_name").perform(context),
@@ -253,6 +254,11 @@ def generate_launch_description():
             "enable_arm_hardware",
             default_value="true",
             description="Include the two Dynamixel upper-body systems",
+        ),
+        DeclareLaunchArgument(
+            "enable_hand_hardware",
+            default_value="true",
+            description="Include the optional Seed Robotics hand U2D2 system",
         ),
         DeclareLaunchArgument(
             "arm_port_name",

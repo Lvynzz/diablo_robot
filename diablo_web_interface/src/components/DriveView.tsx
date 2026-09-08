@@ -494,8 +494,9 @@ export function DriveView({ state, hardwareReady, panels, sendCommand, onEvent }
         <StatCard label="Y POSITION" value={fmt(wheelPose?.y)} unit="METERS · FILTERED ODOM" tone="blue" />
         <StatCard label="HEADING θ" value={fmtDegrees(wheelPose?.theta)} unit="DEGREES · FILTERED ODOM" tone="orange" />
         <div className="quick-actions">
-          <span>QUICK ACTIONS</span>
-          <button type="button" onClick={() => void quickRequest({ type: "reset_odom" }, "Reset odom requested.")}>RESET ODOM</button>
+          <span>POSE RESET</span>
+          <button type="button" onClick={() => void quickRequest({ type: "reset_position" }, "Reset X/Y position requested.")}>RESET X/Y</button>
+          <button type="button" onClick={() => void quickRequest({ type: "reset_orientation" }, "Reset heading requested.")}>RESET HEADING</button>
           <button type="button" onClick={() => void quickRequest({ type: "reset_encoder" }, "Reset encoder reference requested.")}>RESET ENCODER</button>
           <button type="button" onClick={() => void quickRequest({ type: "start_lidar" }, "Start LiDAR requested.")}>START LIDAR</button>
         </div>

@@ -18,10 +18,16 @@ function restPathFor(command: SocketCommand): string | null {
       return "/api/teleop/stand";
     case "reset_odom":
       return "/api/odom/reset";
+    case "reset_position":
+      return "/api/odom/reset-position";
+    case "reset_orientation":
+      return "/api/odom/reset-orientation";
     case "reset_encoder":
       return "/api/encoder/reset";
     case "start_lidar":
       return "/api/sensors/lidar/start";
+    case "stop_lidar":
+      return "/api/sensors/lidar/stop";
     case "start_hardware":
       return "/api/hardware/start";
     case "stop_hardware":

@@ -13,6 +13,7 @@
 <xacro:arg name="use_mock_hardware" default="true"/>
 <xacro:arg name="enable_base_hardware" default="true"/>
 <xacro:arg name="enable_arm_hardware" default="true"/>
+<xacro:arg name="enable_hand_hardware" default="true"/>
 <xacro:arg name="arm_port_name" default="/dev/u2d2_arm"/>
 <xacro:arg name="hand_port_name" default="/dev/u2d2_hand"/>
 <xacro:arg name="baud_rate" default="1000000"/>
@@ -1346,7 +1347,10 @@
       <xacro:diablo_dynamixel_gpio gpio_name="dxl_left_elbow" motor_id="8"/>
       </ros2_control>
 
-      <!-- U2D2-B: Seed Robotics hand actuators. -->
+      <!-- U2D2-B: Seed Robotics hand actuators.  The hand bus is optional:
+           an unavailable hand must not prevent the six arm joints from
+           publishing /joint_states. -->
+      <xacro:if value="$(arg enable_hand_hardware)">
       <ros2_control name="DiabloHandDynamixelSystem" type="system">
       <hardware>
         <plugin>dynamixel_hardware_interface/DynamixelHardware</plugin>
@@ -1396,6 +1400,7 @@
       <xacro:diablo_dynamixel_gpio gpio_name="dxl_left_wrist" motor_id="9"/>
       <xacro:diablo_dynamixel_gpio gpio_name="dxl_left_thumb" motor_id="10"/>
       </ros2_control>
+      </xacro:if>
     </xacro:if>
   </xacro:unless>
 

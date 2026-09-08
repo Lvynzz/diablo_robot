@@ -177,6 +177,7 @@ export interface WebConfig {
   map_frame: string;
   reset_encoder_service?: string;
   lidar_start_service?: string;
+  lidar_stop_service?: string;
   diablo_start_command?: string;
   lidar_start_command?: string;
   dynamixel_start_command?: string;
@@ -217,8 +218,11 @@ export type SocketCommand =
   | { type: "stop" }
   | { type: "stand"; stand: boolean }
   | { type: "reset_odom" }
+  | { type: "reset_position" }
+  | { type: "reset_orientation" }
   | { type: "reset_encoder" }
   | { type: "start_lidar" }
+  | { type: "stop_lidar" }
   | { type: "start_hardware" }
   | { type: "stop_hardware" }
   | { type: "start_localization" }

@@ -130,6 +130,7 @@ async def config():
         "map_frame": node.map_frame,
         "reset_encoder_service": node.reset_encoder_service,
         "lidar_start_service": node.lidar_start_service,
+        "lidar_stop_service": node.lidar_stop_service,
         "diablo_start_command": node.diablo_start_command,
         "lidar_start_command": node.lidar_start_command,
         "dynamixel_start_command": node.dynamixel_start_command,
@@ -224,6 +225,18 @@ async def reset_odom():
     return _require_node().reset_odom()
 
 
+@app.post("/api/odom/reset-position")
+@app.post("/api/control/reset_position")
+async def reset_position():
+    return _require_node().reset_position()
+
+
+@app.post("/api/odom/reset-orientation")
+@app.post("/api/control/reset_orientation")
+async def reset_orientation():
+    return _require_node().reset_orientation()
+
+
 @app.post("/api/encoder/reset")
 @app.post("/api/control/reset_encoder")
 async def reset_encoder():
@@ -234,6 +247,12 @@ async def reset_encoder():
 @app.post("/api/lidar/start")
 async def start_lidar():
     return _require_node().start_lidar()
+
+
+@app.post("/api/sensors/lidar/stop")
+@app.post("/api/lidar/stop")
+async def stop_lidar():
+    return _require_node().stop_lidar()
 
 
 @app.post("/api/hardware/start")
@@ -393,10 +412,16 @@ async def _handle_ws_command(websocket: WebSocket, raw_message: str):
         node.publish_stand_command(bool(payload.get("stand", True)))
     elif command_type == "reset_odom":
         await websocket.send_json({"type": "reset_odom_ack", **node.reset_odom()})
+    elif command_type in ("reset_position", "reset_xy"):
+        await websocket.send_json({"type": "reset_position_ack", **node.reset_position()})
+    elif command_type in ("reset_orientation", "reset_heading"):
+        await websocket.send_json({"type": "reset_orientation_ack", **node.reset_orientation()})
     elif command_type == "reset_encoder":
         await websocket.send_json({"type": "reset_encoder_ack", **node.reset_encoder()})
     elif command_type == "start_lidar":
         await websocket.send_json({"type": "start_lidar_ack", **node.start_lidar()})
+    elif command_type == "stop_lidar":
+        await websocket.send_json({"type": "stop_lidar_ack", **node.stop_lidar()})
     elif command_type in ("start_hardware", "hardware_start"):
         await websocket.send_json({"type": "start_hardware_ack", **node.start_hardware()})
     elif command_type in ("stop_hardware", "hardware_stop"):

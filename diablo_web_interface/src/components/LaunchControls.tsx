@@ -18,8 +18,8 @@ interface LaunchToggleButtonProps extends LaunchControlsProps {
 const LABELS: Record<LaunchComponent, { eyebrow: string; title: string; detail: string }> = {
   hardware: {
     eyebrow: "HARDWARE",
-    title: "DIABLO + LIDAR + U2D2",
-    detail: "Driver Diablo, LiDAR dan Dynamixel yang dijalankan oleh web interface.",
+    title: "DIABLO + LIDAR + ARM U2D2",
+    detail: "Driver Diablo, LiDAR dan arm Dynamixel opsional yang dijalankan oleh web interface.",
   },
   localization: {
     eyebrow: "LOCALIZATION",

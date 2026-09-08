@@ -72,7 +72,7 @@ function App() {
     if (packet.type === "goal_pose_ack") addEvent(packet.accepted ? "Nav2 goal submitted." : String(packet.message || "Nav2 goal rejected."), packet.accepted ? "success" : "error");
     if (packet.type === "goal_cancel_ack") addEvent(String(packet.message || "Navigation cancel requested."), "warn");
     if (packet.type === "initial_pose_ack") addEvent("Initial pose acknowledged by backend.", "success");
-    if (["reset_odom_ack", "reset_encoder_ack", "start_lidar_ack", "start_hardware_ack", "stop_hardware_ack", "start_localization_ack", "stop_localization_ack", "start_navigation_ack", "stop_navigation_ack", "start_mapping_ack", "stop_mapping_ack", "joint_position_ack", "save_map_ack"].includes(String(packet.type))) {
+    if (["reset_odom_ack", "reset_position_ack", "reset_orientation_ack", "reset_encoder_ack", "start_lidar_ack", "stop_lidar_ack", "start_hardware_ack", "stop_hardware_ack", "start_localization_ack", "stop_localization_ack", "start_navigation_ack", "stop_navigation_ack", "start_mapping_ack", "stop_mapping_ack", "joint_position_ack", "save_map_ack"].includes(String(packet.type))) {
       const accepted = packet.requested !== false;
       const saved = packet.type === "save_map_ack" ? packet.saved !== false : true;
       addEvent(String(packet.message || "Control request acknowledged."), accepted && saved ? "success" : "warn");
@@ -94,7 +94,7 @@ function App() {
   }, [addEvent, connection.state.nav_goal]);
 
   useEffect(() => {
-    const ready = connection.state.hardware.all_ready;
+    const ready = connection.state.hardware.ready;
     if (lastHardwareReady.current === null) {
       lastHardwareReady.current = ready;
       return;
@@ -102,10 +102,10 @@ function App() {
     if (lastHardwareReady.current === ready) return;
     lastHardwareReady.current = ready;
     addEvent(
-      ready ? "All hardware ready: mapping and teleop unlocked." : "Hardware feedback incomplete: mapping remains locked.",
+      ready ? "Diablo motor ready: teleop unlocked; mapping waits for LiDAR." : "Diablo motor feedback unavailable: teleop locked.",
       ready ? "success" : "error",
     );
-  }, [addEvent, connection.state.hardware.all_ready]);
+  }, [addEvent, connection.state.hardware.ready]);
 
   const togglePanel = (panel: PanelKey) => setPanels((previous) => ({ ...previous, [panel]: !previous[panel] }));
   const stop = () => {

@@ -29,8 +29,8 @@ dibuat, backend memakai frontend fallback di
   `diablo_web_interface/static/`.
 
 Panel Drive Control menggunakan tema HMI industrial berwarna biru-abu terang,
-sidebar pilihan panel di kiri, tiga readout posisi dari resettable wheel odometry, quick
-actions, Motion Control, wheel encoder telemetry, keybind legend, dan trajectory
+sidebar pilihan panel di kiri, tiga readout posisi dari resettable wheel odometry, tombol
+reset X/Y dan heading, quick actions, Motion Control, wheel encoder telemetry, keybind legend, dan trajectory
 map. Panel obstacle laser depan serta magnetic navigation sensor sengaja tidak
 ditampilkan pada versi ini. Setiap panel dapat ditutup dari tombol chevron di
 header; sidebar juga dapat diciutkan sehingga ikon tetap bisa dipakai untuk
@@ -39,13 +39,15 @@ berpindah panel.
 Panel Mapping menampilkan occupancy grid live dari `/map`, status tiga komponen
 hardware, kontrol start/stop SLAM Toolbox, teleoperasi W/A/S/D, dan penyimpanan
 pasangan file `.pgm` + `.yaml`. Tombol mapping hanya dibuka setelah feedback
-motor Diablo, LiDAR dan Dynamixel diterima.
+motor Diablo dan LiDAR diterima. Teleoperasi tersedia segera setelah feedback
+motor Diablo masuk; mapping tidak diperlukan untuk mengemudi.
 
 Panel Navigation memakai tombol lifecycle ON/OFF untuk hardware, localization,
 navigation dan mapping. Saat komponen yang sedang aktif ditekan kembali, HMI
 meminta konfirmasi **IYA, STOP** atau **TIDAK**. Hardware OFF lebih dulu
-menghentikan mapping/navigation/localization yang dijalankan oleh HMI, mengirim
-command berhenti, lalu menghentikan process group hardware yang dibuat oleh HMI.
+menghentikan teleoperasi dengan command nol, mencoba service stop motor LiDAR,
+menghentikan mapping/navigation/localization yang dijalankan oleh HMI, lalu
+menghentikan process group hardware yang dibuat oleh HMI.
 Process yang dijalankan dari terminal atau systemd sengaja tidak dibunuh oleh
 tombol ini.
 
@@ -98,8 +100,9 @@ dependency dipasang di laptop.
 ## Menjalankan web + mapping
 
 Jalankan web interface pada mesin ROS. Tombol **ON HARDWARE** akan menjalankan
-driver Diablo, LiDAR dan Dynamixel dengan port udev robot, lalu menunggu semua
-feedback sebelum membuka mapping dan teleoperasi:
+driver Diablo, LiDAR dan optional Dynamixel arm dengan port udev robot, lalu
+menunggu feedback motor untuk membuka teleoperasi. Mapping tetap menunggu
+feedback LiDAR:
 
 ```bash
 source ~/diablo_ws/install/setup.bash
@@ -141,7 +144,10 @@ memantau tiga feedback ROS nyata:
 
 - Diablo ROS2: `ros2 run diablo_ctrl diablo_ctrl_node --ros-args -p controller_port:=/dev/diablo_controller`.
 - LiDAR: `ros2 launch sllidar_ros2 sllidar_a2m7_launch.py serial_port:=/dev/rplidar frame_id:=laser`.
-- Dynamixel: mode upper-body `full_body_hardware.launch.py` dengan `/dev/u2d2_arm`, `/dev/u2d2_hand`, dan baudrate `1000000`.
+- Dynamixel arm: mode upper-body `full_body_hardware.launch.py` dengan `/dev/u2d2_arm`.
+  Bus hand `/dev/u2d2_hand` opsional (`enable_hand_hardware:=false`), sehingga
+  probe hand yang gagal tidak mematikan arm/base. Aktifkan eksplisit bila
+  servo hand memang terhubung.
 
 Gate mapping aktif setelah `/diablo/sensor/Motors` dan `/scan` diterima;
 Dynamixel dilaporkan terpisah dan tidak lagi memblokir SLAM. Status **ALL
@@ -199,7 +205,10 @@ Standalone `wheel_odom` mengabaikan lonjakan satu sampel di atas 1.5 radian
 revolution counter yang belum stabil saat serial driver baru hidup menggeser
 pose beberapa meter.
 
-Reset pose lokal hanya dengan sengaja. Opsi `-w 1` menunggu node reset
+Reset X/Y atau heading dapat dilakukan dari tombol di bawah readout pose.
+Service yang dipakai adalah `/diablo/reset_position` dan
+`/diablo/reset_orientation`. Reset pose lokal penuh tetap tersedia melalui
+`/diablo/reset_odom`. Opsi `-w 1` menunggu node reset
 terhubung sebelum mengirim pesan one-shot:
 
 ```bash
@@ -220,8 +229,8 @@ disimpan berada di `diablo_bringup/map` dan tidak dibuat oleh UI navigasi.
 
 Web mengirim command manual berkala. Mux menghentikan output ketika command
 terpilih diam lebih dari sekitar 0.35 detik. Tombol `STOP` mengirim command
-nol dan memaksa mode manual. Mapping hanya dapat dimulai setelah seluruh gate
-hardware siap.
+nol dan memaksa mode manual. Teleoperasi hanya memerlukan Diablo ready;
+mapping memerlukan Diablo dan LiDAR ready.
 
 Topic echo memakai dynamic ROS subscription maksimal empat topic dan membatasi
 payload tiap message supaya tidak membebani WebSocket.

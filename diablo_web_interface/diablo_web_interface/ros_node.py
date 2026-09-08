@@ -124,6 +124,8 @@ class DiabloWebNode(Node):
         self.declare_parameter("reset_encoder_service", "/diablo/reset_encoder")
         self.declare_parameter("lidar_start_service", "/start_motor")
         self.declare_parameter("lidar_start_service_type", "empty")
+        self.declare_parameter("lidar_stop_service", "/stop_motor")
+        self.declare_parameter("lidar_stop_service_type", "empty")
         self.declare_parameter(
             "diablo_start_command",
             "ros2 run diablo_ctrl diablo_ctrl_node "
@@ -137,7 +139,7 @@ class DiabloWebNode(Node):
             "dynamixel_start_command",
             "ros2 launch diablo_full_body_moveit_config full_body_hardware.launch.py "
             "use_mock_hardware:=false upper_only:=true "
-            "enable_arm_hardware:=true enable_base_hardware:=false "
+            "enable_arm_hardware:=true enable_hand_hardware:=false enable_base_hardware:=false "
             "arm_port_name:=/dev/u2d2_arm hand_port_name:=/dev/u2d2_hand baud_rate:=1000000 "
             "start_arm_controllers:=true start_base_controller:=false use_ekf:=false "
             "use_local_odom:=false start_move_group:=false",
@@ -184,6 +186,18 @@ class DiabloWebNode(Node):
                 "using 'empty'"
             )
             self.lidar_start_service_type = "empty"
+        self.lidar_stop_service = str(
+            self.get_parameter("lidar_stop_service").value
+        ).strip()
+        self.lidar_stop_service_type = str(
+            self.get_parameter("lidar_stop_service_type").value
+        ).strip().lower()
+        if self.lidar_stop_service_type not in {"empty", "trigger"}:
+            self.get_logger().warning(
+                f"Unknown lidar_stop_service_type '{self.lidar_stop_service_type}'; "
+                "using 'empty'"
+            )
+            self.lidar_stop_service_type = "empty"
         self.diablo_start_command = str(
             self.get_parameter("diablo_start_command").value
         ).strip()
@@ -269,6 +283,8 @@ class DiabloWebNode(Node):
             ),
         }
         self._reset_odom_client = self.create_client(Trigger, "/diablo/reset_odom")
+        self._reset_position_client = self.create_client(Trigger, "/diablo/reset_position")
+        self._reset_orientation_client = self.create_client(Trigger, "/diablo/reset_orientation")
         self._reset_encoder_client = (
             self.create_client(Trigger, self.reset_encoder_service)
             if self.reset_encoder_service
@@ -289,6 +305,17 @@ class DiabloWebNode(Node):
             else:
                 self._lidar_start_empty_client = self.create_client(
                     Empty, self.lidar_start_service
+                )
+        self._lidar_stop_client = None
+        self._lidar_stop_empty_client = None
+        if self.lidar_stop_service:
+            if self.lidar_stop_service_type == "trigger":
+                self._lidar_stop_client = self.create_client(
+                    Trigger, self.lidar_stop_service
+                )
+            else:
+                self._lidar_stop_empty_client = self.create_client(
+                    Empty, self.lidar_stop_service
                 )
         self._hardware = HardwareManager(
             self.get_logger(),
@@ -746,8 +773,52 @@ class DiabloWebNode(Node):
                 "theta": 0.0,
                 "source": "filtered_odom",
             }
+            if self._pose is None or self._pose.get("source") in (
+                "odom", "wheel_odom", "filtered_odom"
+            ):
+                self._pose = copy.deepcopy(self._odom_pose)
             self._wheel_trajectory = [{"x": 0.0, "y": 0.0}]
         return {"requested": True, "message": "Local wheel odometry reset requested"}
+
+    def reset_position(self):
+        """Reset only the local x/y origin and preserve the current heading."""
+        if not self._reset_position_client.wait_for_service(timeout_sec=0.5):
+            return {"requested": False, "message": "Position reset service is unavailable"}
+        self._reset_position_client.call_async(Trigger.Request())
+        with self._lock:
+            theta = float(self._odom_pose.get("theta", 0.0)) if self._odom_pose else 0.0
+            self._odom_pose = {
+                "x": 0.0,
+                "y": 0.0,
+                "theta": theta,
+                "source": "filtered_odom",
+            }
+            if self._pose is None or self._pose.get("source") in (
+                "odom", "wheel_odom", "filtered_odom"
+            ):
+                self._pose = copy.deepcopy(self._odom_pose)
+            self._wheel_trajectory = [{"x": 0.0, "y": 0.0}]
+        return {"requested": True, "message": "Local odometry position reset requested"}
+
+    def reset_orientation(self):
+        """Reset only the local heading and preserve the current x/y pose."""
+        if not self._reset_orientation_client.wait_for_service(timeout_sec=0.5):
+            return {"requested": False, "message": "Orientation reset service is unavailable"}
+        self._reset_orientation_client.call_async(Trigger.Request())
+        with self._lock:
+            x = float(self._odom_pose.get("x", 0.0)) if self._odom_pose else 0.0
+            y = float(self._odom_pose.get("y", 0.0)) if self._odom_pose else 0.0
+            self._odom_pose = {
+                "x": x,
+                "y": y,
+                "theta": 0.0,
+                "source": "filtered_odom",
+            }
+            if self._pose is None or self._pose.get("source") in (
+                "odom", "wheel_odom", "filtered_odom"
+            ):
+                self._pose = copy.deepcopy(self._odom_pose)
+        return {"requested": True, "message": "Local odometry orientation reset requested"}
 
     def reset_encoder(self):
         """Reset the wheel odometry encoder reference without changing pose."""
@@ -854,6 +925,28 @@ class DiabloWebNode(Node):
             "hardware": self._hardware.snapshot(),
         }
 
+    def stop_lidar(self):
+        """Stop the LiDAR motor service and any LiDAR process owned by the HMI."""
+        service_requested = False
+        client = None
+        request = None
+        if self._lidar_stop_empty_client is not None and self._lidar_stop_empty_client.wait_for_service(timeout_sec=0.25):
+            client = self._lidar_stop_empty_client
+            request = Empty.Request()
+        elif self._lidar_stop_client is not None and self._lidar_stop_client.wait_for_service(timeout_sec=0.25):
+            client = self._lidar_stop_client
+            request = Trigger.Request()
+        if client is not None:
+            client.call_async(request)
+            service_requested = True
+        process_result = self._hardware.stop_process("lidar")
+        return {
+            "requested": bool(service_requested or process_result.get("requested")),
+            "message": "LiDAR stop requested" if service_requested or process_result.get("requested") else "LiDAR was not running",
+            "service_requested": service_requested,
+            "process": process_result,
+        }
+
     def start_hardware(self):
         """Start the configured Diablo, LiDAR and Dynamixel processes."""
         result = self._hardware.start_all()
@@ -941,11 +1034,13 @@ class DiabloWebNode(Node):
             self.publish_stop()
         except Exception as error:
             self.get_logger().warning(f"Could not publish hardware stop: {error}")
+        lidar = self.stop_lidar()
         hardware = self._hardware.stop_hardware()
         return {
-            "requested": bool(hardware.get("requested") or stopped),
+            "requested": bool(hardware.get("requested") or stopped or lidar.get("requested")),
             "message": "Hardware and dependent web launches stopped",
             "hardware": self._hardware.snapshot(),
+            "lidar": lidar,
             "stopped": stopped,
             "results": hardware.get("results", {}),
         }

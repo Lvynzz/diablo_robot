@@ -7,7 +7,7 @@
   let state = {
     pose: null,
     map: null,
-    hardware: { ready: false, all_ready: false, starting: false, components: [] },
+    hardware: { ready: false, mapping_ready: false, all_ready: false, starting: false, components: [] },
     processes: {},
     joints: [],
     mapping: { active: false, state: "idle", message: "" },
@@ -145,8 +145,8 @@
     $("mapping-state").textContent = String(mapping.state || "idle").toUpperCase();
     $("mapping-status").textContent = String(mapping.state || "idle").toUpperCase();
     $("mapping-message").textContent = mapping.message || "Mapping belum dimulai.";
-    $("hardware-status").textContent = mappingReady ? "MAPPING READY" : hardware.starting ? "STARTING" : "LOCKED";
-    $("hardware-status").className = mappingReady ? "ready" : hardware.starting ? "starting" : "";
+    $("hardware-status").textContent = mappingReady ? "MAPPING READY" : hardware.ready ? "TELEOP READY" : hardware.starting ? "STARTING" : "LOCKED";
+    $("hardware-status").className = mappingReady || hardware.ready ? "ready" : hardware.starting ? "starting" : "";
     $("hardware-message").textContent = hardware.message || "Press ON HARDWARE to start hardware.";
     const components = Object.fromEntries((hardware.components || []).map((item) => [item.id, item]));
     [["diablo", "component-diablo", "DIABLO"], ["lidar", "component-lidar", "LIDAR"], ["dynamixel", "component-dynamixel", "DYNAMIXEL"]].forEach(([id, element, label]) => {
@@ -173,8 +173,9 @@
     $("start-mapping").disabled = !mappingReady || active;
     $("stop-mapping").disabled = !active;
     $("save-map").disabled = !active;
-    $("teleop-lock").textContent = active && mappingReady ? "TELEOP UNLOCKED" : "START DIABLO + LIDAR + MAPPING TO UNLOCK";
-    $("teleop-lock").className = active && mappingReady ? "unlocked" : "";
+    const teleopReady = Boolean(hardware.ready);
+    $("teleop-lock").textContent = teleopReady ? "TELEOP UNLOCKED · MAPPING OPTIONAL" : "START HARDWARE TO UNLOCK TELEOP";
+    $("teleop-lock").className = teleopReady ? "unlocked" : "";
     const pose = state.pose;
     $("pose-x").textContent = pose ? Number(pose.x).toFixed(3) : "—";
     $("pose-y").textContent = pose ? Number(pose.y).toFixed(3) : "—";
@@ -284,7 +285,7 @@
     }
   }
 
-  function isUnlocked() { return Boolean(state.mapping?.active && state.hardware?.mapping_ready); }
+  function isUnlocked() { return Boolean(state.hardware?.ready); }
   function sendMotion() {
     if (!isUnlocked()) return;
     const forwardSpeed = Number($("forward-speed").value), turnSpeed = Number($("turn-speed").value);
@@ -334,6 +335,8 @@
   function initControls() {
     $("stop-button").addEventListener("click", () => { stopTeleop(); command({ type: "stop" }, "/api/control/stop"); log("STOP command sent.", "warn"); });
     $("start-hardware").addEventListener("click", () => requestLaunch("hardware"));
+    $("reset-position").addEventListener("click", () => { command({ type: "reset_position" }, "/api/odom/reset-position"); log("Reset X/Y position requested.", "success"); });
+    $("reset-orientation").addEventListener("click", () => { command({ type: "reset_orientation" }, "/api/odom/reset-orientation"); log("Reset heading requested.", "success"); });
     $("launch-localization").addEventListener("click", () => requestLaunch("localization"));
     $("launch-navigation").addEventListener("click", () => requestLaunch("navigation"));
     $("launch-mapping").addEventListener("click", () => requestLaunch("mapping"));

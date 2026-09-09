@@ -33,6 +33,38 @@ class HardwareManager:
         "lidar": ("sllidar_a2m7_launch.py", "sllidar_node"),
         "dynamixel": ("full_body_hardware.launch.py",),
     }
+    # Nodes that may survive a crashed/relaunched ROS launch.  These markers
+    # are deliberately limited to the Diablo web/Nav2/SLAM stack; the normal
+    # web bridge nodes are recreated by web_interface.launch.py afterwards.
+    STARTUP_PROCESS_MARKERS = {
+        "localization": (
+            "localization.launch.py",
+            "amcl",
+            "map_server",
+            "lifecycle_manager_localization",
+        ),
+        "navigation": (
+            "navigation.launch.py",
+            "controller_server",
+            "planner_server",
+            "behavior_server",
+            "bt_navigator",
+            "waypoint_follower",
+            "velocity_smoother",
+            "lifecycle_manager_navigation",
+        ),
+        "mapping": (
+            "mapping.launch.py",
+            "slam_toolbox",
+            "async_slam_toolbox_node",
+            "sync_slam_toolbox_node",
+        ),
+        "web_support": (
+            "motion_cmd_mux",
+            "wheel_odom",
+            "diablo_lidar_static_tf",
+        ),
+    }
     _SHELL_AND_QUERY_COMMANDS = {
         "bash",
         "sh",
@@ -541,14 +573,22 @@ class HardwareManager:
             self._started_at.pop(clean_name, None)
             return {"requested": True, "message": f"{clean_name} stopped"}
 
-    def _external_process_pids(self, component):
-        """Find known driver processes not owned by this supervisor.
+    @staticmethod
+    def _argument_matches_marker(argument, marker):
+        return (
+            argument == marker
+            or argument.endswith(f"/{marker}")
+            or argument.endswith(f":={marker}")
+        )
+
+    def _process_pids_for_markers(self, markers):
+        """Find processes whose argv contains one of the exact markers.
 
         Reading ``/proc/*/cmdline`` avoids matching this manager's own grep
-        command and lets us identify the exact launch/node markers.  The
-        caller still groups PIDs by process group before signalling them.
+        command.  Matching complete argv tokens (or executable/node-name
+        suffixes) prevents a query such as ``grep amcl`` from being selected.
         """
-        markers = self.EXTERNAL_PROCESS_MARKERS.get(component, ())
+        markers = tuple(markers or ())
         if not markers:
             return []
         pids = []
@@ -579,38 +619,33 @@ class HardwareManager:
             if Path(arguments[0]).name in self._SHELL_AND_QUERY_COMMANDS:
                 continue
             if any(
-                argument == marker or argument.endswith(f"/{marker}")
+                self._argument_matches_marker(argument, marker)
                 for argument in arguments
                 for marker in markers
             ):
                 pids.append(pid)
         return pids
 
-    def _stop_external_component(self, component):
-        """Stop process groups belonging to a known external hardware driver."""
-        groups = {}
-        own_group = os.getpgrp()
-        for pid in self._external_process_pids(component):
-            try:
-                group = os.getpgid(pid)
-            except (ProcessLookupError, PermissionError, OSError):
-                continue
-            # Never signal the web bridge's own process group, even if a
-            # command line happens to contain a marker in a launch argument.
-            if group in (0, 1, own_group):
-                continue
-            groups[group] = groups.get(group, 0) + 1
+    def _external_process_pids(self, component):
+        """Find known driver processes not owned by this supervisor."""
+        return self._process_pids_for_markers(
+            self.EXTERNAL_PROCESS_MARKERS.get(component, ())
+        )
 
+    def _stop_groups(self, groups, label):
+        """Terminate selected process groups and return a JSON-safe result."""
+        own_group = os.getpgrp()
+        safe_groups = {
+            int(group) for group in groups if int(group) not in (0, 1, own_group)
+        }
         terminated = []
-        for group in groups:
+        for group in safe_groups:
             try:
                 os.killpg(group, signal.SIGTERM)
                 terminated.append(group)
             except (ProcessLookupError, PermissionError, OSError):
                 continue
 
-        # Give launch files a short, deterministic shutdown window, then kill
-        # only groups that are still alive so a stuck USB probe cannot lock OFF.
         deadline = time.monotonic() + 2.0
         remaining = set(terminated)
         while remaining and time.monotonic() < deadline:
@@ -630,12 +665,86 @@ class HardwareManager:
         if not terminated:
             return {
                 "requested": False,
-                "message": f"No external {component} driver process found",
+                "message": f"No stale {label} process found",
             }
         return {
             "requested": True,
-            "message": f"Stopped external {component} driver process group(s)",
+            "message": f"Stopped stale {label} process group(s)",
             "groups": sorted(terminated),
+        }
+
+    def _stop_marker_processes(self, markers, label):
+        pids = self._process_pids_for_markers(markers)
+        groups = set()
+        for pid in pids:
+            try:
+                groups.add(os.getpgid(pid))
+            except (ProcessLookupError, PermissionError, OSError):
+                continue
+        return self._stop_groups(groups, label)
+
+    def _stop_external_component(self, component):
+        """Stop process groups belonging to a known external hardware driver."""
+        groups = {}
+        for pid in self._external_process_pids(component):
+            try:
+                group = os.getpgid(pid)
+            except (ProcessLookupError, PermissionError, OSError):
+                continue
+            groups[group] = groups.get(group, 0) + 1
+        result = self._stop_groups(groups, f"external {component} driver")
+        if not result["requested"]:
+            result["message"] = f"No external {component} driver process found"
+        return result
+
+    def startup_cleanup(self):
+        """Make a fresh web instance the sole owner of robot runtime processes.
+
+        This is safe to call repeatedly.  It removes stale Nav2/SLAM and web
+        support process groups left by a previous launch, then stops known
+        external hardware drivers before the new UI exposes START buttons.
+        """
+        processes = {}
+        for name, markers in self.STARTUP_PROCESS_MARKERS.items():
+            processes[name] = self._stop_marker_processes(markers, name)
+        hardware = {}
+        for component in reversed(self.COMPONENTS):
+            hardware[component] = self._stop_external_component(component)
+
+        with self._lock:
+            self._processes.clear()
+            self._started_at.clear()
+            self._service_state = {
+                component: False for component in self.COMPONENTS
+            }
+            self._last_messages = {
+                component: 0.0 for component in self.COMPONENTS
+            }
+            for component in self.COMPONENTS:
+                if self._commands[component]:
+                    self._set_component(component, "offline", "Startup cleanup complete")
+                else:
+                    self._set_component(
+                        component, "not_configured", "Start command not configured"
+                    )
+            self._status.update(
+                {
+                    "ready": False,
+                    "mapping_ready": False,
+                    "all_ready": False,
+                    "starting": False,
+                    "message": "Startup cleanup complete; hardware is OFF",
+                    "updated": time.time(),
+                }
+            )
+        requested = any(item.get("requested") for item in processes.values()) or any(
+            item.get("requested") for item in hardware.values()
+        )
+        return {
+            "requested": requested,
+            "message": "Startup cleanup complete; hardware and launches are OFF",
+            "processes": processes,
+            "hardware": hardware,
         }
 
     def stop_hardware(self):

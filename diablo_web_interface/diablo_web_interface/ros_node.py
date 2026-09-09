@@ -425,6 +425,22 @@ class DiabloWebNode(Node):
             feedback_timeout=self.hardware_feedback_timeout,
         )
 
+        # A fresh web bridge must begin in a known OFF state.  This cleanup
+        # handles driver/Nav2/SLAM processes left by an earlier launch, while
+        # preserving only the support nodes created by the new web launch.
+        try:
+            self.publish_stop()
+        except Exception as error:
+            self.get_logger().warning(f"Could not publish startup stop: {error}")
+        try:
+            cleanup = self._hardware.startup_cleanup()
+            if cleanup.get("requested"):
+                self.get_logger().warning(
+                    "Startup cleanup stopped stale robot processes before enabling the web UI"
+                )
+        except Exception as error:
+            self.get_logger().error(f"Startup process cleanup failed: {error}")
+
         # Match Nav2/AMR QoS: /map and global costmap are latched reliable
         # grids, while the rolling local costmap and sensor streams are
         # best-effort volatile.  A sensor-data QoS on the global costmap can

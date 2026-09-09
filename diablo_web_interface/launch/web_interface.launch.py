@@ -10,6 +10,10 @@ def generate_launch_description():
         DeclareLaunchArgument("host", default_value="0.0.0.0"),
         DeclareLaunchArgument("port", default_value="8000"),
         DeclareLaunchArgument(
+            "instance_lock_file",
+            default_value="/tmp/diablo_web_interface.lock",
+        ),
+        DeclareLaunchArgument(
             "manual_cmd_topic", default_value="/diablo/MotionCmd/manual"
         ),
         DeclareLaunchArgument(
@@ -86,6 +90,9 @@ def generate_launch_description():
 
         SetEnvironmentVariable("DIABLO_WEB_HOST", LaunchConfiguration("host")),
         SetEnvironmentVariable("DIABLO_WEB_PORT", LaunchConfiguration("port")),
+        SetEnvironmentVariable(
+            "DIABLO_WEB_LOCK_FILE", LaunchConfiguration("instance_lock_file")
+        ),
 
         Node(
             package="diablo_web_interface",

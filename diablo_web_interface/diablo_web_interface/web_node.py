@@ -2,6 +2,7 @@
 """FastAPI browser interface for Diablo teleoperation and Nav2."""
 
 import asyncio
+import fcntl
 import logging
 import os
 from pathlib import Path
@@ -39,7 +40,45 @@ app.add_middleware(
 
 ROS_NODE = None
 ROS_THREAD = None
+_INSTANCE_LOCK_HANDLE = None
 _SHUTTING_DOWN = False
+
+
+def _acquire_instance_lock():
+    """Allow exactly one web process to own the robot runtime at a time."""
+    global _INSTANCE_LOCK_HANDLE
+    if _INSTANCE_LOCK_HANDLE is not None:
+        return
+    lock_path = (
+        os.environ.get("DIABLO_WEB_LOCK_FILE", "/tmp/diablo_web_interface.lock")
+        .strip()
+        or "/tmp/diablo_web_interface.lock"
+    )
+    lock_file = open(lock_path, "a+", encoding="utf-8")
+    try:
+        fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except (BlockingIOError, OSError) as error:
+        lock_file.close()
+        raise RuntimeError(
+            "Another Diablo web instance already owns the robot runtime"
+        ) from error
+    _INSTANCE_LOCK_HANDLE = lock_file
+
+
+def _release_instance_lock():
+    global _INSTANCE_LOCK_HANDLE
+    lock_file = _INSTANCE_LOCK_HANDLE
+    _INSTANCE_LOCK_HANDLE = None
+    if lock_file is None:
+        return
+    try:
+        fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
+    except OSError:
+        pass
+    try:
+        lock_file.close()
+    except OSError:
+        pass
 
 
 def _static_dir():
@@ -666,9 +705,14 @@ def _start_ros_node():
     global ROS_NODE, ROS_THREAD
     if ROS_NODE is not None:
         return
+    _acquire_instance_lock()
     if not rclpy.ok():
         rclpy.init()
-    ROS_NODE = DiabloWebNode()
+    try:
+        ROS_NODE = DiabloWebNode()
+    except Exception:
+        _release_instance_lock()
+        raise
 
     def spin():
         try:
@@ -684,18 +728,21 @@ def _start_ros_node():
 def _stop_ros_node():
     global ROS_NODE, ROS_THREAD, _SHUTTING_DOWN
     _SHUTTING_DOWN = True
-    if ROS_NODE is not None:
-        try:
-            ROS_NODE.publish_stop()
-            ROS_NODE.destroy_node()
-        except Exception:
-            logger.exception("Error while stopping Diablo web ROS node")
-        ROS_NODE = None
-    if rclpy.ok():
-        rclpy.shutdown()
-    if ROS_THREAD is not None:
-        ROS_THREAD.join(timeout=1.0)
-        ROS_THREAD = None
+    try:
+        if ROS_NODE is not None:
+            try:
+                ROS_NODE.publish_stop()
+                ROS_NODE.destroy_node()
+            except Exception:
+                logger.exception("Error while stopping Diablo web ROS node")
+            ROS_NODE = None
+        if rclpy.ok():
+            rclpy.shutdown()
+        if ROS_THREAD is not None:
+            ROS_THREAD.join(timeout=1.0)
+            ROS_THREAD = None
+    finally:
+        _release_instance_lock()
 
 
 @app.on_event("startup")

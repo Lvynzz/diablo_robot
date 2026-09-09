@@ -450,6 +450,55 @@ class HardwareManager:
                 ),
             }
 
+    @staticmethod
+    def _parent_pid(pid):
+        """Read a process parent PID without invoking shell utilities."""
+        try:
+            status = Path(f"/proc/{pid}/status").read_text(
+                encoding="utf-8", errors="replace"
+            )
+        except (OSError, ValueError):
+            return None
+        for line in status.splitlines():
+            if line.startswith("PPid:"):
+                try:
+                    return int(line.split()[1])
+                except (IndexError, ValueError):
+                    return None
+        return None
+
+    def _process_tree_groups(self, root_pid):
+        """Return process groups for a launch process and all live descendants."""
+        descendants = {int(root_pid)}
+        changed = True
+        while changed:
+            changed = False
+            try:
+                entries = os.listdir("/proc")
+            except OSError:
+                break
+            for entry in entries:
+                if not entry.isdigit():
+                    continue
+                pid = int(entry)
+                if pid in descendants:
+                    continue
+                parent = self._parent_pid(pid)
+                if parent in descendants:
+                    descendants.add(pid)
+                    changed = True
+
+        groups = set()
+        own_group = os.getpgrp()
+        for pid in descendants:
+            try:
+                group = os.getpgid(pid)
+            except (ProcessLookupError, PermissionError, OSError):
+                continue
+            if group not in (0, 1, own_group):
+                groups.add(group)
+        return groups
+
     def stop_process(self, name):
         """Stop one optional process group without touching the hardware drivers."""
         clean_name = str(name or "process").strip().replace(" ", "_")
@@ -459,13 +508,31 @@ class HardwareManager:
                 if process is not None:
                     self._close_log(clean_name)
                 return {"requested": False, "message": f"{clean_name} is not running"}
+            groups = self._process_tree_groups(process.pid)
+            if not groups:
+                # The launch process normally has its own session/process
+                # group, but keep a safe fallback for a short /proc race.
+                groups = {process.pid}
+            for group in groups:
+                try:
+                    os.killpg(group, signal.SIGTERM)
+                except (ProcessLookupError, PermissionError, OSError):
+                    continue
             try:
-                os.killpg(process.pid, signal.SIGTERM)
                 process.wait(timeout=2.0)
             except Exception:
+                pass
+            # Children may use separate process groups.  Escalate only those
+            # groups discovered from this launch tree, never the web bridge.
+            for group in tuple(groups):
                 try:
-                    os.killpg(process.pid, signal.SIGKILL)
-                except Exception:
+                    os.killpg(group, 0)
+                except (ProcessLookupError, PermissionError, OSError):
+                    groups.discard(group)
+            for group in groups:
+                try:
+                    os.killpg(group, signal.SIGKILL)
+                except (ProcessLookupError, PermissionError, OSError):
                     pass
             self._close_log(clean_name)
             # SIGTERM requested here is a normal stop. Drop the completed

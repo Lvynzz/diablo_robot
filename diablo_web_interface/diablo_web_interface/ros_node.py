@@ -433,6 +433,13 @@ class DiabloWebNode(Node):
         except Exception as error:
             self.get_logger().warning(f"Could not publish startup stop: {error}")
         try:
+            # Ask a still-running scanner to stop its motor before the process
+            # cleanup sends SIGTERM.  If the service is unavailable, the
+            # process-group cleanup below remains the fallback.
+            self.stop_lidar()
+        except Exception as error:
+            self.get_logger().warning(f"Could not request startup LiDAR stop: {error}")
+        try:
             cleanup = self._hardware.startup_cleanup()
             if cleanup.get("requested"):
                 self.get_logger().warning(

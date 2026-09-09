@@ -500,7 +500,7 @@ class HardwareManager:
         return groups
 
     def stop_process(self, name):
-        """Stop one optional process group without touching the hardware drivers."""
+        """Stop one optional launch and all of its child process groups."""
         clean_name = str(name or "process").strip().replace(" ", "_")
         with self._lock:
             process = self._processes.get(clean_name)

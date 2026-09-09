@@ -1,35 +1,51 @@
 controller_manager:
   ros__parameters:
-    update_rate: 50  # Hz
+    # Arti: frekuensi loop controller manager (Hz). Dampak: naik lebih responsif
+    # tetapi CPU/bus naik. Kisaran praktis: 30-200 Hz.
+    update_rate: 50
 
+    # Arti: broadcaster state semua joint. Kisaran: plugin terinstal.
     joint_state_broadcaster:
       type: joint_state_broadcaster/JointStateBroadcaster
 
+    # Arti: controller trajectory untuk joint2-3. Kisaran: plugin terinstal.
     joint23_trajectory_controller:
       type: joint_trajectory_controller/JointTrajectoryController
 
 joint23_trajectory_controller:
   ros__parameters:
+    # Arti: joint dan urutan indeks trajectory. Dampak: nama/order salah dapat
+    # menggerakkan joint yang keliru. Kisaran: nama joint valid di URDF.
     joints:
       - joint2
       - joint3
+    # Arti: interface command hardware. Kisaran: interface yang diekspor hardware.
     command_interfaces:
       - position
+    # Arti: interface state yang dibaca controller. Kisaran: interface hardware.
     state_interfaces:
       - position
       - velocity
+    # Arti: frekuensi publish state (Hz). Dampak: naik lebih halus, bandwidth naik.
+    # Kisaran praktis: 10-100 Hz.
     state_publish_rate: 50.0
+    # Arti: frekuensi monitor action (Hz). Kisaran praktis: 5-50 Hz.
     action_monitor_rate: 20.0
     # Teleop mengirim kedua joint setiap kali. Ini membuat slot "x" tetap
     # mempertahankan posisi feedback terakhir tanpa partial-goal ambiguity.
+    # Kisaran: false/true; false direkomendasikan bila teleop selalu mengirim semua joint.
     allow_partial_joints_goal: false
     constraints:
+      # Arti: kecepatan joint yang dianggap sudah berhenti (rad/s). Kisaran: 0-0.5.
       stopped_velocity_tolerance: 0.05
       # Beri waktu servo Dynamixel untuk settle setelah trajectory selesai.
+      # Kisaran praktis: 0-10 s; makin besar makin toleran tetapi timeout lambat.
       goal_time: 2.5
       joint2:
+        # Arti: toleransi joint2 terhadap trajectory/goal (rad). Kisaran: 0.01-0.5.
         trajectory: 0.3
         goal: 0.05
       joint3:
+        # Arti: toleransi joint3 terhadap trajectory/goal (rad). Kisaran: 0.01-0.5.
         trajectory: 0.3
         goal: 0.05

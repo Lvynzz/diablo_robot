@@ -1,67 +1,166 @@
 # Nav2 defaults for Diablo.
 #
-# The values are deliberately conservative.  Adjust wheel odometry, footprint
-# and /scan settings after measuring the real robot.  Launch arguments can
-# replace the map file, but topic/frame changes are easiest to make in a copy
-# of this file supplied with params_file:=...
+# Tuning guide: comments below give the meaning (Arti), the usual effect when
+# increasing/decreasing a value (Dampak), and a practical range (Kisaran).
+# “Kisaran” is a safe starting range, not a hard Nav2 limit; always respect the
+# measured robot geometry, lidar specification, and the units shown.  Change
+# one group at a time and observe /amcl_pose, /tf, /scan and the costmaps.
+# Launch arguments can replace the map file, but topic/frame changes are easiest
+# to make in a copy of this file supplied with params_file:=...
 
 amcl:
   ros__parameters:
+    # Arti: gunakan clock simulasi. Dampak: true tanpa /clock membuat AMCL
+    # menunggu waktu; robot nyata harus false. Kisaran: false/true.
     use_sim_time: false
+    # alpha1..alpha5 = noise odometri (rotasi akibat rotasi, rotasi akibat
+    # translasi, translasi akibat translasi, translasi akibat rotasi, dan
+    # strafing). Nilai lebih besar membuat AMCL kurang percaya odom dan lebih
+    # cepat mengikuti lidar, tetapi pose lebih berisik. Kisaran praktis: 0-1;
+    # alpha5 biasanya 0 untuk differential drive.
     alpha1: 0.2
     alpha2: 0.2
     alpha3: 0.2
     alpha4: 0.2
     alpha5: 0.2
+    # Arti: frame badan robot yang dipakai AMCL. Dampak: harus tepat sama
+    # dengan TF; salah nama membuat pose/TF tidak muncul. Kisaran: nama frame.
     base_frame_id: diablo_base_link
+    # Arti: jarak (m) untuk mengabaikan beam lidar saat beam-skip aktif. Nilai
+    # lebih besar melewati lebih banyak outlier/dynamic obstacle. Kisaran: 0.3-2 m.
     beam_skip_distance: 0.5
+    # Arti: proporsi beam yang boleh gagal sebelum skip dibatalkan (0..1).
+    # Nilai lebih tinggi lebih toleran terhadap banyak objek bergerak. Kisaran: 0.5-1.
     beam_skip_error_threshold: 0.9
+    # Arti: proporsi beam yang harus cocok agar beam boleh di-skip (0..1).
+    # Nilai lebih kecil lebih agresif membuang outlier. Kisaran: 0.1-0.5.
     beam_skip_threshold: 0.3
+    # Arti: aktifkan beam skipping untuk objek dinamis. Dampak: false lebih
+    # deterministik; true membantu di lingkungan ramai namun bisa menyamarkan
+    # kesalahan peta. Kisaran: false/true (aktifkan bersama tiga parameter di atas).
     do_beamskip: false
+    # Arti: frame peta global. Dampak: harus sama dengan map_server dan Nav2.
+    # Kisaran: nama frame, biasanya map.
     global_frame_id: map
+    # Arti: bobot distribusi jarak pendek pada model laser. Dampak: lebih besar
+    # menganggap obstacle tak terduga sebagai valid. Kisaran praktis: 0-1.
     lambda_short: 0.1
+    # Arti: jarak maksimum (m) untuk tabel likelihood-field. Dampak: lebih
+    # besar memakai area peta lebih luas (CPU naik, lebih tahan offset besar).
+    # Kisaran praktis: 0.5-5 m.
     laser_likelihood_max_dist: 2.0
+    # Arti: jangkauan lidar yang dipakai (m). Dampak: terlalu tinggi memasukkan
+    # noise; terlalu rendah membuang fitur. Kisaran: 5-30 m, <= spesifikasi lidar.
     laser_max_range: 30.0
+    # Arti: jarak minimum lidar (m); -1 berarti gunakan minimum sensor.
+    # Dampak: naik mengabaikan pantulan sangat dekat. Kisaran: -1 atau 0-1 m.
     laser_min_range: -1.0
+    # Arti: model probabilistik scan. Dampak: likelihood_field cepat dan umum;
+    # beam lebih detail tetapi lebih mahal. Kisaran: likelihood_field, beam,
+    # atau likelihood_field_prob (pilih sesuai sensor/peta).
     laser_model_type: likelihood_field
+    # Arti: jumlah beam yang disampling tiap scan. Dampak: lebih besar akurat
+    # namun CPU naik. Kisaran praktis: 30-120 (jangan melebihi beam sensor).
     max_beams: 60
+    # Arti: batas atas jumlah partikel. Dampak: lebih besar mampu menangani
+    # lokasi ambigu tetapi CPU/memori naik. Kisaran praktis: 500-5000.
     max_particles: 2000
+    # Arti: batas bawah partikel. Dampak: lebih besar mencegah kehilangan pose
+    # tetapi selalu memakai CPU lebih banyak. Kisaran praktis: 100-1000;
+    # harus <= max_particles.
     min_particles: 300
+    # Arti: frame odometri. Dampak: harus cocok dengan TF odom->base.
+    # Kisaran: nama frame, biasanya odom.
     odom_frame_id: odom
+    # Arti: error translasi relatif untuk adaptive particle count. Dampak: lebih
+    # kecil meminta keyakinan lebih tinggi (partikel naik). Kisaran praktis: 0.01-0.2.
     pf_err: 0.05
+    # Arti: probabilitas keyakinan adaptive particle count (0..1). Dampak: lebih
+    # dekat 1 cenderung memakai lebih banyak partikel. Kisaran praktis: 0.9-0.999.
     pf_z: 0.99
+    # Arti: laju detektor recovery cepat/lambat. Nilai 0 menonaktifkan recovery;
+    # nilai lebih besar membantu relocalization tetapi dapat membuat pose meloncat.
+    # Kisaran praktis bila diaktifkan: 0.001-0.1.
     recovery_alpha_fast: 0.0
     recovery_alpha_slow: 0.0
+    # Arti: interval resampling dalam jumlah update scan. Dampak: lebih besar
+    # menghemat CPU namun adaptasi lebih lambat. Kisaran praktis: 1-10.
     resample_interval: 1
+    # Arti: model gerak robot. Dampak: differential tepat untuk dua roda; model
+    # salah membuat kovariansi pose keliru. Kisaran: plugin AMCL yang tersedia.
     robot_model_type: nav2_amcl::DifferentialMotionModel
+    # Arti: frekuensi penyimpanan pose terakhir (Hz). Dampak: lebih tinggi lebih
+    # cepat menyimpan recovery pose, dengan sedikit I/O. Kisaran: 0.1-2 Hz (0 menonaktifkan).
     save_pose_rate: 0.5
+    # Arti: sigma noise hit (m) pada likelihood field. Dampak: lebih besar lebih
+    # toleran terhadap peta/scan yang tidak presisi; terlalu besar melemahkan koreksi.
+    # Kisaran praktis: 0.05-0.5 m.
     sigma_hit: 0.2
+    # Arti: siarkan TF map->odom dari AMCL. Dampak: harus true untuk lokalisasi
+    # Nav2; false hanya bila broadcaster lain mengambil alih. Kisaran: false/true.
     tf_broadcast: true
+    # Arti: toleransi waktu lookup TF (s). Dampak: lebih besar tahan jeda jaringan,
+    # tetapi dapat memakai transform basi. Kisaran praktis: 0.1-1 s.
     transform_tolerance: 0.5
+    # Arti: gerak minimum sebelum update AMCL (rad dan m). Dampak: lebih besar
+    # mengurangi CPU/noise tetapi koreksi lebih jarang. Kisaran: update_min_a 0.02-0.2
+    # rad dan update_min_d 0.02-0.15 m.
     update_min_a: 0.10
     update_min_d: 0.05
+    # Arti: bobot model laser hit/max/rand/short. Dampak: z_hit lebih besar
+    # mempercayai kecocokan peta; z_rand lebih besar tahan scan liar; z_short dan
+    # z_max menangani obstacle tak terpetakan/range maksimum. Kisaran: masing-masing
+    # 0-1; mulai dengan bobot non-negatif yang totalnya kira-kira 1.
     z_hit: 0.5
     z_max: 0.05
     z_rand: 0.5
     z_short: 0.05
+    # Arti: topic LaserScan. Dampak: salah topic membuat AMCL tidak mengoreksi
+    # pose. Kisaran: nama topic ROS, biasanya /scan.
     scan_topic: /scan
+    # Arti: gunakan pose awal dari parameter AMCL. Dampak: config true hanya
+    # dipakai bila launch tidak menimpanya; localization.launch Diablo default
+    # menunggu tombol Set initial pose (override false). Kisaran: false/true.
     set_initial_pose: true
+    # Arti: hanya terima peta pertama. Dampak: true mencegah reset saat map topic
+    # berganti; false memungkinkan reload map. Kisaran: false/true.
     first_map_only: false
 
 bt_navigator:
   ros__parameters:
+    # Arti: gunakan clock simulasi. Dampak: true tanpa /clock membuat node
+    # menunggu waktu. Kisaran: false/true; robot nyata false.
     use_sim_time: false
+    # Arti: frame global, biasanya map. Dampak: harus sama dengan AMCL/map_server.
+    # Kisaran: nama frame.
     global_frame: map
+    # Arti: frame badan robot. Dampak: harus sama dengan TF dan costmap.
+    # Kisaran: nama frame.
     robot_base_frame: diablo_base_link
+    # Arti: topic odometri yang dibaca navigator (Twist/odom). Dampak: topic
+    # salah membuat prediksi gerak tersendat. Kisaran: nama topic ROS.
     odom_topic: /diablo/odometry
+    # Arti: periode tick Behavior Tree (ms). Dampak: lebih kecil lebih responsif
+    # tetapi CPU naik. Kisaran praktis: 5-100 ms.
     bt_loop_duration: 10
+    # Arti: batas tunggu action server (ms). Dampak: terlalu kecil memicu timeout;
+    # terlalu besar menunda error. Kisaran praktis: 10-1000 ms.
     default_server_timeout: 20
+    # Arti: batas tunggu service (ms). Dampak: lebih besar toleran startup lambat;
+    # kisaran praktis: 100-5000 ms.
     wait_for_service_timeout: 1000
+    # Arti: navigator BT yang dimuat. Dampak: daftar harus cocok dengan blok
+    # plugin di bawah; ini bukan parameter performa. Kisaran: nama navigator tersedia.
     navigators: [navigate_to_pose, navigate_through_poses]
+    # Arti: implementasi action navigator. Dampak: nama plugin harus tersedia di
+    # instalasi Nav2. Kisaran: plugin NavigateToPose/NavigateThroughPoses.
     navigate_to_pose:
       plugin: nav2_bt_navigator/NavigateToPoseNavigator
     navigate_through_poses:
       plugin: nav2_bt_navigator/NavigateThroughPosesNavigator
+    # Arti: library node BT yang diregistrasikan. Dampak: menambah kemampuan BT;
+    # library yang tidak terpasang menyebabkan node gagal start. Kisaran: nama
+    # library Nav2 yang benar-benar terinstal.
     plugin_lib_names:
       - nav2_compute_path_to_pose_action_bt_node
       - nav2_compute_path_through_poses_action_bt_node
@@ -82,215 +181,451 @@ bt_navigator:
 
 bt_navigator_navigate_to_pose_rclcpp_node:
   ros__parameters:
+    # Arti: sinkronisasi clock helper BT dengan navigator. Kisaran: false/true.
     use_sim_time: false
 
 bt_navigator_navigate_through_poses_rclcpp_node:
   ros__parameters:
+    # Arti: sinkronisasi clock helper BT dengan navigator. Kisaran: false/true.
     use_sim_time: false
 
 controller_server:
   ros__parameters:
+    # Arti: clock sumber parameter. Kisaran: false/true; false untuk robot nyata.
     use_sim_time: false
+    # Arti: frekuensi menghitung cmd_vel (Hz). Dampak: lebih tinggi lebih halus
+    # dan responsif, tetapi CPU naik. Kisaran praktis: 5-30 Hz.
     controller_frequency: 10.0
+    # Arti: topic nav_msgs/Odometry. Dampak: odom salah membuat kontrol tidak
+    # stabil. Kisaran: nama topic ROS.
     odom_topic: /diablo/odometry
+    # Arti: kecepatan di bawah ambang dianggap nol (m/s, m/s, rad/s). Dampak:
+    # menaikkan ambang mengurangi jitter tetapi menghilangkan gerak kecil.
+    # Kisaran praktis: 0-0.05.
     min_x_velocity_threshold: 0.001
     min_y_velocity_threshold: 0.0
     min_theta_velocity_threshold: 0.001
+    # Arti: toleransi waktu kegagalan controller (s). Dampak: lebih besar
+    # memberi waktu pulih sebelum abort, tetapi robot dapat diam lebih lama.
+    # Kisaran praktis: 0-5 s.
     failure_tolerance: 0.3
+    # Arti: nama plugin pemeriksa progres, tujuan, dan controller yang diaktifkan.
+    # Dampak: setiap nama harus memiliki blok konfigurasi. Kisaran: plugin tersedia.
     progress_checker_plugins: [progress_checker]
     goal_checker_plugins: [goal_checker]
     controller_plugins: [FollowPath]
     progress_checker:
+      # Arti: kelas pemeriksa apakah robot masih bergerak. Kisaran: plugin tersedia.
       plugin: nav2_controller::SimpleProgressChecker
+      # Arti: radius gerak minimum (m) dalam allowance. Dampak: lebih besar cepat
+      # mendeteksi macet; terlalu besar salah menganggap jalur gagal. Kisaran: 0.01-0.3 m.
       required_movement_radius: 0.08
+      # Arti: waktu yang diizinkan mencapai radius (s). Dampak: lebih besar tahan
+      # lantai licin/sempit tetapi deteksi macet lambat. Kisaran: 5-120 s.
       movement_time_allowance: 30.0
     goal_checker:
+      # Arti: kelas pemeriksa toleransi goal. Kisaran: plugin tersedia.
       plugin: nav2_controller::SimpleGoalChecker
+      # Arti: toleransi jarak posisi goal (m). Dampak: lebih kecil lebih presisi
+      # namun sulit tercapai. Kisaran praktis: 0.05-0.30 m.
       xy_goal_tolerance: 0.20
+      # Arti: toleransi heading goal (rad). Dampak: lebih kecil lebih presisi
+      # tetapi lebih banyak waktu berputar. Kisaran praktis: 0.05-0.40 rad.
       yaw_goal_tolerance: 0.20
+      # Arti: pertahankan status goal checker antar siklus. Kisaran: false/true;
+      # true biasanya mengurangi pergantian status dekat goal.
       stateful: true
     FollowPath:
+      # Arti: plugin local planner. Dampak: salah plugin membuat controller gagal.
+      # Kisaran: nama plugin Nav2 yang terinstal.
       plugin: dwb_core::DWBLocalPlanner
+      # Arti: keluarkan detail setiap trajectory untuk debug. Dampak: true lebih
+      # banyak log dan CPU. Kisaran: false/true.
       debug_trajectory_details: false
+      # Arti: batas kecepatan linear maju/mundur (m/s). Dampak: naik mempercepat
+      # robot tetapi menurunkan keselamatan/kestabilan. Kisaran praktis Diablo:
+      # min -0.5..0, max 0.05..0.8.
       min_vel_x: -0.30
       max_vel_x: 0.35
+      # Arti: batas kecepatan lateral (m/s). Differential drive harus 0.
+      # Kisaran: 0 untuk differential; non-zero hanya robot holonomic.
       min_vel_y: 0.0
       max_vel_y: 0.0
+      # Arti: batas kecepatan putar (rad/s). Dampak: naik mempercepat orientasi
+      # tetapi lebih mudah overshoot. Kisaran praktis: 0.2-1.5 rad/s.
       max_vel_theta: 0.60
+      # Arti: batas norm kecepatan translasi dan rotasi. Dampak: membatasi output
+      # gabungan meski batas sumbu lebih tinggi. Kisaran: 0..max_vel masing-masing.
       min_speed_xy: 0.0
       max_speed_xy: 0.35
       min_speed_theta: 0.0
+      # Arti: percepatan/perlambatan maksimum (m/s² dan rad/s²). Dampak: naik
+      # lebih gesit namun slip/overshoot; decel ditulis negatif. Kisaran praktis:
+      # linear 0.1-1.5, angular 0.2-3.0.
       acc_lim_x: 0.40
       decel_lim_x: -0.50
       acc_lim_y: 0.0
       decel_lim_y: 0.0
       acc_lim_theta: 0.80
       decel_lim_theta: -0.80
+      # Arti: jumlah sampel kandidat pada tiap sumbu. Dampak: lebih besar
+      # kualitas trajectory naik, CPU naik. Kisaran praktis: vx/vtheta 5-40;
+      # vy=1 untuk differential drive.
       vx_samples: 15
       vy_samples: 1
       vtheta_samples: 15
+      # Arti: horizon simulasi trajectory (s). Dampak: lebih besar melihat jauh
+      # tetapi respons obstacle dekat melambat. Kisaran praktis: 0.5-3 s.
       sim_time: 1.5
+      # Arti: jarak sampling trajectory linear/angular (m/rad). Dampak: lebih
+      # kecil detail collision lebih baik, CPU naik. Kisaran praktis: 0.01-0.10.
       linear_granularity: 0.05
       angular_granularity: 0.025
+      # Arti: toleransi lookup TF planner (s). Dampak: lebih besar tahan jitter
+      # waktu namun transform bisa basi. Kisaran praktis: 0.1-1 s.
       transform_tolerance: 0.3
+      # Arti: hentikan evaluasi setelah trajectory buruk ditemukan. Dampak: true
+      # hemat CPU; false mengevaluasi semua kandidat untuk debug. Kisaran: false/true.
       short_circuit_trajectory_evaluation: true
+      # Arti: pertahankan status internal planner antar siklus. Kisaran: false/true.
       stateful: true
+      # Arti: daftar critic DWB yang menilai trajectory. Dampak: mengubah daftar
+      # mengubah perilaku; setiap nama harus memiliki plugin critic. Kisaran: nama
+      # critic yang tersedia.
       critics: [BaseObstacle, PathAlign, GoalAlign, PathDist, GoalDist, RotateToGoal, Oscillation]
+      # Arti: bobot critic (tanpa unit). Dampak: naik = perilaku critic lebih
+      # dominan; terlalu tinggi mengalahkan tujuan lain. Kisaran praktis: 0-50.
       BaseObstacle.scale: 0.02
+      # PathAlign menjaga arah robot sejajar jalur; forward point adalah jarak
+      # titik sampel di depan robot (m). Kisaran scale 0-50, jarak 0-1 m.
       PathAlign.scale: 16.0
       PathAlign.forward_point_distance: 0.35
+      # GoalAlign mengarahkan heading ke goal; forward point dalam meter.
+      # Kisaran scale 0-50, jarak 0-1 m.
       GoalAlign.scale: 12.0
       GoalAlign.forward_point_distance: 0.25
+      # PathDist meminimalkan jarak dari jalur. Kisaran bobot praktis 0-50.
       PathDist.scale: 18.0
+      # GoalDist meminimalkan jarak ke goal. Kisaran bobot praktis 0-50.
       GoalDist.scale: 18.0
+      # RotateToGoal mengatur putar di dekat goal; slowing_factor >=0 mengatur
+      # seberapa cepat melambat, lookahead_time -1 berarti otomatis. Kisaran:
+      # scale 0-50, slowing_factor 0-20, lookahead_time -1 atau 0.1-5 s.
       RotateToGoal.scale: 20.0
       RotateToGoal.slowing_factor: 5.0
       RotateToGoal.lookahead_time: -1.0
+      # Oscillation memberi penalti gerak bolak-balik. Kisaran bobot praktis 0-10.
       Oscillation.scale: 1.0
 
 local_costmap:
   local_costmap:
     ros__parameters:
+      # Arti: clock simulasi. Kisaran: false/true; robot nyata false.
       use_sim_time: false
+      # Arti: frekuensi costmap menghitung obstacle (Hz). Dampak: naik lebih
+      # cepat merespons lidar tetapi CPU naik. Kisaran praktis: 2-15 Hz.
       update_frequency: 5.0
+      # Arti: frekuensi publish costmap (Hz). Dampak: naik membuat visualisasi
+      # dan controller lebih segar, bandwidth/CPU naik. Kisaran praktis: 1-10 Hz.
       publish_frequency: 3.0
+      # Arti: frame referensi local costmap. Dampak: odom membuat window ikut
+      # robot; harus tersedia di TF. Kisaran: nama frame, biasanya odom.
       global_frame: odom
+      # Arti: frame badan robot. Kisaran: nama frame yang sama dengan AMCL.
       robot_base_frame: diablo_base_link
+      # Arti: geser window mengikuti robot. Dampak: true untuk local costmap;
+      # false membuat grid tetap di tempat. Kisaran: false/true.
       rolling_window: true
+      # Arti: ukuran window local (m). Dampak: lebih besar melihat obstacle jauh
+      # tetapi CPU/memori naik. Kisaran praktis: 2-8 m.
       width: 4.0
       height: 4.0
+      # Arti: resolusi grid (m/cell). Dampak: lebih kecil detail lebih baik,
+      # tetapi CPU/memori naik. Kisaran praktis: 0.02-0.10 m.
       resolution: 0.05
+      # Arti: toleransi waktu TF (s). Dampak: lebih besar tahan jitter namun
+      # dapat memakai pose basi. Kisaran praktis: 0.1-1 s.
       transform_tolerance: 0.5
+      # Arti: poligon footprint robot dalam meter [x,y]. Dampak: footprint lebih
+      # besar menjaga jarak aman tetapi mempersempit jalur. Kisaran: ukur dimensi
+      # robot; titik harus mengelilingi robot secara berurutan.
       footprint: "[[0.30, 0.20], [0.30, -0.20], [-0.30, -0.20], [-0.30, 0.20]]"
+      # Arti: tambahan jarak aman footprint (m). Dampak: naik lebih aman namun
+      # jalur sempit ditolak. Kisaran praktis: 0-0.15 m.
       footprint_padding: 0.03
+      # Arti: layer yang digabungkan dan urutannya. Dampak: layer wajib punya
+      # blok konfigurasi; urutan memengaruhi hasil akhir. Kisaran: nama layer aktif.
       plugins: [obstacle_layer, inflation_layer]
       obstacle_layer:
+        # Arti: plugin obstacle dari LaserScan. Kisaran: plugin terinstal.
         plugin: nav2_costmap_2d::ObstacleLayer
+        # Arti: aktifkan layer. Dampak: false meniadakan obstacle dari scan.
+        # Kisaran: false/true.
         enabled: true
+        # Arti: nama sumber observasi yang dirujuk di bawah. Kisaran: nama blok.
         observation_sources: scan
+        # Arti: hapus obstacle di dalam footprint robot. Dampak: true mencegah
+        # robot menandai dirinya sendiri. Kisaran: false/true.
         footprint_clearing_enabled: true
         scan:
+          # Arti: topic LaserScan. Dampak: salah topic membuat layer kosong.
+          # Kisaran: nama topic ROS, biasanya /scan.
           topic: /scan
+          # Arti: tipe pesan observasi. Kisaran: LaserScan atau PointCloud2 sesuai topic.
           data_type: LaserScan
+          # Arti: ray scan menghapus ruang bebas. Dampak: false menyisakan
+          # obstacle lama; kisaran false/true.
           clearing: true
+          # Arti: ray scan menandai obstacle. Dampak: false hanya clearing;
+          # kisaran false/true.
           marking: true
+          # Arti: jarak maksimum obstacle yang ditandai (m). Dampak: naik melihat
+          # lebih jauh dengan CPU lebih tinggi. Kisaran praktis: 3-15 m.
           obstacle_max_range: 8.0
+          # Arti: jarak minimum obstacle yang ditandai (m). Dampak: naik
+          # mengabaikan pantulan dekat. Kisaran praktis: 0.05-0.30 m.
           obstacle_min_range: 0.10
+          # Arti: jarak maksimum raytrace clearing (m). Dampak: naik membersihkan
+          # ruang lebih jauh. Harus >= obstacle_max_range. Kisaran: 3-20 m.
           raytrace_max_range: 10.0
+          # Arti: jarak minimum raytrace (m). Kisaran praktis: 0.05-0.30 m.
           raytrace_min_range: 0.10
+          # Arti: tinggi obstacle yang diterima (m). Dampak: naik menangkap
+          # obstacle tinggi namun noise/overhead naik. Kisaran praktis: 0.2-2 m.
           max_obstacle_height: 1.5
       inflation_layer:
+        # Arti: plugin yang mengembangkan obstacle menjadi biaya aman.
+        # Kisaran: plugin terinstal.
         plugin: nav2_costmap_2d::InflationLayer
+        # Arti: radius inflasi (m). Dampak: naik menjaga robot lebih jauh namun
+        # koridor sempit bisa tidak dilalui. Kisaran praktis: 0.15-1 m.
         inflation_radius: 0.35
+        # Arti: laju penurunan biaya terhadap jarak. Dampak: lebih besar biaya
+        # turun tajam (robot boleh dekat setelah sedikit jarak); lebih kecil
+        # menyebarkan penalti lebih luas. Kisaran praktis: 1-10.
         cost_scaling_factor: 3.0
+      # Arti: selalu kirim grid penuh, bukan update parsial. Dampak: true lebih
+      # mudah untuk subscriber/visualisasi, tetapi bandwidth naik. Kisaran false/true.
       always_send_full_costmap: true
 
 global_costmap:
   global_costmap:
     ros__parameters:
+      # Arti: clock simulasi. Kisaran: false/true; robot nyata false.
       use_sim_time: false
+      # Arti: frekuensi menghitung global costmap (Hz). Dampak: naik lebih cepat
+      # memasukkan obstacle baru tetapi CPU naik. Kisaran praktis: 0.5-5 Hz.
       update_frequency: 1.0
+      # Arti: frekuensi publish grid (Hz). Dampak: naik memperbarui planner/UI
+      # lebih cepat dengan bandwidth lebih tinggi. Kisaran praktis: 0.5-5 Hz.
       publish_frequency: 1.0
+      # Arti: frame global costmap. Dampak: harus sama dengan map/AMCL.
+      # Kisaran: nama frame, biasanya map.
       global_frame: map
+      # Arti: frame badan robot. Kisaran: nama frame TF robot.
       robot_base_frame: diablo_base_link
+      # Arti: toleransi lookup TF (s). Dampak: lebih besar tahan jitter, namun
+      # transform dapat basi. Kisaran praktis: 0.1-1 s.
       transform_tolerance: 0.5
+      # Arti: poligon robot dalam meter. Dampak: menentukan collision footprint;
+      # ukur ulang bila dimensi robot berubah. Kisaran: titik keliling robot.
       footprint: "[[0.30, 0.20], [0.30, -0.20], [-0.30, -0.20], [-0.30, 0.20]]"
+      # Arti: padding keselamatan footprint (m). Kisaran praktis: 0-0.15 m.
       footprint_padding: 0.03
+      # Arti: simpan area unknown sebagai unknown. Dampak: true mencegah planner
+      # menganggap area belum dipetakan aman; false lebih permisif. Kisaran false/true.
       track_unknown_space: true
+      # Arti: urutan layer static, obstacle, dan inflation. Dampak: semua nama
+      # harus memiliki blok. Kisaran: nama layer yang terpasang.
       plugins: [static_layer, obstacle_layer, inflation_layer]
       static_layer:
+        # Arti: layer yang membaca occupancy grid map_server. Kisaran: plugin terpasang.
         plugin: nav2_costmap_2d::StaticLayer
+        # Arti: gunakan QoS transient-local agar map latched diterima subscriber
+        # baru. Dampak: false dapat membuat map tidak masuk saat startup. Kisaran false/true.
         map_subscribe_transient_local: true
       obstacle_layer:
+        # Arti: layer obstacle dari sensor. Kisaran: plugin terpasang.
         plugin: nav2_costmap_2d::ObstacleLayer
+        # Arti: aktifkan obstacle layer global. Kisaran: false/true.
         enabled: true
+        # Arti: nama blok sumber observasi. Kisaran: nama blok, di sini scan.
         observation_sources: scan
         scan:
+          # Arti: topic LaserScan. Kisaran: nama topic ROS.
           topic: /scan
+          # Arti: tipe pesan. Kisaran: LaserScan atau PointCloud2 sesuai topic.
           data_type: LaserScan
+          # Arti: clearing ruang bebas dari ray. Kisaran: false/true.
           clearing: true
+          # Arti: marking obstacle dari ray. Kisaran: false/true.
           marking: true
+          # Arti: jarak maksimum marking (m). Kisaran praktis: 3-15 m.
           obstacle_max_range: 8.0
+          # Arti: jarak minimum marking (m). Kisaran praktis: 0.05-0.30 m.
           obstacle_min_range: 0.10
+          # Arti: jarak maksimum clearing ray (m), sebaiknya >= obstacle_max_range.
+          # Kisaran praktis: 3-20 m.
           raytrace_max_range: 10.0
+          # Arti: jarak minimum clearing ray (m). Kisaran praktis: 0.05-0.30 m.
           raytrace_min_range: 0.10
+          # Arti: tinggi maksimum obstacle (m). Kisaran praktis: 0.2-2 m.
           max_obstacle_height: 1.5
       inflation_layer:
+        # Arti: plugin inflasi obstacle. Kisaran: plugin terpasang.
         plugin: nav2_costmap_2d::InflationLayer
+        # Arti: radius biaya obstacle (m). Dampak: lebih besar lebih aman namun
+        # jalur sempit ditolak. Kisaran praktis: 0.15-1 m.
         inflation_radius: 0.35
+        # Arti: kemiringan penurunan biaya. Dampak: lebih besar penalti lebih
+        # dekat obstacle; kisaran praktis: 1-10.
         cost_scaling_factor: 3.0
+      # Arti: selalu publish grid penuh. Dampak: subscriber mudah konsisten,
+      # bandwidth naik. Kisaran: false/true.
       always_send_full_costmap: true
 
 planner_server:
   ros__parameters:
+    # Arti: clock simulasi. Kisaran: false/true.
     use_sim_time: false
+    # Arti: frekuensi planner yang diharapkan (Hz). Dampak: hanya peringatan bila
+    # lebih lambat; kisaran praktis: 1-20 Hz.
     expected_planner_frequency: 5.0
+    # Arti: nama planner plugin aktif. Kisaran: nama blok planner.
     planner_plugins: [GridBased]
     GridBased:
+      # Arti: algoritma planner global. Kisaran: plugin NavfnPlanner terinstal.
       plugin: nav2_navfn_planner/NavfnPlanner
+      # Arti: toleransi jarak terhadap goal (m) saat mencari path. Dampak: naik
+      # memudahkan goal di cell sulit, tetapi goal akhir bisa bergeser. Kisaran: 0-1 m.
       tolerance: 0.25
+      # Arti: gunakan A* (true) atau Dijkstra (false). Dampak: A* biasanya lebih
+      # cepat dengan heuristic; false lebih netral. Kisaran: false/true.
       use_astar: false
+      # Arti: izinkan jalur melewati cell unknown. Dampak: true lebih permisif
+      # namun berisiko; false lebih aman pada peta tak lengkap. Kisaran: false/true.
       allow_unknown: true
 
 behavior_server:
   ros__parameters:
+    # Arti: clock simulasi. Kisaran: false/true.
     use_sim_time: false
+    # Arti: topic raw local costmap untuk behavior collision check. Dampak:
+    # salah topic membuat recovery gagal. Kisaran: nama topic costmap.
     costmap_topic: local_costmap/costmap_raw
+    # Arti: topic footprint terbitan costmap. Kisaran: nama topic footprint.
     footprint_topic: local_costmap/published_footprint
+    # Arti: frekuensi siklus behavior (Hz). Dampak: naik lebih responsif namun
+    # CPU naik. Kisaran praktis: 1-30 Hz.
     cycle_frequency: 10.0
+    # Arti: frame global behavior (odom untuk local recovery). Kisaran: nama frame.
     global_frame: odom
+    # Arti: frame robot. Kisaran: nama frame TF robot.
     robot_base_frame: diablo_base_link
+    # Arti: toleransi lookup TF (s). Kisaran praktis: 0.1-1 s.
     transform_tolerance: 0.5
+    # Arti: behavior recovery yang dimuat. Dampak: daftar harus cocok dengan
+    # blok plugin. Kisaran: spin, backup, drive_on_heading, wait, atau plugin valid.
     behavior_plugins: [spin, backup, drive_on_heading, wait]
     spin:
+      # Arti: plugin memutar robot di tempat. Kisaran: plugin terinstal.
       plugin: nav2_behaviors/Spin
     backup:
+      # Arti: plugin mundur saat recovery. Kisaran: plugin terinstal.
       plugin: nav2_behaviors/BackUp
     drive_on_heading:
+      # Arti: plugin maju/mundur pada heading tertentu. Kisaran: plugin terinstal.
       plugin: nav2_behaviors/DriveOnHeading
     wait:
+      # Arti: plugin berhenti menunggu. Kisaran: plugin terinstal.
       plugin: nav2_behaviors/Wait
 
 waypoint_follower:
   ros__parameters:
+    # Arti: clock simulasi. Kisaran: false/true.
     use_sim_time: false
+    # Arti: frekuensi pemeriksaan waypoint (Hz). Dampak: lebih tinggi responsif,
+    # CPU naik. Kisaran praktis: 1-50 Hz.
     loop_rate: 20
+    # Arti: hentikan seluruh misi jika satu waypoint gagal. Dampak: true aman;
+    # false mencoba waypoint berikutnya. Kisaran: false/true.
     stop_on_failure: true
+    # Arti: executor task di waypoint. Kisaran: nama blok plugin.
     waypoint_task_executor_plugin: wait_at_waypoint
     wait_at_waypoint:
+      # Arti: plugin aksi tunggu di waypoint. Kisaran: plugin terinstal.
       plugin: nav2_waypoint_follower::WaitAtWaypoint
+      # Arti: aktifkan jeda otomatis. Dampak: false melewati jeda. Kisaran false/true.
       enabled: false
+      # Arti: lama jeda di waypoint (ms). Dampak: lebih besar memberi waktu
+      # observasi/aksi, misi lebih lambat. Kisaran praktis: 0-60000 ms.
       waypoint_pause_duration: 0
 
 velocity_smoother:
   ros__parameters:
+    # Arti: clock simulasi. Kisaran: false/true.
     use_sim_time: false
+    # Arti: frekuensi smoothing cmd_vel (Hz). Dampak: lebih halus/responsif,
+    # CPU naik. Kisaran praktis: 5-50 Hz.
     smoothing_frequency: 20.0
+    # Arti: skalakan sumbu lain saat satu sumbu dibatasi. Dampak: true menjaga
+    # arah relatif; false mempertahankan tiap sumbu. Kisaran: false/true.
     scale_velocities: false
+    # Arti: sumber feedback, OPEN_LOOP atau CLOSED_LOOP. Dampak: CLOSED_LOOP
+    # mengikuti odom lebih akurat tetapi bergantung kualitas odom. Kisaran: enum tersebut.
     feedback: OPEN_LOOP
+    # Arti: batas kecepatan maksimum [x,y,theta] (m/s,m/s,rad/s). Dampak: naik
+    # lebih cepat namun risiko slip. Kisaran praktis Diablo [0.05-0.8, 0, 0.2-1.5].
     max_velocity: [0.35, 0.0, 0.60]
+    # Arti: batas minimum [x,y,theta] (m/s,m/s,rad/s); x negatif = mundur.
+    # Kisaran praktis [-0.8..0, 0, -1.5..0].
     min_velocity: [-0.30, 0.0, -0.60]
+    # Arti: percepatan maksimum [x,y,theta]. Dampak: naik lebih gesit tetapi
+    # dapat slip/overshoot. Kisaran praktis [0.1-1.5, 0, 0.2-3].
     max_accel: [0.40, 0.0, 0.80]
+    # Arti: perlambatan maksimum (nilai negatif) [x,y,theta]. Dampak: magnitudo
+    # lebih besar berhenti lebih cepat namun lebih kasar. Kisaran praktis [-1.5..0, 0, -3..0].
     max_decel: [-0.50, 0.0, -0.80]
+    # Arti: topic odometri untuk CLOSED_LOOP. Kisaran: nama topic Odometry.
     odom_topic: /diablo/odometry
+    # Arti: durasi data odom yang dipakai (s). Dampak: lebih besar tahan update
+    # jarang tetapi lebih basi. Kisaran praktis: 0.05-1 s.
     odom_duration: 0.1
+    # Arti: deadband [x,y,theta] di bawah nilai ini dianggap nol. Dampak: naik
+    # menghilangkan jitter tetapi bisa menghambat gerak kecil. Kisaran praktis: 0-0.05.
     deadband_velocity: [0.0, 0.0, 0.0]
+    # Arti: timeout tanpa cmd_vel sebelum output nol (s). Dampak: lebih kecil
+    # lebih aman; terlalu kecil memotong command berkala. Kisaran praktis: 0.1-2 s.
     velocity_timeout: 0.5
+    # Arti: gunakan TwistStamped (true) atau Twist (false). Dampak: harus sama
+    # dengan subscriber /cmd_vel. Kisaran: false/true.
     enable_stamped_cmd_vel: false
 
 map_server:
   ros__parameters:
+    # Arti: clock simulasi. Kisaran: false/true.
     use_sim_time: false
+    # Arti: file peta YAML. Launch Diablo mengisi ini dari map terpilih; string
+    # kosong di sini mencegah hard-code path. Kisaran: path file .yaml yang ada.
     yaml_filename: ""
 
 lifecycle_manager_localization:
   ros__parameters:
+    # Arti: clock simulasi. Kisaran: false/true.
     use_sim_time: false
+    # Arti: otomatis configure/activate node localization. Dampak: false perlu
+    # lifecycle manual. Kisaran: false/true.
     autostart: true
+    # Arti: node yang dikelola saat localization start. Dampak: semua nama harus
+    # benar-benar dijalankan. Kisaran: [map_server, amcl] atau node valid.
     node_names: [map_server, amcl]
 
 lifecycle_manager_navigation:
   ros__parameters:
+    # Arti: clock simulasi. Kisaran: false/true.
     use_sim_time: false
+    # Arti: otomatis configure/activate stack navigation. Kisaran: false/true.
     autostart: true
+    # Arti: node yang dikelola saat Nav2 start. Dampak: nama hilang membuat
+    # lifecycle manager gagal mengaktifkan stack. Kisaran: node Nav2 yang aktif.
     node_names: [controller_server, planner_server, behavior_server, bt_navigator, waypoint_follower, velocity_smoother]

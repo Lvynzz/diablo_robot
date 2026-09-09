@@ -1,19 +1,22 @@
 controller_manager:
   ros__parameters:
-    update_rate: 30  # Frekuensi update controller (Hz)
+    # Arti: frekuensi loop controller manager (Hz). Dampak: naik lebih responsif
+    # tetapi CPU/bus naik. Kisaran praktis: 30-200 Hz.
+    update_rate: 30
 
-    # Controller untuk menyebarkan state (posisi/kecepatan) joint saat ini ke ROS
+    # Arti: broadcaster state posisi/kecepatan joint ke ROS. Kisaran: plugin terinstal.
     joint_state_broadcaster:
       type: joint_state_broadcaster/JointStateBroadcaster
 
-    # Controller trajectory yang akan kita gunakan
+    # Arti: controller trajectory untuk tujuh joint. Kisaran: plugin terinstal.
     seven_joint_trajectory_controller:
       type: joint_trajectory_controller/JointTrajectoryController
 
 # Konfigurasi khusus untuk trajectory controller
 seven_joint_trajectory_controller:
   ros__parameters:
-    # Daftar joint yang dikendalikan oleh controller ini
+    # Arti: daftar joint dan urutan indeks trajectory. Dampak: order salah dapat
+    # menggerakkan joint berbeda. Kisaran: nama joint valid di URDF.
     joints:
       - joint1  # ID 1
       - joint2  # ID 2
@@ -23,9 +26,11 @@ seven_joint_trajectory_controller:
       - joint8  # ID 8
       - joint11 # ID 11
     
-    # Interface yang dikirimkan ke hardware (posisi)
+    # Arti: interface command ke hardware. Dampak: position mengirim target sudut.
+    # Kisaran: interface yang diekspor hardware.
     command_interfaces:
       - position
-    # Interface yang dibaca dari hardware (posisi)
+    # Arti: interface state yang dibaca dari hardware. Dampak: dipakai publisher
+    # state/feedback. Kisaran: interface hardware yang tersedia.
     state_interfaces:
       - position

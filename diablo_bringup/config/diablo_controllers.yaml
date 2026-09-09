@@ -1,15 +1,26 @@
 controller_manager:
   ros__parameters:
-    update_rate: 100  # Hz
+    # Arti: frekuensi controller_manager menjalankan update hardware (Hz).
+    # Dampak: lebih tinggi responsif tetapi CPU/komunikasi servo naik. Kisaran
+    # praktis: 30-200 Hz, jangan melebihi kemampuan bus Dynamixel.
+    update_rate: 100
 
+    # Arti: broadcaster state joint ke /joint_states. Kisaran: tipe plugin
+    # harus tersedia; tidak ada range numerik.
     joint_state_broadcaster:
       type: joint_state_broadcaster/JointStateBroadcaster
 
+    # Arti: controller yang menerima command posisi joint2. Kisaran: tipe
+    # plugin harus tersedia dan nama dipakai saat spawner.
     joint2_position_controller:
       type: position_controllers/JointGroupPositionController
 
 joint2_position_controller:
   ros__parameters:
+    # Arti: daftar joint yang dikendalikan. Dampak: nama/order harus cocok
+    # dengan URDF dan command yang dikirim. Kisaran: nama joint valid.
     joints:
       - joint2
+    # Arti: interface command hardware. Dampak: position mengirim target sudut;
+    # kisaran: interface yang diekspor hardware (position/velocity/effort).
     interface_name: position

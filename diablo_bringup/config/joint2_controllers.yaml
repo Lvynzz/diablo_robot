@@ -1,28 +1,44 @@
 controller_manager:
   ros__parameters:
-    update_rate: 50  # Hz
+    # Arti: frekuensi loop controller manager (Hz). Dampak: naik lebih responsif
+    # tetapi CPU/bus naik. Kisaran praktis: 30-200 Hz.
+    update_rate: 50
 
+    # Arti: broadcaster state joint. Kisaran: plugin terinstal.
     joint_state_broadcaster:
       type: joint_state_broadcaster/JointStateBroadcaster
 
+    # Arti: controller trajectory joint2. Kisaran: plugin terinstal.
     joint2_trajectory_controller:
       type: joint_trajectory_controller/JointTrajectoryController
 
 joint2_trajectory_controller:
   ros__parameters:
+    # Arti: joint yang dikendalikan. Dampak: nama harus ada di URDF.
+    # Kisaran: nama joint valid.
     joints:
       - joint2
+    # Arti: interface command hardware. Kisaran: interface hardware yang tersedia.
     command_interfaces:
       - position
+    # Arti: interface state yang dibaca. Kisaran: interface hardware yang tersedia.
     state_interfaces:
       - position
       - velocity
+    # Arti: frekuensi publish state (Hz). Kisaran praktis: 10-100 Hz.
     state_publish_rate: 50.0
+    # Arti: frekuensi monitor action (Hz). Kisaran praktis: 5-50 Hz.
     action_monitor_rate: 20.0
+    # Arti: izinkan goal parsial. Dampak: false memaksa command joint lengkap;
+    # true memudahkan goal parsial namun state yang tidak disebut dipertahankan.
+    # Kisaran: false/true.
     allow_partial_joints_goal: false
     constraints:
+      # Arti: kecepatan dianggap berhenti (rad/s). Kisaran: 0-0.5.
       stopped_velocity_tolerance: 0.05
+      # Arti: waktu tambahan mencapai goal (s). Kisaran praktis: 0-10 s.
       goal_time: 0.5
       joint2:
+        # Arti: toleransi joint2 untuk trajectory/goal (rad). Kisaran: 0.01-0.5.
         trajectory: 0.1
         goal: 0.05

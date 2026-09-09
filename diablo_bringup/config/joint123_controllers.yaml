@@ -1,36 +1,59 @@
 controller_manager:
   ros__parameters:
+    # Arti: frekuensi loop controller manager (Hz). Dampak: naik lebih responsif
+    # tetapi beban CPU/bus naik. Kisaran praktis: 30-200 Hz.
     update_rate: 50
 
+    # Arti: publish state semua joint ke /joint_states. Kisaran: plugin terinstal.
     joint_state_broadcaster:
       type: joint_state_broadcaster/JointStateBroadcaster
 
+    # Arti: controller trajectory untuk joint1-3. Kisaran: plugin terinstal.
     joint123_trajectory_controller:
       type: joint_trajectory_controller/JointTrajectoryController
 
 joint123_trajectory_controller:
   ros__parameters:
+    # Arti: joint yang dikendalikan dan urutan indeks trajectory. Dampak: urutan
+    # salah menggerakkan joint berbeda. Kisaran: nama joint valid di URDF.
     joints:
       - joint1
       - joint2
       - joint3
+    # Arti: interface command yang ditulis. Kisaran: position/velocity/effort
+    # sesuai interface hardware.
     command_interfaces:
       - position
+    # Arti: interface state yang dibaca. Dampak: velocity dibutuhkan untuk
+    # feedback/constraint. Kisaran: interface yang diekspor hardware.
     state_interfaces:
       - position
       - velocity
+    # Arti: frekuensi publish state trajectory (Hz). Dampak: naik lebih halus
+    # di UI tetapi bandwidth naik. Kisaran praktis: 10-100 Hz.
     state_publish_rate: 50.0
+    # Arti: frekuensi monitoring action trajectory (Hz). Kisaran praktis: 5-50 Hz.
     action_monitor_rate: 20.0
+    # Arti: izinkan goal tidak menyebut semua joint. Dampak: false lebih aman
+    # untuk teleop yang mengirim semua joint; true memudahkan goal parsial.
+    # Kisaran: false/true.
     allow_partial_joints_goal: false
     constraints:
+      # Arti: kecepatan maksimum yang dianggap berhenti (rad/s). Dampak: naik
+      # lebih cepat selesai tetapi posisi akhir kurang presisi. Kisaran: 0-0.5.
       stopped_velocity_tolerance: 0.05
+      # Arti: waktu tambahan mencapai goal (s). Dampak: naik mencegah timeout
+      # servo lambat, tetapi error terdeteksi lebih lambat. Kisaran: 0-10 s.
       goal_time: 2.5
       joint1:
+        # Arti: toleransi joint terhadap trajectory/goal (rad). Kisaran praktis: 0.01-0.5.
         trajectory: 0.3
         goal: 0.05
       joint2:
+        # Arti: toleransi joint2 terhadap trajectory/goal (rad). Kisaran praktis: 0.01-0.5.
         trajectory: 0.3
         goal: 0.05
       joint3:
+        # Arti: toleransi joint3 terhadap trajectory/goal (rad). Kisaran praktis: 0.01-0.5.
         trajectory: 0.3
         goal: 0.05

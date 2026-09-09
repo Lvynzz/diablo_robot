@@ -1,15 +1,21 @@
 controller_manager:
   ros__parameters:
-    update_rate: 30  # Hz -- mulai konservatif dulu
+    # Arti: frekuensi loop controller manager (Hz). Dampak: naik lebih responsif
+    # tetapi CPU/bus naik. Kisaran praktis: 30-200 Hz; 30 konservatif.
+    update_rate: 30
 
+    # Arti: broadcaster state semua joint. Kisaran: plugin terinstal.
     joint_state_broadcaster:
       type: joint_state_broadcaster/JointStateBroadcaster
 
+    # Arti: controller posisi grup untuk enam joint. Kisaran: plugin terinstal.
     six_joint_position_controller:
       type: position_controllers/JointGroupPositionController
 
 six_joint_position_controller:
   ros__parameters:
+    # Arti: daftar joint yang menerima target posisi. Dampak: urutan harus cocok
+    # dengan command yang dikirim. Kisaran: nama joint valid di URDF.
     joints:
       - joint1
       - joint2
@@ -17,4 +23,6 @@ six_joint_position_controller:
       - joint6
       - joint7
       - joint8
+    # Arti: interface command yang ditulis. Dampak: position = target sudut.
+    # Kisaran: interface yang diekspor hardware (position/velocity/effort).
     interface_name: position

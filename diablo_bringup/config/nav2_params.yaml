@@ -338,8 +338,11 @@ local_costmap:
       rolling_window: true
       # Arti: ukuran window local (m). Dampak: lebih besar melihat obstacle jauh
       # tetapi CPU/memori naik. Kisaran praktis: 2-8 m.
-      width: 4.0
-      height: 4.0
+      # Nav2 Humble declares these two local-window dimensions as integers
+      # (meters).  Decimal YAML values are parsed as doubles and make
+      # controller_server abort with InvalidParameterTypeException.
+      width: 4
+      height: 4
       # Arti: resolusi grid (m/cell). Dampak: lebih kecil detail lebih baik,
       # tetapi CPU/memori naik. Kisaran praktis: 0.02-0.10 m.
       resolution: 0.05

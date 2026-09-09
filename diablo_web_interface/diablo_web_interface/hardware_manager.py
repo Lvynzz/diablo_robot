@@ -11,6 +11,7 @@ import signal
 import subprocess
 import threading
 import time
+from pathlib import Path
 
 
 class HardwareManager:
@@ -23,6 +24,25 @@ class HardwareManager:
     OPTIONAL_COMPONENTS = ("dynamixel",)
     OPTIONAL_PROCESSES = ("localization", "navigation", "mapping")
     MAPPING_COMPONENTS = ("diablo", "lidar")
+    # Hardware processes can be started manually (or by an older web bridge)
+    # and therefore are not always children of this manager.  OFF HARDWARE
+    # must still be able to stop those known robot drivers, while avoiding a
+    # broad kill of unrelated ROS nodes.
+    EXTERNAL_PROCESS_MARKERS = {
+        "diablo": ("diablo_ctrl_node",),
+        "lidar": ("sllidar_a2m7_launch.py", "sllidar_node"),
+        "dynamixel": ("full_body_hardware.launch.py",),
+    }
+    _SHELL_AND_QUERY_COMMANDS = {
+        "bash",
+        "sh",
+        "dash",
+        "zsh",
+        "grep",
+        "pgrep",
+        "pkill",
+        "ssh",
+    }
 
     def __init__(
         self,
@@ -454,16 +474,111 @@ class HardwareManager:
             self._started_at.pop(clean_name, None)
             return {"requested": True, "message": f"{clean_name} stopped"}
 
-    def stop_hardware(self):
-        """Stop only hardware process groups created by this manager.
+    def _external_process_pids(self, component):
+        """Find known driver processes not owned by this supervisor.
 
-        Drivers that were already running before the web button was pressed are
-        deliberately left alone. This prevents the web UI from killing an
-        operator-owned or systemd-owned process unexpectedly.
+        Reading ``/proc/*/cmdline`` avoids matching this manager's own grep
+        command and lets us identify the exact launch/node markers.  The
+        caller still groups PIDs by process group before signalling them.
         """
+        markers = self.EXTERNAL_PROCESS_MARKERS.get(component, ())
+        if not markers:
+            return []
+        pids = []
+        try:
+            entries = os.listdir("/proc")
+        except OSError:
+            return pids
+        for entry in entries:
+            if not entry.isdigit():
+                continue
+            pid = int(entry)
+            if pid == os.getpid():
+                continue
+            try:
+                command_line = Path(f"/proc/{pid}/cmdline").read_bytes()
+            except (OSError, ValueError):
+                continue
+            arguments = [
+                item.decode("utf-8", "replace")
+                for item in command_line.split(b"\0")
+                if item
+            ]
+            if not arguments:
+                continue
+            # A remote ``grep``/shell command may contain a driver name in
+            # its search expression.  It is not a driver and must never be
+            # selected for group termination.
+            if Path(arguments[0]).name in self._SHELL_AND_QUERY_COMMANDS:
+                continue
+            if any(
+                argument == marker or argument.endswith(f"/{marker}")
+                for argument in arguments
+                for marker in markers
+            ):
+                pids.append(pid)
+        return pids
+
+    def _stop_external_component(self, component):
+        """Stop process groups belonging to a known external hardware driver."""
+        groups = {}
+        own_group = os.getpgrp()
+        for pid in self._external_process_pids(component):
+            try:
+                group = os.getpgid(pid)
+            except (ProcessLookupError, PermissionError, OSError):
+                continue
+            # Never signal the web bridge's own process group, even if a
+            # command line happens to contain a marker in a launch argument.
+            if group in (0, 1, own_group):
+                continue
+            groups[group] = groups.get(group, 0) + 1
+
+        terminated = []
+        for group in groups:
+            try:
+                os.killpg(group, signal.SIGTERM)
+                terminated.append(group)
+            except (ProcessLookupError, PermissionError, OSError):
+                continue
+
+        # Give launch files a short, deterministic shutdown window, then kill
+        # only groups that are still alive so a stuck USB probe cannot lock OFF.
+        deadline = time.monotonic() + 2.0
+        remaining = set(terminated)
+        while remaining and time.monotonic() < deadline:
+            for group in tuple(remaining):
+                try:
+                    os.killpg(group, 0)
+                except (ProcessLookupError, PermissionError, OSError):
+                    remaining.discard(group)
+            if remaining:
+                time.sleep(0.05)
+        for group in remaining:
+            try:
+                os.killpg(group, signal.SIGKILL)
+            except (ProcessLookupError, PermissionError, OSError):
+                pass
+
+        if not terminated:
+            return {
+                "requested": False,
+                "message": f"No external {component} driver process found",
+            }
+        return {
+            "requested": True,
+            "message": f"Stopped external {component} driver process group(s)",
+            "groups": sorted(terminated),
+        }
+
+    def stop_hardware(self):
+        """Stop all known hardware drivers and reset their readiness state."""
         results = {}
         for component in reversed(self.COMPONENTS):
             results[component] = self.stop_process(component)
+        external = {}
+        for component in reversed(self.COMPONENTS):
+            external[component] = self._stop_external_component(component)
 
         with self._lock:
             # Also clear handles that had already exited before OFF was
@@ -495,11 +610,14 @@ class HardwareManager:
                     "updated": time.time(),
                 }
             )
-        requested = any(item.get("requested") for item in results.values())
+        requested = any(item.get("requested") for item in results.values()) or any(
+            item.get("requested") for item in external.values()
+        )
         return {
             "requested": requested,
             "message": "Hardware stop requested",
             "results": results,
+            "external": external,
         }
 
     def _close_log(self, component):

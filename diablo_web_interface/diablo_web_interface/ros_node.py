@@ -697,12 +697,25 @@ class DiabloWebNode(Node):
             )
         except Exception:
             with self._lock:
-                localization_running = self._hardware.process_status("localization")["active"]
+                # Navigation owns the embedded map_server + AMCL launch.  Do
+                # not fall back to odometry while either standalone
+                # localization or Navigation is active: odom is in a
+                # different frame and would make the robot icon jump on the
+                # map whenever map->odom has not been published yet.
+                localization_running = (
+                    self._hardware.process_status("localization")["active"]
+                    or self._hardware.process_status("navigation")["active"]
+                )
                 amcl_recent = time.monotonic() - self._last_amcl_pose_time <= 3.0
-                if self._odom_pose is not None and (
-                    self._pose is None
-                    or self._pose.get("source") in ("odom", "wheel_odom", "filtered_odom")
-                    or (not localization_running and not amcl_recent)
+                if (
+                    self._odom_pose is not None
+                    and not localization_running
+                    and not amcl_recent
+                    and (
+                        self._pose is None
+                        or self._pose.get("source")
+                        in ("odom", "wheel_odom", "filtered_odom")
+                    )
                 ):
                     self._pose = self._odom_pose
             return
@@ -1258,6 +1271,7 @@ class DiabloWebNode(Node):
             "lidar": lidar,
             "stopped": stopped,
             "results": hardware.get("results", {}),
+            "external": hardware.get("external", {}),
         }
 
     def mapping_status(self):

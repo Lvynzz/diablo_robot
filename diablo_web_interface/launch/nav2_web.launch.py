@@ -21,13 +21,15 @@ def _default_map_file(bringup_share):
             selected = ""
         if selected:
             selected_path = Path(selected).expanduser()
-            if not selected_path.is_absolute():
-                selected_path = directory / selected_path.name
             if selected_path.suffix.lower() == ".pgm":
                 selected_path = selected_path.with_suffix(".yaml")
+            # The install-space map files may be symlinks into the source
+            # checkout.  Resolve the marker by basename inside each candidate
+            # directory; resolving the file first makes the old parent check
+            # reject valid install-space symlinks and fall back to empty.yaml.
+            selected_path = directory / selected_path.name
             try:
-                selected_path = selected_path.resolve()
-                if directory.resolve() in selected_path.parents and selected_path.is_file():
+                if selected_path.is_file():
                     return str(selected_path)
             except OSError:
                 pass

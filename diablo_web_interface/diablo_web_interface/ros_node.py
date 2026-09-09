@@ -193,6 +193,13 @@ class DiabloWebNode(Node):
         self.declare_parameter("scan_topic", "/scan")
         self.declare_parameter("base_frame", "diablo_base_link")
         self.declare_parameter("map_frame", "map")
+        # Keep the calibrated laser pose available to the web bridge even
+        # during the short DDS discovery window before /tf_static is latched.
+        # These values are also the same defaults used by web_interface.launch.
+        self.declare_parameter("lidar_x", 0.0)
+        self.declare_parameter("lidar_y", 0.08)
+        self.declare_parameter("lidar_z", 0.17)
+        self.declare_parameter("lidar_yaw", 3.141592653589793)
         self.declare_parameter("max_forward_command", 1.0)
         self.declare_parameter("max_turn_command", 1.0)
         self.declare_parameter("max_roll_command", 0.2)
@@ -249,6 +256,14 @@ class DiabloWebNode(Node):
         self.scan_topic = str(self.get_parameter("scan_topic").value)
         self.base_frame = str(self.get_parameter("base_frame").value)
         self.map_frame = str(self.get_parameter("map_frame").value)
+        self.lidar_x = float(self.get_parameter("lidar_x").value)
+        self.lidar_y = float(self.get_parameter("lidar_y").value)
+        self.lidar_z = float(self.get_parameter("lidar_z").value)
+        self.lidar_yaw = float(self.get_parameter("lidar_yaw").value)
+        if not all(math.isfinite(value) for value in (
+            self.lidar_x, self.lidar_y, self.lidar_z, self.lidar_yaw
+        )):
+            raise ValueError("lidar pose parameters must be finite")
         self.max_forward = abs(float(self.get_parameter("max_forward_command").value))
         self.max_turn = abs(float(self.get_parameter("max_turn_command").value))
         self.max_roll = abs(float(self.get_parameter("max_roll_command").value))
@@ -574,7 +589,12 @@ class DiabloWebNode(Node):
             round(float(value), 3) if math.isfinite(float(value)) else None
             for value in sampled
         ]
-        sensor_x = sensor_y = sensor_theta = 0.0
+        # Use the launch calibration as a deterministic fallback.  Without
+        # this, the browser silently draws the scan in the wrong direction if
+        # a latched /tf_static sample arrives after the first LaserScan.
+        sensor_x = self.lidar_x
+        sensor_y = self.lidar_y
+        sensor_theta = self.lidar_yaw
         try:
             scan_frame = message.header.frame_id or "laser"
             transform = self._tf_buffer.lookup_transform(
@@ -584,8 +604,9 @@ class DiabloWebNode(Node):
             sensor_y = float(transform.transform.translation.y)
             sensor_theta = _yaw_from_quaternion(transform.transform.rotation)
         except Exception:
-            # The static laser TF may not have arrived during the first scan.
-            # Keep a base-frame fallback; subsequent scans retry the lookup.
+            # The calibrated fallback above remains valid for the configured
+            # `laser` frame; subsequent scans still retry the lookup so custom
+            # frame trees continue to work when they become available.
             pass
         with self._lock:
             self._scan = {

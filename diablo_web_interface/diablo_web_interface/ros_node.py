@@ -235,7 +235,8 @@ class DiabloWebNode(Node):
         )
         self.declare_parameter(
             "navigation_start_command",
-            "ros2 launch diablo_web_interface navigation.launch.py",
+            "ros2 launch diablo_web_interface navigation.launch.py "
+            "enable_mux:=false enable_wheel_odom:=false",
         )
         self.declare_parameter(
             "mapping_start_command",

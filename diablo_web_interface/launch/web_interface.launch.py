@@ -64,7 +64,10 @@ def generate_launch_description():
         ),
         DeclareLaunchArgument(
             "navigation_start_command",
-            default_value="ros2 launch diablo_web_interface navigation.launch.py",
+            default_value=(
+                "ros2 launch diablo_web_interface navigation.launch.py "
+                "enable_mux:=false enable_wheel_odom:=false"
+            ),
         ),
         DeclareLaunchArgument(
             "mapping_start_command",

@@ -45,6 +45,7 @@ class HardwareManager:
         ),
         "navigation": (
             "navigation.launch.py",
+            "motion_cmd_bridge",
             "controller_server",
             "planner_server",
             "behavior_server",
@@ -60,6 +61,7 @@ class HardwareManager:
             "sync_slam_toolbox_node",
         ),
         "web_support": (
+            "web_node",
             "motion_cmd_mux",
             "wheel_odom",
             "diablo_lidar_static_tf",
@@ -677,21 +679,15 @@ class HardwareManager:
         pids = self._process_pids_for_markers(markers)
         groups = set()
         for pid in pids:
-            try:
-                groups.add(os.getpgid(pid))
-            except (ProcessLookupError, PermissionError, OSError):
-                continue
+            groups.update(self._process_tree_groups(pid))
         return self._stop_groups(groups, label)
 
     def _stop_external_component(self, component):
         """Stop process groups belonging to a known external hardware driver."""
         groups = {}
         for pid in self._external_process_pids(component):
-            try:
-                group = os.getpgid(pid)
-            except (ProcessLookupError, PermissionError, OSError):
-                continue
-            groups[group] = groups.get(group, 0) + 1
+            for group in self._process_tree_groups(pid):
+                groups[group] = groups.get(group, 0) + 1
         result = self._stop_groups(groups, f"external {component} driver")
         if not result["requested"]:
             result["message"] = f"No external {component} driver process found"

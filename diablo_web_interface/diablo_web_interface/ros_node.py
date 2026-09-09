@@ -1184,8 +1184,10 @@ class DiabloWebNode(Node):
             ("navigation", self.stop_navigation),
             ("localization", self.stop_localization),
         ):
-            if self._hardware.process_status(component)["active"]:
-                stopped[component] = stopper()
+            # Always issue the stop request.  Status can lag a timed-out
+            # component (for example LiDAR) or a launch can still be in its
+            # startup window; OFF HARDWARE must never be gated by that state.
+            stopped[component] = stopper()
         try:
             self.publish_stop()
         except Exception as error:

@@ -500,7 +500,6 @@ export function MappingView({ state, hardware, panels, sendCommand, onEvent }: M
             {hardware.components.map((component) => <div className={`hardware-component state-${component.state}`} key={component.id}><i /><span>{component.label}</span><b>{componentLabel(component)}</b></div>)}
           </div>
           <LaunchToggleButton component="hardware" state={state} hardware={hardware} sendCommand={sendCommand} onEvent={onEvent} compact />
-          <button className="primary-action mapping-wide-button legacy-hardware-button" type="button" disabled={hardware.all_ready || hardware.starting} onClick={() => void requestHardware()}>{hardware.all_ready ? "HARDWARE READY" : hardware.starting ? "STARTING…" : "ON HARDWARE"}</button>
         </div>
 
         <div className="mapping-control-grid">

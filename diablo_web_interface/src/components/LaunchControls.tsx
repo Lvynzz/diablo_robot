@@ -40,7 +40,17 @@ const LABELS: Record<LaunchComponent, { eyebrow: string; title: string; detail: 
 
 function activeFor(component: LaunchComponent, state: DiabloState, hardware: HardwareStatus) {
   if (component === "hardware") {
-    return hardware.ready || hardware.starting || hardware.all_ready;
+    const componentProcessActive = hardware.components.some(
+      (item) => !["offline", "not_configured"].includes(item.state),
+    );
+    return hardware.ready
+      || hardware.starting
+      || hardware.all_ready
+      || componentProcessActive
+      || Boolean(state.mapping?.active)
+      || Boolean(state.processes?.mapping?.active)
+      || Boolean(state.processes?.navigation?.active)
+      || Boolean(state.processes?.localization?.active);
   }
   return component === "mapping"
     ? state.mapping.active || Boolean(state.processes?.mapping?.active)

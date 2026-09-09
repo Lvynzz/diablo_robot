@@ -57,7 +57,16 @@
   function componentActive(name) {
     if (name === "hardware") {
       const hardware = state.hardware || {};
-      return Boolean(hardware.ready || hardware.starting || hardware.all_ready);
+      const components = Array.isArray(hardware.components) ? hardware.components : [];
+      const componentProcessActive = components.some((item) => !["offline", "not_configured"].includes(String(item.state || "")));
+      // Keep the OFF action available even when one sensor timed out.  Any
+      // ready/waiting component or dependent launch means there is something
+      // that must receive the stop command.
+      return Boolean(
+        hardware.ready || hardware.starting || hardware.all_ready ||
+        componentProcessActive || processActive("mapping") ||
+        processActive("navigation") || processActive("localization")
+      );
     }
     return processActive(name);
   }

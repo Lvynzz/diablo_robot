@@ -104,6 +104,8 @@ def test_web_ui_has_mapping_teleop_and_topic_echo_panels():
     assert 'LaunchToggleButton' in mapping
     assert 'LaunchControls' in read_text("src/components/LaunchControls.tsx")
     assert 'type: "stop_hardware"' in read_text("src/components/LaunchControls.tsx")
+    assert "componentProcessActive" in read_text("src/components/LaunchControls.tsx")
+    assert "Always issue the stop request" in ros_node
     assert 'type: "joint_position"' in drive
     assert 'Dynamixel Joint Control' in drive
     assert "mapping.active" in mapping

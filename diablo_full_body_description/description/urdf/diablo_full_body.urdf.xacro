@@ -21,12 +21,13 @@
 <xacro:arg name="track_width" default="0.475"/>
 <xacro:arg name="left_feedback_sign" default="1.0"/>
 <xacro:arg name="right_feedback_sign" default="1.0"/>
-<!-- RPLIDAR A2 frame calibration.  The default assumes the sensor +X axis
-     points in the same direction as the robot +X (forward) axis. -->
+<!-- RPLIDAR A2 frame calibration.  The driver publishes +X toward the
+     interface lead; on Diablo that lead is toward the robot rear, hence the
+     default 180-degree yaw makes the laser +X axis point forward. -->
 <xacro:arg name="lidar_x" default="0.0"/>
 <xacro:arg name="lidar_y" default="0.08"/>
 <xacro:arg name="lidar_z" default="0.17"/>
-<xacro:arg name="lidar_yaw" default="0.0"/>
+<xacro:arg name="lidar_yaw" default="3.141592653589793"/>
 
 <!-- One GPIO description is shared by the arm and Seed Robotics hand
      ros2_control systems below.  The IDs are kept next to the calls so the
@@ -70,8 +71,8 @@
 	</link>
 
 	<!-- RPLIDAR A2 frame.  Measured offset from diablo_base_link is
-	     x=0.00 m, y=+0.08 m, z=+0.17 m.  Set lidar_yaw to pi if the
-	     installed sensor +X axis points toward the robot rear. -->
+	     x=0.00 m, y=+0.08 m, z=+0.17 m.  The interface lead is mounted
+	     toward the robot rear, so the laser frame is yawed by pi. -->
 	<link name="laser"/>
 	<joint name="diablo_laser_joint" type="fixed">
 		<origin xyz="$(arg lidar_x) $(arg lidar_y) $(arg lidar_z)"

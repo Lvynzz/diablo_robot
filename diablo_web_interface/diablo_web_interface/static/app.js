@@ -79,6 +79,9 @@
       if (hardware.starting) return "STARTING";
       return "OFFLINE";
     }
+    if (name === "localization" && state.processes?.localization?.owner === "navigation") {
+      return "AMCL VIA NAV2";
+    }
     if (name === "mapping" && state.mapping?.active) return "RUNNING";
     return String(state.processes?.[name]?.state || "idle").replaceAll("_", " ").toUpperCase();
   }
@@ -177,11 +180,12 @@
       if (!button) return;
       const running = componentActive(name);
       const definition = launchDefinitions[name];
+      const embeddedLocalization = name === "localization" && state.processes?.localization?.owner === "navigation";
       button.classList.toggle("is-active", running);
-      button.querySelector("span").textContent = running ? `OFF ${definition.label}` : `ON ${definition.label}`;
+      button.querySelector("span").textContent = embeddedLocalization ? "AMCL VIA NAV2" : running ? `OFF ${definition.label}` : `ON ${definition.label}`;
       button.querySelector("b").textContent = componentStatus(name);
       const configured = state.processes?.[name]?.state !== "not_configured";
-      button.disabled = !running && (!configured || (name === "mapping" && !mappingReady));
+      button.disabled = embeddedLocalization || (!running && (!configured || (name === "mapping" && !mappingReady)));
     });
     $("start-mapping").disabled = !mappingReady || active;
     $("stop-mapping").disabled = !active;

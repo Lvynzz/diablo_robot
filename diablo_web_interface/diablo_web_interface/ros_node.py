@@ -738,6 +738,22 @@ class DiabloWebNode(Node):
                             "message": "Launch command not configured",
                         }
                     )
+
+            # The full Navigation launch owns map_server and AMCL.  It first
+            # stops the standalone Localization launch to avoid duplicate
+            # lifecycle nodes and competing map->odom broadcasters.  Expose
+            # that embedded AMCL as an active localization component in the
+            # HMI, otherwise the operator sees "LOCALIZATION OFF" while AMCL
+            # is actually running inside Nav2.
+            if processes["navigation"]["active"] and not processes["localization"]["active"]:
+                processes["localization"] = {
+                    "name": "localization",
+                    "state": "embedded",
+                    "active": True,
+                    "pid": processes["navigation"].get("pid"),
+                    "message": "AMCL + map_server berjalan di dalam Navigation",
+                    "owner": "navigation",
+                }
             state = {
                 "type": "state",
                 "stamp": time.time(),
@@ -1154,6 +1170,14 @@ class DiabloWebNode(Node):
                 ),
                 "mapping": self.mapping_status(),
             }
+
+        # SLAM Toolbox must be the only map->odom authority during mapping.
+        # Stop the complete Nav2 stack (including its embedded AMCL) and any
+        # standalone localization launch before starting SLAM.
+        if self._hardware.process_status("navigation")["active"]:
+            self.stop_navigation()
+        if self._hardware.process_status("localization")["active"]:
+            self.stop_localization()
         result = self._hardware.start_process("mapping", self.mapping_start_command)
         return {**result, "component": "mapping", "mapping": self.mapping_status()}
 
@@ -1168,6 +1192,18 @@ class DiabloWebNode(Node):
         return {**result, "component": "mapping", "mapping": self.mapping_status()}
 
     def stop_localization(self):
+        # When Navigation is active, AMCL belongs to that launch group rather
+        # than to the standalone localization process.  Do not pretend that a
+        # no-op stop succeeded; the operator must stop Navigation to disable
+        # its embedded AMCL.
+        if self._hardware.process_status("navigation")["active"]:
+            return {
+                "requested": False,
+                "component": "localization",
+                "embedded": True,
+                "message": "AMCL is owned by Navigation; stop Navigation to disable localization",
+                "process": self._hardware.process_status("localization"),
+            }
         try:
             self.publish_stop()
         except Exception as error:

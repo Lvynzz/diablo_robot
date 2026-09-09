@@ -11,7 +11,7 @@ import threading
 import time
 
 from action_msgs.msg import GoalStatus
-from geometry_msgs.msg import PoseStamped, PoseWithCovarianceStamped
+from geometry_msgs.msg import PolygonStamped, PoseStamped, PoseWithCovarianceStamped, Twist
 from motion_msgs.msg import LegMotors, MotionCtrl, RobotStatus
 from nav2_msgs.action import NavigateToPose
 from nav_msgs.msg import OccupancyGrid, Odometry, Path as NavPath
@@ -193,6 +193,7 @@ class DiabloWebNode(Node):
         self.declare_parameter("scan_topic", "/scan")
         self.declare_parameter("base_frame", "diablo_base_link")
         self.declare_parameter("map_frame", "map")
+        self.declare_parameter("odom_frame", "odom")
         # Keep the calibrated laser pose available to the web bridge even
         # during the short DDS discovery window before /tf_static is latched.
         # These values are also the same defaults used by web_interface.launch.
@@ -257,6 +258,7 @@ class DiabloWebNode(Node):
         self.scan_topic = str(self.get_parameter("scan_topic").value)
         self.base_frame = str(self.get_parameter("base_frame").value)
         self.map_frame = str(self.get_parameter("map_frame").value)
+        self.odom_frame = str(self.get_parameter("odom_frame").value)
         self.lidar_x = float(self.get_parameter("lidar_x").value)
         self.lidar_y = float(self.get_parameter("lidar_y").value)
         self.lidar_z = float(self.get_parameter("lidar_z").value)
@@ -348,6 +350,30 @@ class DiabloWebNode(Node):
         self._pose = None
         self._odom_pose = None
         self._last_amcl_pose_time = 0.0
+        self._last_map_time = 0.0
+        self._last_local_costmap_time = 0.0
+        self._last_global_costmap_time = 0.0
+        self._last_odom_time = 0.0
+        self._last_scan_time = 0.0
+        self._last_tf_time = 0.0
+        self._last_footprint_time = 0.0
+        self._footprint = None
+        # These timestamps/values are diagnostic only.  Nav2 is the sole
+        # publisher of the command chain; the web node merely observes every
+        # hop so a blocked goal can explain exactly where velocity stopped.
+        self._command_pipeline = {
+            "cmd_vel_nav": {"topic": "/cmd_vel_nav", "last_time": 0.0, "linear": 0.0, "angular": 0.0},
+            "cmd_vel_smoothed": {"topic": "/cmd_vel_smoothed", "last_time": 0.0, "linear": 0.0, "angular": 0.0},
+            "motion_cmd_nav": {"topic": "/diablo/MotionCmd/nav", "last_time": 0.0, "linear": 0.0, "angular": 0.0},
+            "motion_cmd_mux": {"topic": "/diablo/MotionCmd", "last_time": 0.0, "linear": 0.0, "angular": 0.0},
+        }
+        self._pending_initial_pose = None
+        self._initial_pose_diagnostic = {
+            "state": "idle",
+            "message": "Belum ada initial pose",
+            "attempts": 0,
+            "age": None,
+        }
         self._wheel_trajectory = []
         self._telemetry = {
             "battery": None,
@@ -493,6 +519,12 @@ class DiabloWebNode(Node):
                 transient_qos,
             ),
             self.create_subscription(
+                PolygonStamped,
+                "/local_costmap/published_footprint",
+                self._footprint_callback,
+                reliable_qos,
+            ),
+            self.create_subscription(
                 Odometry, self.odom_topic, self._odom_callback, qos_profile_sensor_data
             ),
             self.create_subscription(
@@ -537,10 +569,31 @@ class DiabloWebNode(Node):
                 self._joint_state_callback,
                 qos_profile_sensor_data,
             ),
+            # Observe each Nav2 command hop.  The topic names mirror
+            # navigation.launch.py (controller -> smoother -> bridge -> mux).
+            self.create_subscription(
+                Twist, "/cmd_vel_nav", self._cmd_vel_nav_callback, 10
+            ),
+            self.create_subscription(
+                Twist, "/cmd_vel_smoothed", self._cmd_vel_smoothed_callback, 10
+            ),
+            self.create_subscription(
+                MotionCtrl,
+                "/diablo/MotionCmd/nav",
+                self._motion_cmd_nav_callback,
+                10,
+            ),
+            self.create_subscription(
+                MotionCtrl,
+                "/diablo/MotionCmd",
+                self._motion_cmd_mux_callback,
+                10,
+            ),
         ]
 
         self._tf_timer = self.create_timer(0.1, self._update_tf_pose)
         self._hardware_timer = self.create_timer(0.5, self._update_hardware_status)
+        self._initial_pose_timer = self.create_timer(0.5, self._retry_initial_pose)
         self._nav_to_pose_client = ActionClient(
             self, NavigateToPose, "/navigate_to_pose"
         )
@@ -554,22 +607,65 @@ class DiabloWebNode(Node):
     def _map_callback(self, message):
         with self._lock:
             self._map = self._parse_grid(message)
+            self._last_map_time = time.monotonic()
             self._versions["map"] += 1
 
     def _local_costmap_callback(self, message):
         with self._lock:
             self._local_costmap = self._parse_grid(message)
+            self._last_local_costmap_time = time.monotonic()
             self._versions["local_costmap"] += 1
 
     def _global_costmap_callback(self, message):
         with self._lock:
             self._global_costmap = self._parse_grid(message)
+            self._last_global_costmap_time = time.monotonic()
             self._versions["global_costmap"] += 1
+
+    def _footprint_callback(self, message: PolygonStamped):
+        """Keep Nav2's live footprint in map coordinates for the canvas."""
+        source_frame = (message.header.frame_id or self.base_frame).strip().lstrip("/")
+        points = []
+        transform_ok = source_frame == self.map_frame
+        transform = None
+        if not transform_ok:
+            try:
+                transform = self._tf_buffer.lookup_transform(
+                    self.map_frame, source_frame, Time()
+                )
+                transform_ok = True
+            except Exception:
+                transform_ok = False
+        if transform_ok and transform is not None:
+            translation = transform.transform.translation
+            rotation = transform.transform.rotation
+            tf_yaw = _yaw_from_quaternion(rotation)
+            cosine = math.cos(tf_yaw)
+            sine = math.sin(tf_yaw)
+            for point in message.polygon.points:
+                px = float(point.x)
+                py = float(point.y)
+                points.append({
+                    "x": float(translation.x) + cosine * px - sine * py,
+                    "y": float(translation.y) + sine * px + cosine * py,
+                })
+        else:
+            points = [{"x": float(point.x), "y": float(point.y)} for point in message.polygon.points]
+        with self._lock:
+            self._footprint = {
+                "frame_id": self.map_frame if transform_ok else source_frame,
+                "source_frame_id": source_frame,
+                "transform_ok": transform_ok,
+                "points": points,
+                "stamp": time.time(),
+            }
+            self._last_footprint_time = time.monotonic()
 
     def _odom_callback(self, message: Odometry):
         pose = self._pose_from_pose_message(message.pose.pose, "filtered_odom")
         with self._lock:
             self._odom_pose = pose
+            self._last_odom_time = time.monotonic()
             if not self._wheel_trajectory:
                 self._wheel_trajectory.append({"x": pose["x"], "y": pose["y"]})
             else:
@@ -644,7 +740,44 @@ class DiabloWebNode(Node):
                 "range_max": float(message.range_max),
                 "ranges": clean_ranges,
             }
+            self._last_scan_time = time.monotonic()
             self._versions["scan"] += 1
+
+    def _cmd_vel_nav_callback(self, message: Twist):
+        self._record_pipeline("cmd_vel_nav", float(message.linear.x), float(message.angular.z))
+
+    def _cmd_vel_smoothed_callback(self, message: Twist):
+        self._record_pipeline(
+            "cmd_vel_smoothed", float(message.linear.x), float(message.angular.z)
+        )
+
+    def _motion_cmd_nav_callback(self, message: MotionCtrl):
+        value = getattr(message, "value", None)
+        self._record_pipeline(
+            "motion_cmd_nav",
+            float(getattr(value, "forward", 0.0)),
+            float(getattr(value, "left", 0.0)),
+        )
+
+    def _motion_cmd_mux_callback(self, message: MotionCtrl):
+        value = getattr(message, "value", None)
+        self._record_pipeline(
+            "motion_cmd_mux",
+            float(getattr(value, "forward", 0.0)),
+            float(getattr(value, "left", 0.0)),
+        )
+
+    def _record_pipeline(self, key, linear, angular):
+        if not math.isfinite(linear):
+            linear = 0.0
+        if not math.isfinite(angular):
+            angular = 0.0
+        with self._lock:
+            item = self._command_pipeline.get(key)
+            if item is not None:
+                item["last_time"] = time.monotonic()
+                item["linear"] = linear
+                item["angular"] = angular
 
     def _amcl_pose_callback(self, message: PoseWithCovarianceStamped):
         """Use AMCL's filtered map pose as the robot pose shown by the HMI."""
@@ -652,6 +785,9 @@ class DiabloWebNode(Node):
         with self._lock:
             self._pose = pose
             self._last_amcl_pose_time = time.monotonic()
+            pending = self._pending_initial_pose
+            if pending is not None:
+                pending["amcl_seen"] = True
 
     def _battery_callback(self, message: BatteryState):
         with self._lock:
@@ -754,6 +890,7 @@ class DiabloWebNode(Node):
         }
         with self._lock:
             self._pose = pose
+            self._last_tf_time = time.monotonic()
 
     # -------------------- Web state and command API --------------------
 
@@ -805,6 +942,9 @@ class DiabloWebNode(Node):
                 "joints": self.joint_status(),
                 "mapping": self.mapping_status(),
                 "versions": versions,
+                "footprint": copy.deepcopy(self._footprint),
+                "navigation_readiness": self.navigation_readiness(),
+                "command_pipeline": self.command_pipeline_status(),
             }
             for key, value in (
                 ("map", self._map),
@@ -879,12 +1019,40 @@ class DiabloWebNode(Node):
         self._control_mode_publisher.publish(String(data=clean_mode))
         return clean_mode
 
-    def send_nav_goal(self, x, y, theta):
+    def send_nav_goal(self, x, y, theta, force=False):
         x = float(x)
         y = float(y)
         theta = float(theta)
         if not all(math.isfinite(value) for value in (x, y, theta)):
             raise ValueError("goal coordinates must be finite")
+
+        readiness = self.navigation_readiness()
+        if not readiness["ready"] and not force:
+            with self._nav_goal_lock:
+                self._goal_sequence += 1
+                sequence = self._goal_sequence
+                message = readiness["message"]
+                self._current_goal_handle = None
+                self._nav_goal_status = {
+                    "state": "blocked",
+                    "message": message,
+                    "seq": sequence,
+                    "distance_remaining": None,
+                }
+            return {
+                "accepted": False,
+                "blocked": True,
+                "seq": sequence,
+                "message": message,
+                "readiness": readiness,
+            }
+        if force and not readiness["checks"]["action_server"]["ready"]:
+            return {
+                "accepted": False,
+                "forced": True,
+                "message": "Nav2 action server belum tersedia; start Navigation dulu.",
+                "readiness": readiness,
+            }
 
         with self._nav_goal_lock:
             old_handle = self._current_goal_handle
@@ -975,6 +1143,18 @@ class DiabloWebNode(Node):
         # pending value with its corrected map pose.
         with self._lock:
             self._pose = {"x": x, "y": y, "theta": theta, "source": "amcl_initial"}
+            self._pending_initial_pose = {
+                "message": message,
+                "started_at": time.monotonic(),
+                "attempts": 1,
+                "amcl_seen": False,
+            }
+            self._initial_pose_diagnostic = {
+                "state": "pending",
+                "message": "Menunggu AMCL menerbitkan /amcl_pose dan TF map→odom",
+                "attempts": 1,
+                "age": 0.0,
+            }
         return {"published": True, "x": x, "y": y, "theta": theta}
 
     def reset_odom(self):
@@ -1480,8 +1660,13 @@ class DiabloWebNode(Node):
         stride = max(1, math.ceil(math.sqrt((width * height) / MAX_MAP_CELLS)))
         parsed_width = math.ceil(width / stride)
         parsed_height = math.ceil(height / stride)
+        # PGM pixels are stored from the top-left corner, while a ROS
+        # OccupancyGrid stores row zero at the map origin (bottom-left).
+        # Read the image bottom-to-top so preview clicks and the live
+        # map_server /map use one coordinate convention.  The renderer then
+        # applies the same single y-axis conversion to both grids.
         data = []
-        for row in range(0, height, stride):
+        for row in range(height - 1, -1, -stride):
             for column in range(0, width, stride):
                 value = pixels[row * width + column]
                 probability = value / maximum if negate else (maximum - value) / maximum
@@ -1560,7 +1745,175 @@ class DiabloWebNode(Node):
 
     def nav2_ready(self):
         try:
-            return bool(self._nav_to_pose_client.server_is_ready())
+            return bool(
+                getattr(self, "_nav_to_pose_client", None)
+                and self._nav_to_pose_client.server_is_ready()
+            )
+        except Exception:
+            return False
+
+    def navigation_readiness(self):
+        """Return explicit prerequisites and diagnostics for a Nav2 goal.
+
+        A goal is accepted by the normal web path only when the full robot
+        data path is alive.  The separate FORCE button can still submit a
+        goal when the action server exists, which is useful for diagnosis but
+        is deliberately never selected automatically.
+        """
+        now = time.monotonic()
+        navigation_process = self._hardware.process_status("navigation")
+        try:
+            hardware_ready = bool(self.hardware_ready())
+        except Exception:
+            hardware_ready = False
+        with self._lock:
+            map_value = self._map
+            local_costmap = copy.deepcopy(self._local_costmap)
+            global_costmap = copy.deepcopy(self._global_costmap)
+            timestamps = {
+                "map": self._last_map_time,
+                "scan": self._last_scan_time,
+                "odom": self._last_odom_time,
+                "amcl": self._last_amcl_pose_time,
+                "tf": self._last_tf_time,
+                "local_costmap": self._last_local_costmap_time,
+                "global_costmap": self._last_global_costmap_time,
+            }
+            pending_initial = self._pending_initial_pose is not None
+            initial_diagnostic = copy.deepcopy(self._initial_pose_diagnostic)
+
+        def age(last_time):
+            if not last_time:
+                return None
+            return round(max(0.0, now - last_time), 2)
+
+        def recent(last_time, limit):
+            value = age(last_time)
+            return value is not None and value <= limit
+
+        map_to_odom = self._tf_available(self.map_frame, self.odom_frame)
+        map_to_base = self._tf_available(self.map_frame, self.base_frame)
+        action_server = self.nav2_ready()
+        local_ready = bool(
+            local_costmap
+            and (local_costmap.get("transform_ok") or local_costmap.get("frame_id") == self.map_frame)
+            and recent(timestamps["local_costmap"], 4.0)
+        )
+        global_ready = bool(
+            global_costmap
+            and (global_costmap.get("transform_ok") or global_costmap.get("frame_id") == self.map_frame)
+            and recent(timestamps["global_costmap"], 4.0)
+        )
+        checks = {
+            "navigation_active": {
+                "ready": bool(navigation_process.get("active")),
+                "label": "Navigation launch",
+                "age": None,
+            },
+            "hardware": {
+                "ready": hardware_ready,
+                "label": "Hardware Diablo",
+                "age": None,
+            },
+            "map": {
+                "ready": map_value is not None,
+                "label": "/map",
+                "age": age(timestamps["map"]),
+            },
+            "scan": {
+                "ready": recent(timestamps["scan"], 3.0),
+                "label": self.scan_topic,
+                "age": age(timestamps["scan"]),
+            },
+            "odom": {
+                "ready": recent(timestamps["odom"], 3.0),
+                "label": self.odom_topic,
+                "age": age(timestamps["odom"]),
+            },
+            "amcl_pose": {
+                "ready": recent(timestamps["amcl"], 5.0),
+                "label": "/amcl_pose",
+                "age": age(timestamps["amcl"]),
+            },
+            "tf_map_odom": {
+                "ready": map_to_odom,
+                "label": f"TF {self.map_frame}→{self.odom_frame}",
+                "age": age(timestamps["tf"]),
+            },
+            "tf_map_base": {
+                "ready": map_to_base,
+                "label": f"TF {self.map_frame}→{self.base_frame}",
+                "age": age(timestamps["tf"]),
+            },
+            "local_costmap": {
+                "ready": local_ready,
+                "label": "/local_costmap/costmap",
+                "age": age(timestamps["local_costmap"]),
+            },
+            "global_costmap": {
+                "ready": global_ready,
+                "label": "/global_costmap/costmap",
+                "age": age(timestamps["global_costmap"]),
+            },
+            "action_server": {
+                "ready": action_server,
+                "label": "/navigate_to_pose action",
+                "age": None,
+            },
+        }
+        blockers = [item["label"] for item in checks.values() if not item["ready"]]
+        if blockers:
+            message = "Navigation belum siap: " + ", ".join(blockers)
+        else:
+            message = "Navigation siap menerima goal normal"
+
+        return {
+            "ready": not blockers,
+            "message": message,
+            "blockers": blockers,
+            "checks": checks,
+            "force_allowed": action_server,
+            "initial_pose": {
+                **initial_diagnostic,
+                "pending": pending_initial,
+            },
+            "pipeline": self.command_pipeline_status(),
+            "local_costmap_window": {
+                "width": float(local_costmap.get("width", 80) * local_costmap.get("resolution", 0.05))
+                if local_costmap
+                else 4.0,
+                "height": float(local_costmap.get("height", 80) * local_costmap.get("resolution", 0.05))
+                if local_costmap
+                else 4.0,
+                "frame_id": local_costmap.get("frame_id", self.odom_frame)
+                if local_costmap
+                else self.odom_frame,
+            },
+        }
+
+    def command_pipeline_status(self):
+        """Serialize observed Nav2 velocity pipeline values and ages."""
+        now = time.monotonic()
+        with self._lock:
+            result = {}
+            for key, item in self._command_pipeline.items():
+                age = None if not item["last_time"] else round(max(0.0, now - item["last_time"]), 2)
+                linear = float(item["linear"])
+                angular = float(item["angular"])
+                result[key] = {
+                    "topic": item["topic"],
+                    "age": age,
+                    "recent": age is not None and age <= 3.0,
+                    "nonzero": abs(linear) > 1e-4 or abs(angular) > 1e-4,
+                    "linear": round(linear, 4),
+                    "angular": round(angular, 4),
+                }
+            return result
+
+    def _tf_available(self, target_frame, source_frame):
+        try:
+            self._tf_buffer.lookup_transform(target_frame, source_frame, Time())
+            return True
         except Exception:
             return False
 
@@ -1570,6 +1923,52 @@ class DiabloWebNode(Node):
             self._hardware.update(topic_names)
         except Exception as error:
             self.get_logger().debug(f"Hardware status refresh failed: {error}")
+
+    def _retry_initial_pose(self):
+        """Republish /initialpose during AMCL startup, then report timeout."""
+        now = time.monotonic()
+        with self._lock:
+            pending = self._pending_initial_pose
+            if pending is None:
+                return
+            elapsed = max(0.0, now - pending["started_at"])
+            amcl_seen = bool(pending.get("amcl_seen"))
+            if amcl_seen or self._tf_available(self.map_frame, self.odom_frame):
+                self._pending_initial_pose = None
+                self._initial_pose_diagnostic = {
+                    "state": "confirmed",
+                    "message": "AMCL / TF map→odom aktif",
+                    "attempts": int(pending.get("attempts", 1)),
+                    "age": round(elapsed, 2),
+                }
+                return
+            if elapsed >= 8.0:
+                attempts = int(pending.get("attempts", 1))
+                self._pending_initial_pose = None
+                self._initial_pose_diagnostic = {
+                    "state": "timeout",
+                    "message": (
+                        "AMCL tidak menerbitkan /amcl_pose atau TF map→odom dalam 8 detik; "
+                        "pastikan Navigation, /scan, odom, dan map aktif"
+                    ),
+                    "attempts": attempts,
+                    "age": round(elapsed, 2),
+                }
+                self.get_logger().warning(self._initial_pose_diagnostic["message"])
+                return
+            message = pending["message"]
+            try:
+                self._initial_pose_publisher.publish(message)
+            except Exception as error:
+                self.get_logger().warning(f"Could not republish initial pose: {error}")
+                return
+            pending["attempts"] = int(pending.get("attempts", 1)) + 1
+            self._initial_pose_diagnostic = {
+                "state": "pending",
+                "message": "Republish initial pose; menunggu AMCL / TF map→odom",
+                "attempts": pending["attempts"],
+                "age": round(elapsed, 2),
+            }
 
     def destroy_node(self):
         try:

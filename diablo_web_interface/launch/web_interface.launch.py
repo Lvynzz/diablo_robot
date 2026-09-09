@@ -22,6 +22,7 @@ def generate_launch_description():
         DeclareLaunchArgument("map_topic", default_value="/map"),
         DeclareLaunchArgument("base_frame", default_value="diablo_base_link"),
         DeclareLaunchArgument("map_frame", default_value="map"),
+        DeclareLaunchArgument("odom_frame", default_value="odom"),
         DeclareLaunchArgument("odom_topic", default_value="/diablo/odometry"),
         DeclareLaunchArgument("scan_topic", default_value="/scan"),
         DeclareLaunchArgument(
@@ -109,6 +110,7 @@ def generate_launch_description():
                 "map_topic": LaunchConfiguration("map_topic"),
                 "base_frame": LaunchConfiguration("base_frame"),
                 "map_frame": LaunchConfiguration("map_frame"),
+                "odom_frame": LaunchConfiguration("odom_frame"),
                 "lidar_x": LaunchConfiguration("lidar_x"),
                 "lidar_y": LaunchConfiguration("lidar_y"),
                 "lidar_z": LaunchConfiguration("lidar_z"),

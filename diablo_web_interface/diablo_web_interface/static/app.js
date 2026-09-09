@@ -13,6 +13,9 @@
     processes: {},
     joints: [],
     mapping: { active: false, state: "idle", message: "" },
+    navigation_readiness: null,
+    command_pipeline: {},
+    footprint: null,
   };
   const keys = new Set();
   let teleopTimer = null;
@@ -215,6 +218,7 @@
     $("map-select-apply").disabled = !state.previewMap;
     drawMap();
     renderJoints();
+    renderNavigationReadiness();
   }
 
   function renderJoints() {
@@ -277,6 +281,50 @@
     $("joint-status").textContent = hardwareReady ? "JOINTS READY" : "START HARDWARE + ARM FEEDBACK";
   }
 
+  function renderNavigationReadiness() {
+    const panel = $("nav-readiness");
+    const stateLabel = $("nav-readiness-state");
+    const detail = $("nav-readiness-detail");
+    const pipelineLabel = $("nav-readiness-pipeline");
+    const normalButton = $("goal-send");
+    const forceButton = $("goal-force");
+    if (!panel || !stateLabel || !detail) return;
+    const readiness = state.navigation_readiness;
+    if (!readiness) {
+      panel.dataset.ready = "false";
+      stateLabel.textContent = "NAV2 CHECK: MENUNGGU";
+      detail.textContent = "Menunggu status Navigation.";
+      if (pipelineLabel) pipelineLabel.textContent = "PIPELINE: —";
+      if (normalButton) normalButton.disabled = true;
+      if (forceButton) { forceButton.hidden = true; forceButton.disabled = true; }
+      return;
+    }
+    const ready = Boolean(readiness.ready);
+    const blockers = Array.isArray(readiness.blockers) ? readiness.blockers : [];
+    panel.dataset.ready = ready ? "true" : "false";
+    stateLabel.textContent = ready ? "NAV2 CHECK: READY" : "NAV2 CHECK: BLOCKED";
+    detail.textContent = ready
+      ? "Hardware, scan, odom, AMCL/TF, costmap dan action server aktif."
+      : (blockers.join(" · ") || readiness.message || "Prerequisite belum lengkap.");
+    if (pipelineLabel) {
+      const pipeline = readiness.pipeline || {};
+      const names = ["cmd_vel_nav", "cmd_vel_smoothed", "motion_cmd_nav", "motion_cmd_mux"];
+      pipelineLabel.textContent = `PIPELINE: ${names.map((name) => {
+        const item = pipeline[name] || {};
+        return `${name.replace("motion_cmd_", "MOTION ").replace("cmd_vel_", "VEL ")} ${item.recent ? (item.nonzero ? "LIVE" : "ZERO") : "—"}`;
+      }).join(" → ")}`;
+    }
+    if (normalButton) normalButton.disabled = !ready;
+    if (forceButton) {
+      const forceAllowed = Boolean(readiness.force_allowed);
+      forceButton.hidden = ready;
+      forceButton.disabled = !forceAllowed;
+      forceButton.title = forceAllowed
+        ? "Kirim goal tanpa gate readiness (mode developer)."
+        : "Start Navigation sampai action server tersedia.";
+    }
+  }
+
   function drawMap() {
     const canvas = $("map-canvas");
     const navigationActive = Boolean(state.processes?.navigation?.active);
@@ -294,24 +342,73 @@
     const cell = Math.min((rect.width - 28) / grid.width, (rect.height - 28) / grid.height);
     const ox = (rect.width - grid.width * cell) / 2;
     const oy = (rect.height - grid.height * cell) / 2;
+    const origin = grid.origin || { x: 0, y: 0, yaw: 0 };
+    const originAngle = Number(origin.yaw) || 0;
+    const originCos = Math.cos(originAngle), originSin = Math.sin(originAngle);
+    const toCanvas = (x, y) => {
+      const dx = x - Number(origin.x || 0), dy = y - Number(origin.y || 0);
+      const gx = (originCos * dx + originSin * dy) / Number(grid.resolution || 1);
+      const gy = (-originSin * dx + originCos * dy) / Number(grid.resolution || 1);
+      return [ox + gx * cell, oy + (grid.height - gy) * cell];
+    };
+    const worldFromGrid = (gridOrigin, angle, col, row, resolution) => {
+      const cosine = Math.cos(angle), sine = Math.sin(angle);
+      return [
+        Number(gridOrigin.x || 0) + cosine * col * resolution - sine * row * resolution,
+        Number(gridOrigin.y || 0) + sine * col * resolution + cosine * row * resolution,
+      ];
+    };
+    const worldFromMeters = (gridOrigin, angle, localX, localY) => {
+      const cosine = Math.cos(angle), sine = Math.sin(angle);
+      return [
+        Number(gridOrigin.x || 0) + cosine * localX - sine * localY,
+        Number(gridOrigin.y || 0) + sine * localX + cosine * localY,
+      ];
+    };
+    const drawWorldCell = (gridOrigin, angle, col, row, width, height, resolution) => {
+      const corners = [
+        worldFromGrid(gridOrigin, angle, col, row, resolution),
+        worldFromGrid(gridOrigin, angle, col + width, row, resolution),
+        worldFromGrid(gridOrigin, angle, col + width, row + height, resolution),
+        worldFromGrid(gridOrigin, angle, col, row + height, resolution),
+      ].map(([x, y]) => toCanvas(x, y));
+      ctx.beginPath();
+      ctx.moveTo(corners[0][0], corners[0][1]);
+      corners.slice(1).forEach(([x, y]) => ctx.lineTo(x, y));
+      ctx.closePath();
+      ctx.fill();
+    };
     const sample = Math.max(1, Math.ceil(Math.sqrt((grid.width * grid.height) / 180000)));
     for (let row = 0; row < grid.height; row += sample) {
       for (let col = 0; col < grid.width; col += sample) {
         const value = grid.data[row * grid.width + col] ?? -1;
         ctx.fillStyle = value < 0 ? "#dce6ec" : value >= 65 ? "#405765" : "#f8fbfd";
-        ctx.fillRect(ox + col * cell, oy + (grid.height - row - sample) * cell, Math.ceil(cell * sample + .3), Math.ceil(cell * sample + .3));
+        drawWorldCell(
+          origin,
+          originAngle,
+          col,
+          row,
+          Math.min(sample, grid.width - col),
+          Math.min(sample, grid.height - row),
+          Number(grid.resolution || 1),
+        );
       }
     }
-    const origin = grid.origin || { x: 0, y: 0, yaw: 0 };
-    const toCanvas = (x, y) => {
-      const dx = x - origin.x, dy = y - origin.y, angle = origin.yaw || 0;
-      const gx = (Math.cos(angle) * dx + Math.sin(angle) * dy) / grid.resolution;
-      const gy = (-Math.sin(angle) * dx + Math.cos(angle) * dy) / grid.resolution;
-      return [ox + gx * cell, oy + (grid.height - gy) * cell];
-    };
     const checked = (id, fallback) => {
       const element = $(id);
       return element ? element.checked : fallback;
+    };
+    const costColor = (value, layer) => {
+      const numeric = Number(value);
+      const normalized = Math.max(0, Math.min(1, numeric > 100 ? numeric / 254 : numeric / 100));
+      const stops = normalized < 0.5
+        ? [[104, 195, 236], [246, 218, 83], normalized * 2]
+        : [[246, 218, 83], [219, 49, 52], (normalized - 0.5) * 2];
+      const red = Math.round(stops[0][0] + (stops[1][0] - stops[0][0]) * stops[2]);
+      const green = Math.round(stops[0][1] + (stops[1][1] - stops[0][1]) * stops[2]);
+      const blue = Math.round(stops[0][2] + (stops[1][2] - stops[0][2]) * stops[2]);
+      const alpha = layer === "global" ? 0.16 + 0.68 * normalized : 0.10 + 0.40 * normalized;
+      return `rgba(${red},${green},${blue},${alpha.toFixed(3)})`;
     };
     const drawCostmap = (costmap, layer) => {
       if (!costmap) return;
@@ -324,22 +421,68 @@
       for (let row = 0; row < costmap.height; row += overlaySample) {
         for (let col = 0; col < costmap.width; col += overlaySample) {
           const value = costmap.data[row * costmap.width + col] ?? -1;
-          if (value < 1) continue;
-          const worldX = costOrigin.x + Math.cos(costAngle) * col * costmap.resolution - Math.sin(costAngle) * row * costmap.resolution;
-          const worldY = costOrigin.y + Math.sin(costAngle) * col * costmap.resolution + Math.cos(costAngle) * row * costmap.resolution;
-          const [x, y] = toCanvas(worldX, worldY);
-          const lethal = value >= 90;
-          ctx.fillStyle = layer === "global"
-            ? `rgba(47,120,174,${lethal ? .55 : .23})`
-            : `rgba(197,83,0,${lethal ? .55 : .23})`;
-          const sizeValue = Math.max(1, cell * costmap.resolution / grid.resolution * overlaySample + .5);
-          ctx.fillRect(x, y - sizeValue, sizeValue, sizeValue);
+          if (value < 1 || value === 255) continue;
+          ctx.fillStyle = costColor(value, layer);
+          drawWorldCell(
+            costOrigin,
+            costAngle,
+            col,
+            row,
+            Math.min(overlaySample, costmap.width - col),
+            Math.min(overlaySample, costmap.height - row),
+            Number(costmap.resolution || 1),
+          );
         }
       }
     };
-    if (checked("layer-global-costmap", true)) drawCostmap(state.global_costmap, "global");
-    if (checked("layer-local-costmap", true)) drawCostmap(state.local_costmap, "local");
+    if (navigationActive && checked("layer-global-costmap", true)) drawCostmap(state.global_costmap, "global");
+    if (navigationActive && checked("layer-local-costmap", true)) drawCostmap(state.local_costmap, "local");
     const displayPose = state.pose || state.wheel_pose;
+    const drawWindow = (costmap) => {
+      let corners;
+      let label;
+      if (costmap && !(costmap.transform_ok === false && costmap.frame_id !== grid.frame_id)) {
+        const windowOrigin = costmap.origin || { x: 0, y: 0, yaw: 0 };
+        const angle = Number(windowOrigin.yaw || 0);
+        const width = Number(costmap.width || 0) * Number(costmap.resolution || 0);
+        const height = Number(costmap.height || 0) * Number(costmap.resolution || 0);
+        corners = [
+          worldFromMeters(windowOrigin, angle, 0, 0),
+          worldFromMeters(windowOrigin, angle, width, 0),
+          worldFromMeters(windowOrigin, angle, width, height),
+          worldFromMeters(windowOrigin, angle, 0, height),
+        ];
+        label = `LOCAL ${width.toFixed(1)}×${height.toFixed(1)} m`;
+      } else if (displayPose) {
+        const fallback = state.navigation_readiness?.local_costmap_window || {};
+        const width = Number(fallback.width) || 4;
+        const height = Number(fallback.height) || 4;
+        corners = [
+          [displayPose.x - width / 2, displayPose.y - height / 2],
+          [displayPose.x + width / 2, displayPose.y - height / 2],
+          [displayPose.x + width / 2, displayPose.y + height / 2],
+          [displayPose.x - width / 2, displayPose.y + height / 2],
+        ];
+        label = `LOCAL WINDOW ${width.toFixed(1)}×${height.toFixed(1)} m · WAITING`;
+      }
+      if (!corners) return;
+      const canvasCorners = corners.map(([x, y]) => toCanvas(x, y));
+      ctx.save();
+      ctx.beginPath();
+      ctx.moveTo(canvasCorners[0][0], canvasCorners[0][1]);
+      canvasCorners.slice(1).forEach(([x, y]) => ctx.lineTo(x, y));
+      ctx.closePath();
+      ctx.strokeStyle = "rgba(30,137,166,.9)";
+      ctx.lineWidth = 1.5;
+      ctx.setLineDash([5, 4]);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.fillStyle = "rgba(30,112,142,.95)";
+      ctx.font = "700 8px monospace";
+      ctx.fillText(label, canvasCorners[0][0] + 4, canvasCorners[0][1] - 5);
+      ctx.restore();
+    };
+    if (navigationActive && checked("layer-local-costmap", true)) drawWindow(state.local_costmap);
     if (checked("layer-lidar", false) && state.scan && displayPose) {
       ctx.fillStyle = "rgba(36,126,164,.62)";
       const sensorX = Number(state.scan.sensor_x) || 0;
@@ -356,9 +499,47 @@
     }
     if (checked("layer-robot", true) && displayPose) {
       const [x, y] = toCanvas(displayPose.x, displayPose.y);
-      ctx.save(); ctx.translate(x, y); ctx.rotate(-displayPose.theta);
-      ctx.fillStyle = "#4f925c"; ctx.strokeStyle = "#fff"; ctx.lineWidth = 2;
-      ctx.beginPath(); ctx.moveTo(13, 0); ctx.lineTo(-9, -7); ctx.lineTo(-6, 0); ctx.lineTo(-9, 7); ctx.closePath(); ctx.fill(); ctx.stroke(); ctx.restore();
+      let footprintPoints = null;
+      const footprint = state.footprint;
+      if (footprint && footprint.transform_ok && Array.isArray(footprint.points) && footprint.points.length >= 3) {
+        footprintPoints = footprint.points.map((point) => [Number(point.x), Number(point.y)]);
+      }
+      if (!footprintPoints) {
+        const fallback = [[0.30, 0.20], [0.30, -0.20], [-0.30, -0.20], [-0.30, 0.20]];
+        const cosine = Math.cos(displayPose.theta), sine = Math.sin(displayPose.theta);
+        footprintPoints = fallback.map(([px, py]) => [
+          displayPose.x + cosine * px - sine * py,
+          displayPose.y + sine * px + cosine * py,
+        ]);
+      }
+      const footprintCanvas = footprintPoints.map(([px, py]) => toCanvas(px, py));
+      ctx.save();
+      ctx.beginPath();
+      ctx.moveTo(footprintCanvas[0][0], footprintCanvas[0][1]);
+      footprintCanvas.slice(1).forEach(([px, py]) => ctx.lineTo(px, py));
+      ctx.closePath();
+      ctx.fillStyle = "rgba(61,145,85,.28)";
+      ctx.strokeStyle = "#2f7b45";
+      ctx.lineWidth = 2;
+      ctx.fill();
+      ctx.stroke();
+      ctx.restore();
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.rotate(-displayPose.theta);
+      const arrowSize = Math.max(9, Math.min(22, cell * 0.35 / Number(grid.resolution || 1)));
+      ctx.fillStyle = "#4f925c";
+      ctx.strokeStyle = "#fff";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(arrowSize, 0);
+      ctx.lineTo(-arrowSize * .70, -arrowSize * .48);
+      ctx.lineTo(-arrowSize * .48, 0);
+      ctx.lineTo(-arrowSize * .70, arrowSize * .48);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+      ctx.restore();
     }
     const marker = (pose, color) => {
       if (!pose) return;
@@ -413,7 +594,8 @@
   }
 
   function mapPoint(event) {
-    const grid = state.selectedMap || state.previewMap || state.map;
+    const navigationActive = Boolean(state.processes?.navigation?.active);
+    const grid = navigationActive && state.map ? state.map : state.selectedMap || state.previewMap || state.map;
     const canvas = $("map-canvas");
     if (!grid || !canvas) return null;
     const rect = canvas.getBoundingClientRect();
@@ -423,8 +605,40 @@
     const gx = (event.clientX - rect.left - ox) / cell;
     const gy = grid.height - (event.clientY - rect.top - oy) / cell;
     const origin = grid.origin || { x: 0, y: 0, yaw: 0 };
-    const localX = gx * grid.resolution, localY = gy * grid.resolution, angle = origin.yaw || 0;
-    return { x: origin.x + Math.cos(angle) * localX - Math.sin(angle) * localY, y: origin.y + Math.sin(angle) * localX + Math.cos(angle) * localY };
+    const angle = Number(origin.yaw || 0);
+    // Invert the same rotated map-to-canvas transform used by drawMap().
+    // This keeps click coordinates correct even when map.yaml has non-zero
+    // origin yaw; the y inversion happens exactly once here.
+    const localX = (Math.cos(angle) * gx - Math.sin(angle) * gy) * grid.resolution;
+    const localY = (Math.sin(angle) * gx + Math.cos(angle) * gy) * grid.resolution;
+    return { x: origin.x + localX, y: origin.y + localY };
+  }
+
+  function submitGoal(force = false) {
+    const pose = poseValues("goal");
+    if (![pose.x, pose.y, pose.theta].every(Number.isFinite)) {
+      log("Goal memiliki koordinat non-finite.", "warn");
+      return Promise.resolve(false);
+    }
+    return fetch("/api/goal/nav2", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ x: pose.x, y: pose.y, theta: pose.theta, force }),
+    }).then(async (response) => {
+      let payload = {};
+      try { payload = await response.json(); } catch { /* empty response */ }
+      if (!response.ok) {
+        const detail = typeof payload.detail === "string" ? payload.detail : payload.detail?.message;
+        throw new Error(detail || "Nav2 goal ditolak");
+      }
+      return payload;
+    }).then((payload) => {
+      log(payload.message || (force ? "Force goal dikirim." : "Goal pose dikirim ke Nav2."), "success");
+      return payload.accepted !== false;
+    }).catch((error) => {
+      log(error.message || "Goal pose gagal dikirim.", force ? "warn" : "error");
+      return false;
+    });
   }
 
   function initMapTools() {
@@ -481,7 +695,11 @@
         log(accepted ? "Initial pose dikirim ke AMCL; marker digantikan panah robot." : "Initial pose gagal dikirim.", accepted ? "success" : "warn");
       });
     });
-    $("goal-send").addEventListener("click", () => { const pose = poseValues("goal"); command({ type: "goal_pose", x: pose.x, y: pose.y, theta: pose.theta }, "/api/goal/nav2").then((accepted) => log(accepted ? "Goal pose dikirim ke Nav2." : "Goal pose gagal dikirim.", accepted ? "success" : "warn")); });
+    $("goal-send").addEventListener("click", () => submitGoal(false));
+    $("goal-force").addEventListener("click", () => {
+      if (!window.confirm("FORCE NAV2 GOAL mengabaikan gate readiness. Lanjutkan untuk diagnosis?")) return;
+      submitGoal(true);
+    });
     ["initial", "goal"].forEach((kind) => ["x", "y", "theta"].forEach((field) => $(`${kind}-${field}`).addEventListener("input", () => { const pose = poseValues(kind); if ([pose.x, pose.y, pose.theta].every(Number.isFinite)) { state[`${kind}Pose`] = { ...pose }; drawMap(); } })));
   }
 

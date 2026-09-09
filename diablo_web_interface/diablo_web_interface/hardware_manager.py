@@ -45,6 +45,7 @@ class HardwareManager:
         ),
         "navigation": (
             "navigation.launch.py",
+            "nav2_web.launch.py",
             "motion_cmd_bridge",
             "controller_server",
             "planner_server",

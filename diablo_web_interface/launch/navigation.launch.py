@@ -64,6 +64,7 @@ def generate_launch_description():
     odom_topic = LaunchConfiguration("odom_topic")
     odom_frame = LaunchConfiguration("odom_frame")
     scan_topic = LaunchConfiguration("scan_topic")
+    set_initial_pose = LaunchConfiguration("set_initial_pose")
 
     def bool_value(value):
         return ParameterValue(value, value_type=bool)
@@ -79,6 +80,9 @@ def generate_launch_description():
             "odom_frame_id": odom_frame,
             "topic": scan_topic,
             "scan_topic": scan_topic,
+            # Navigation must wait for the web Set Initial Pose action;
+            # do not silently initialize AMCL at (0, 0, 0) from YAML.
+            "set_initial_pose": set_initial_pose,
         },
         convert_types=True,
     )
@@ -109,6 +113,11 @@ def generate_launch_description():
         DeclareLaunchArgument("odom_frame", default_value="odom"),
         DeclareLaunchArgument("base_frame", default_value="diablo_base_link"),
         DeclareLaunchArgument("scan_topic", default_value="/scan"),
+        DeclareLaunchArgument(
+            "set_initial_pose",
+            default_value="false",
+            description="Wait for /initialpose before AMCL publishes map->odom.",
+        ),
         DeclareLaunchArgument("wheel_radius", default_value="0.093"),
         DeclareLaunchArgument("track_width", default_value="0.475"),
         DeclareLaunchArgument("left_wheel_direction", default_value="1.0"),
@@ -179,7 +188,13 @@ def generate_launch_description():
             executable="amcl",
             name="amcl",
             output="screen",
-            parameters=[configured_params, {"use_sim_time": bool_value(use_sim_time)}],
+            parameters=[
+                configured_params,
+                {
+                    "use_sim_time": bool_value(use_sim_time),
+                    "set_initial_pose": bool_value(set_initial_pose),
+                },
+            ],
         ),
         Node(
             package="nav2_controller",

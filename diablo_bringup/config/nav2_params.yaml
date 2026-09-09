@@ -119,8 +119,8 @@ amcl:
     # pose. Kisaran: nama topic ROS, biasanya /scan.
     scan_topic: /scan
     # Arti: gunakan pose awal dari parameter AMCL. Dampak: config true hanya
-    # dipakai bila launch tidak menimpanya; localization.launch Diablo default
-    # menunggu tombol Set initial pose (override false). Kisaran: false/true.
+    # dipakai bila launch tidak menimpanya; launch Localization dan Navigation
+    # Diablo menunggu tombol Set initial pose (override false). Kisaran: false/true.
     set_initial_pose: true
     # Arti: hanya terima peta pertama. Dampak: true mencegah reset saat map topic
     # berganti; false memungkinkan reload map. Kisaran: false/true.

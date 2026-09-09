@@ -167,6 +167,7 @@ async def config():
         "scan_topic": node.scan_topic,
         "base_frame": node.base_frame,
         "map_frame": node.map_frame,
+        "odom_frame": node.odom_frame,
         "reset_encoder_service": node.reset_encoder_service,
         "lidar_start_service": node.lidar_start_service,
         "lidar_stop_service": node.lidar_stop_service,
@@ -205,7 +206,14 @@ async def status():
         "joints": snapshot.get("joints"),
         "mapping": snapshot.get("mapping"),
         "navigation": node.get_nav_goal_status(),
+        "navigation_readiness": snapshot.get("navigation_readiness"),
+        "command_pipeline": snapshot.get("command_pipeline"),
     }
+
+
+@app.get("/api/navigation/readiness")
+async def navigation_readiness():
+    return _require_node().navigation_readiness()
 
 
 @app.get("/api/topics")
@@ -404,11 +412,14 @@ async def nav_goal(payload: dict):
             _number(payload, "x"),
             _number(payload, "y"),
             _number(payload, "theta"),
+            force=bool(payload.get("force", False)),
         )
     except ValueError as error:
         raise HTTPException(status_code=400, detail=str(error))
     if not result.get("accepted"):
-        raise HTTPException(status_code=503, detail=result.get("message", "Goal rejected"))
+        status_code = 409 if result.get("blocked") else 503
+        detail = result if result.get("blocked") else result.get("message", "Goal rejected")
+        raise HTTPException(status_code=status_code, detail=detail)
     return result
 
 
@@ -539,6 +550,14 @@ async def _handle_ws_command(websocket: WebSocket, raw_message: str):
             _number(payload, "theta"),
         )
         await websocket.send_json({"type": "goal_pose_ack", **result})
+    elif command_type in ("force_goal", "force_nav2_goal"):
+        result = node.send_nav_goal(
+            _number(payload, "x"),
+            _number(payload, "y"),
+            _number(payload, "theta"),
+            force=True,
+        )
+        await websocket.send_json({"type": "force_goal_ack", **result})
     elif command_type in ("cancel_goal", "cancel"):
         result = node.cancel_nav_goal()
         await websocket.send_json({"type": "goal_cancel_ack", **result})

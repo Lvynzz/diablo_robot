@@ -79,7 +79,10 @@ def generate_launch_description():
         DeclareLaunchArgument("lidar_x", default_value="0.0"),
         DeclareLaunchArgument("lidar_y", default_value="0.08"),
         DeclareLaunchArgument("lidar_z", default_value="0.17"),
-        DeclareLaunchArgument("lidar_yaw", default_value="3.141592653589793"),
+        # The laser's +X axis is aligned with the robot's +X (forward) axis.
+        # Override this in radians when the physical scanner is mounted
+        # differently: pi rotates the scan by 180 degrees.
+        DeclareLaunchArgument("lidar_yaw", default_value="0.0"),
 
         SetEnvironmentVariable("DIABLO_WEB_HOST", LaunchConfiguration("host")),
         SetEnvironmentVariable("DIABLO_WEB_PORT", LaunchConfiguration("port")),

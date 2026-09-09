@@ -300,7 +300,7 @@ def generate_launch_description():
         ),
         DeclareLaunchArgument(
             "lidar_yaw",
-            default_value="3.141592653589793",
+            default_value="0.0",
             description="RPLIDAR yaw relative to diablo_base_link (rad)",
         ),
         DeclareLaunchArgument(

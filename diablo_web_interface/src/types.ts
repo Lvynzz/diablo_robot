@@ -17,6 +17,9 @@ export interface MapOrigin {
 export interface OccupancyGrid {
   name?: string;
   frame_id: string;
+  source_frame_id?: string;
+  target_frame_id?: string;
+  transform_ok?: boolean;
   resolution: number;
   width: number;
   height: number;

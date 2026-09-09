@@ -53,6 +53,8 @@ def test_nav2_launch_contains_action_stack_and_safety_bridges():
     assert "DWBLocalPlanner" in params
     assert "local_costmap:" in params
     assert "global_costmap:" in params
+    assert "_transform_grid_origin_to_map" in read_text("diablo_web_interface/ros_node.py")
+    assert "transform_ok" in read_text("diablo_web_interface/ros_node.py")
 
 
 def test_web_ui_has_mapping_teleop_and_topic_echo_panels():
@@ -105,6 +107,10 @@ def test_web_ui_has_mapping_teleop_and_topic_echo_panels():
     assert 'type: "joint_position"' in drive
     assert 'Dynamixel Joint Control' in drive
     assert "mapping.active" in mapping
+    navigation = read_text("src/components/NavigationView.tsx")
+    assert "showGlobalCostmap" in navigation
+    assert "showLocalCostmap" in navigation
+    assert "transform_ok" in navigation
     assert "defaultCollapsed" in panel
     assert "onToggleCollapse" in sidebar
     assert '"/diablo/reset_encoder"' in ros_node

@@ -177,6 +177,10 @@ function MapCanvas({
 
     const drawCostmap = (costmap: OccupancyGrid | null, layer: "global" | "local") => {
       if (!costmap) return;
+      // Costmaps are published in map (global) or odom (rolling local).  The
+      // backend transforms their origin into the map frame.  Until that TF is
+      // available, do not paint an incorrectly shifted overlay on the PGM.
+      if (costmap.transform_ok === false && costmap.frame_id !== grid.frame_id) return;
       const overlaySample = Math.max(1, Math.ceil(Math.sqrt((costmap.width * costmap.height) / 65000)));
       for (let row = 0; row < costmap.height; row += overlaySample) {
         for (let column = 0; column < costmap.width; column += overlaySample) {
@@ -352,7 +356,13 @@ export function NavigationView({ state, hardware, panels, sendCommand, events, o
   const [mapLoading, setMapLoading] = useState(false);
   const [mapMessage, setMapMessage] = useState("Live /map topic");
 
-  const mapGrid = previewMap || state.map || state.global_costmap || state.local_costmap;
+  // Once Nav2 is active, prefer its live /map over a browser preview.  The
+  // costmaps are generated from that live map; keeping an old preview on top
+  // makes a correctly transformed costmap look like it belongs elsewhere.
+  const navigationActive = Boolean(state.processes?.navigation?.active);
+  const mapGrid = navigationActive && state.map
+    ? state.map
+    : previewMap || state.map || state.global_costmap || state.local_costmap;
   // AMR navigation behavior: prefer corrected AMCL pose and fall back to
   // wheel odometry while localization is starting or unavailable.
   const displayedPose = state.pose || state.wheel_pose;
@@ -492,7 +502,7 @@ export function NavigationView({ state, hardware, panels, sendCommand, events, o
           <div className="map-stage"><MapCanvas grid={mapGrid} pose={displayedPose} initialPose={initialPoseApplied ? null : initialPose} path={state.path} scan={state.scan} goal={goal} globalCostmap={state.global_costmap} localCostmap={state.local_costmap} showLidar={showLidar} showPath={showPath} showGlobalCostmap={showGlobalCostmap} showLocalCostmap={showLocalCostmap} showInflationLayer={showInflationLayer} onPick={pickPoint} /><div className="map-legend"><span><i className="legend-dot green" /> Diablo</span><span><i className="legend-dot cyan" /> Init pose</span><span><i className="legend-dot orange" /> Goal</span><span><i className="legend-line blue" /> Nav2 path</span></div></div>
           <div className="map-readouts"><StatCard label="ROBOT X" value={fmt(displayedPose?.x)} unit={displayedPose?.source === "amcl" || displayedPose?.source === "map" || displayedPose?.source === "amcl_initial" ? "METERS · AMCL / MAP" : "METERS · ODOM"} tone="green" /><StatCard label="ROBOT Y" value={fmt(displayedPose?.y)} unit={displayedPose?.source === "amcl" || displayedPose?.source === "map" || displayedPose?.source === "amcl_initial" ? "METERS · AMCL / MAP" : "METERS · ODOM"} tone="blue" /><StatCard label="HEADING θ" value={fmtDegrees(displayedPose?.theta)} unit={displayedPose?.source === "amcl" || displayedPose?.source === "map" || displayedPose?.source === "amcl_initial" ? "DEGREES · AMCL / MAP" : "DEGREES · ODOM"} tone="orange" /><div className="map-instructions"><Icon name="target" size={17} /><span>Choose a tool below, then click the map to place an initial pose, goal, or station.</span></div></div>
         </div>
-        <div className="map-layer-bar"><label><input type="checkbox" checked={showLidar} onChange={(event) => setShowLidar(event.target.checked)} /> LiDAR</label><label><input type="checkbox" checked={showPath} onChange={(event) => setShowPath(event.target.checked)} /> NAV2 PATH</label><span className="map-source-status">{mapMessage}</span></div>
+          <div className="map-layer-bar"><label><input type="checkbox" checked={showLidar} onChange={(event) => setShowLidar(event.target.checked)} /> LiDAR</label><label><input type="checkbox" checked={showPath} onChange={(event) => setShowPath(event.target.checked)} /> NAV2 PATH</label><span className="map-source-status">{navigationActive && state.map ? "LIVE NAV2 /MAP" : mapMessage}</span></div>
       </Panel>}
 
       {panels.poses && <Panel title="Pose & Stations" eyebrow="INITIAL LOCALIZATION // GOAL REGISTRY" accent="cyan">

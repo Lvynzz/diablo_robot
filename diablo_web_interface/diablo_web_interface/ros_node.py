@@ -410,11 +410,32 @@ class DiabloWebNode(Node):
             feedback_timeout=self.hardware_feedback_timeout,
         )
 
+        # Match Nav2/AMR QoS: /map and global costmap are latched reliable
+        # grids, while the rolling local costmap and sensor streams are
+        # best-effort volatile.  A sensor-data QoS on the global costmap can
+        # miss its transient sample when navigation is enabled after the web
+        # node has already subscribed.
         transient_qos = QoSProfile(
             depth=1,
             reliability=ReliabilityPolicy.RELIABLE,
             durability=DurabilityPolicy.TRANSIENT_LOCAL,
         )
+        reliable_qos = QoSProfile(
+            depth=10,
+            reliability=ReliabilityPolicy.RELIABLE,
+            durability=DurabilityPolicy.VOLATILE,
+        )
+        best_effort_qos = QoSProfile(
+            depth=1,
+            reliability=ReliabilityPolicy.BEST_EFFORT,
+            durability=DurabilityPolicy.VOLATILE,
+        )
+
+        # Create TF before subscriptions so a latched costmap callback can
+        # transform its odom-frame origin immediately after startup.
+        self._tf_buffer = Buffer()
+        self._tf_listener = TransformListener(self._tf_buffer, self)
+        self._last_grid_tf_warn = {}
 
         self._subscriptions = [
             self.create_subscription(
@@ -424,13 +445,13 @@ class DiabloWebNode(Node):
                 OccupancyGrid,
                 "/local_costmap/costmap",
                 self._local_costmap_callback,
-                qos_profile_sensor_data,
+                best_effort_qos,
             ),
             self.create_subscription(
                 OccupancyGrid,
                 "/global_costmap/costmap",
                 self._global_costmap_callback,
-                qos_profile_sensor_data,
+                transient_qos,
             ),
             self.create_subscription(
                 Odometry, self.odom_topic, self._odom_callback, qos_profile_sensor_data
@@ -445,7 +466,7 @@ class DiabloWebNode(Node):
                 PoseWithCovarianceStamped,
                 "/amcl_pose",
                 self._amcl_pose_callback,
-                qos_profile_sensor_data,
+                reliable_qos,
             ),
             self.create_subscription(
                 BatteryState,
@@ -479,8 +500,6 @@ class DiabloWebNode(Node):
             ),
         ]
 
-        self._tf_buffer = Buffer()
-        self._tf_listener = TransformListener(self._tf_buffer, self)
         self._tf_timer = self.create_timer(0.1, self._update_tf_pose)
         self._hardware_timer = self.create_timer(0.5, self._update_hardware_status)
         self._nav_to_pose_client = ActionClient(
@@ -1543,8 +1562,16 @@ class DiabloWebNode(Node):
         pose.pose.orientation.w = quaternion["w"]
         return pose
 
-    @staticmethod
-    def _parse_grid(message):
+    def _parse_grid(self, message):
+        """Serialize an OccupancyGrid in the map frame used by the HMI.
+
+        Nav2 publishes the global costmap in ``map`` but the rolling local
+        costmap in ``odom``.  Treating both origins as if they were already in
+        map (the old Diablo renderer did this) makes the overlays appear
+        shifted or completely outside the selected PGM.  Transform the grid
+        origin just like the AMR web interface does; the cell values remain in
+        their native grid and therefore retain their resolution/orientation.
+        """
         origin = message.info.origin
         width = int(message.info.width)
         height = int(message.info.height)
@@ -1570,18 +1597,73 @@ class DiabloWebNode(Node):
                         data.append(-1)
                     else:
                         data.append(max(values, default=0))
+        source_frame = (message.header.frame_id or self.map_frame).strip().lstrip("/")
+        transformed = self._transform_grid_origin_to_map(
+            source_frame,
+            float(origin.position.x),
+            float(origin.position.y),
+            _yaw_from_quaternion(origin.orientation),
+        )
         return {
-            "frame_id": message.header.frame_id,
+            "frame_id": transformed["frame_id"],
+            "source_frame_id": source_frame,
+            "target_frame_id": self.map_frame,
+            "transform_ok": transformed["transform_ok"],
             "resolution": float(message.info.resolution) * stride,
             "width": parsed_width,
             "height": parsed_height,
             "origin": {
-                "x": float(origin.position.x),
-                "y": float(origin.position.y),
-                "yaw": _yaw_from_quaternion(origin.orientation),
+                "x": transformed["x"],
+                "y": transformed["y"],
+                "yaw": transformed["yaw"],
             },
             "data": data,
         }
+
+    def _transform_grid_origin_to_map(self, source_frame, x, y, yaw):
+        """Transform an occupancy-grid origin from its header frame to map."""
+        if source_frame == self.map_frame:
+            return {
+                "frame_id": self.map_frame,
+                "transform_ok": True,
+                "x": x,
+                "y": y,
+                "yaw": yaw,
+            }
+
+        try:
+            transform = self._tf_buffer.lookup_transform(
+                self.map_frame, source_frame, Time()
+            )
+            translation = transform.transform.translation
+            rotation = transform.transform.rotation
+            tf_yaw = _yaw_from_quaternion(rotation)
+            cosine = math.cos(tf_yaw)
+            sine = math.sin(tf_yaw)
+            return {
+                "frame_id": self.map_frame,
+                "transform_ok": True,
+                "x": float(translation.x) + cosine * x - sine * y,
+                "y": float(translation.y) + sine * x + cosine * y,
+                "yaw": math.atan2(math.sin(tf_yaw + yaw), math.cos(tf_yaw + yaw)),
+            }
+        except Exception as error:
+            now = time.monotonic()
+            last_warn = self._last_grid_tf_warn.get(source_frame, 0.0)
+            if now - last_warn > 5.0:
+                self.get_logger().warning(
+                    f"TF {self.map_frame} <- {source_frame} unavailable for costmap: {error}"
+                )
+                self._last_grid_tf_warn[source_frame] = now
+            # Keep the source frame in the payload.  The frontend can avoid
+            # drawing a misleading overlay until the transform becomes valid.
+            return {
+                "frame_id": source_frame,
+                "transform_ok": False,
+                "x": x,
+                "y": y,
+                "yaw": yaw,
+            }
 
     @staticmethod
     def _default_maps_dir():

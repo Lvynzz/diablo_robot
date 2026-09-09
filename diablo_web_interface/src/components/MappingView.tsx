@@ -133,6 +133,7 @@ function OccupancyCanvas({ grid, pose, scan, globalCostmap, localCostmap, showRo
 
     const drawCostmap = (costmap: OccupancyGrid | null, layer: "global" | "local") => {
       if (!costmap) return;
+      if (costmap.transform_ok === false && costmap.frame_id !== grid.frame_id) return;
       const overlaySample = Math.max(1, Math.ceil(Math.sqrt((costmap.width * costmap.height) / 65000)));
       const costmapOrigin = costmap.origin || { x: 0, y: 0, yaw: 0 };
       const angle = costmapOrigin.yaw || 0;

@@ -190,12 +190,15 @@
     ["pose-x-source", "pose-y-source"].forEach((id) => { const element = $(id); if (element) element.textContent = mapPose ? "METERS · MAP / AMCL" : "METERS · ODOM"; });
     const thetaSource = $("pose-theta-source");
     if (thetaSource) thetaSource.textContent = mapPose ? "DEGREES · MAP / AMCL" : "DEGREES · ODOM";
-    const grid = state.selectedMap || state.previewMap || state.map;
+    const navigationActive = Boolean(state.processes?.navigation?.active);
+    // While Nav2 is running, draw its live /map. Costmaps are generated from
+    // that map; a stale browser preview would make the overlay look misaligned.
+    const grid = navigationActive && state.map ? state.map : state.selectedMap || state.previewMap || state.map;
     $("map-empty").style.display = grid ? "none" : "flex";
     $("map-meta").textContent = grid ? `${grid.width} × ${grid.height} · ${Number(grid.resolution).toFixed(3)} m · ${state.selectedMap ? "SELECTED MAP" : state.previewMap ? "PREVIEW" : grid.frame_id || "map"}` : "Menunggu /map";
     const sourceStatus = $("map-source-status");
     const lidarLayer = $("layer-lidar");
-    if (sourceStatus) sourceStatus.textContent = `LIDAR: ${lidarLayer?.checked ? (state.scan ? "LIVE" : "WAITING") : "OFF"} · ${state.selectedMap ? `SELECTED: ${state.selectedMap.name || "MAP"}` : state.previewMap ? `PREVIEW: ${state.previewMap.name || "MAP"}` : "/map → OccupancyGrid"}`;
+    if (sourceStatus) sourceStatus.textContent = `${navigationActive && state.map ? "LIVE NAV2 /MAP" : "/map → OccupancyGrid"} · GLOBAL: ${state.global_costmap ? "LIVE" : "WAITING"} · LOCAL: ${state.local_costmap ? "LIVE" : "WAITING"} · LIDAR: ${lidarLayer?.checked ? (state.scan ? "LIVE" : "WAITING") : "OFF"} · ${state.selectedMap ? `SELECTED: ${state.selectedMap.name || "MAP"}` : state.previewMap ? `PREVIEW: ${state.previewMap.name || "MAP"}` : ""}`;
     $("map-select-apply").disabled = !state.previewMap;
     drawMap();
     renderJoints();
@@ -263,7 +266,8 @@
 
   function drawMap() {
     const canvas = $("map-canvas");
-    const grid = state.selectedMap || state.previewMap || state.map;
+    const navigationActive = Boolean(state.processes?.navigation?.active);
+    const grid = navigationActive && state.map ? state.map : state.selectedMap || state.previewMap || state.map;
     if (!canvas || !grid) return;
     const rect = canvas.getBoundingClientRect();
     const ratio = window.devicePixelRatio || 1;
@@ -298,6 +302,9 @@
     };
     const drawCostmap = (costmap, layer) => {
       if (!costmap) return;
+      // The backend transforms odom-frame local costmaps into map coordinates.
+      // Avoid drawing a misleading offset overlay while that TF is unavailable.
+      if (costmap.transform_ok === false && costmap.frame_id !== grid.frame_id) return;
       const overlaySample = Math.max(1, Math.ceil(Math.sqrt((costmap.width * costmap.height) / 65000)));
       const costOrigin = costmap.origin || { x: 0, y: 0, yaw: 0 };
       const costAngle = costOrigin.yaw || 0;

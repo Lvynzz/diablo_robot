@@ -1,28 +1,35 @@
 # Nav2 defaults for Diablo.
-#
-# Tuning guide: comments below give the meaning (Arti), the usual effect when
-# increasing/decreasing a value (Dampak), and a practical range (Kisaran).
-# “Kisaran” is a safe starting range, not a hard Nav2 limit; always respect the
-# measured robot geometry, lidar specification, and the units shown.  Change
-# one group at a time and observe /amcl_pose, /tf, /scan and the costmaps.
-# Launch arguments can replace the map file, but topic/frame changes are easiest
-# to make in a copy of this file supplied with params_file:=...
 
 amcl:
   ros__parameters:
     # Arti: gunakan clock simulasi. Dampak: true tanpa /clock membuat AMCL
     # menunggu waktu; robot nyata harus false. Kisaran: false/true.
     use_sim_time: false
-    # alpha1..alpha5 = noise odometri (rotasi akibat rotasi, rotasi akibat
-    # translasi, translasi akibat translasi, translasi akibat rotasi, dan
-    # strafing). Nilai lebih besar membuat AMCL kurang percaya odom dan lebih
-    # cepat mengikuti lidar, tetapi pose lebih berisik. Kisaran praktis: 0-1;
-    # alpha5 biasanya 0 untuk differential drive.
+    # 1. Arti: Perkiraan error odometri rotasi akibat pergerakan rotasi.
+    # 2. Dampak: Naik: Partikel menyebar luas saat rotasi (odometri buruk). Turun: Partikel terpusat.
+    # 3. Range: 0.0 - 1.0 (DDMR: ~0.1-0.2)
     alpha1: 0.2
+
+    # 1. Arti: Perkiraan error rotasi akibat pergerakan translasi (selip roda saat lurus).
+    # 2. Dampak: Naik: Robot kurang percaya arah saat jalan lurus. Turun: Pede jalan lurus.
+    # 3. Range: 0.0 - 1.0 (DDMR: ~0.1-0.2)
     alpha2: 0.2
+
+    # 1. Arti: Perkiraan error translasi akibat pergerakan translasi.
+    # 2. Dampak: Naik: Toleransi roda slip/ngesot maju tinggi. Turun: Menganggap jarak maju presisi.
+    # 3. Range: 0.0 - 1.0 (DDMR: ~0.1-0.2)
     alpha3: 0.2
+
+    # 1. Arti: Perkiraan error translasi akibat rotasi (poros putar goyang).
+    # 2. Dampak: Naik: Partikel bergeser linier saat robot putar. Turun: Dianggap mutar di tempat.
+    # 3. Range: 0.0 - 1.0 (DDMR: ~0.1-0.2)
     alpha4: 0.2
+
+    # 1. Arti: Error translasi akibat strafing (gerak samping).
+    # 2. Dampak: Hanya untuk robot omni. Untuk DDMR abaikan.
+    # 3. Range: Abaikan (0.2)
     alpha5: 0.2
+
     # Arti: frame badan robot yang dipakai AMCL. Dampak: harus tepat sama
     # dengan TF; salah nama membuat pose/TF tidak muncul. Kisaran: nama frame.
     base_frame_id: diablo_base_link
@@ -64,17 +71,17 @@ amcl:
     max_beams: 60
     # Arti: batas atas jumlah partikel. Dampak: lebih besar mampu menangani
     # lokasi ambigu tetapi CPU/memori naik. Kisaran praktis: 500-5000.
-    max_particles: 2000
+    max_particles: 2500
     # Arti: batas bawah partikel. Dampak: lebih besar mencegah kehilangan pose
     # tetapi selalu memakai CPU lebih banyak. Kisaran praktis: 100-1000;
     # harus <= max_particles.
-    min_particles: 300
+    min_particles: 700
     # Arti: frame odometri. Dampak: harus cocok dengan TF odom->base.
     # Kisaran: nama frame, biasanya odom.
     odom_frame_id: odom
     # Arti: error translasi relatif untuk adaptive particle count. Dampak: lebih
     # kecil meminta keyakinan lebih tinggi (partikel naik). Kisaran praktis: 0.01-0.2.
-    pf_err: 0.05
+    pf_err: 0.04
     # Arti: probabilitas keyakinan adaptive particle count (0..1). Dampak: lebih
     # dekat 1 cenderung memakai lebih banyak partikel. Kisaran praktis: 0.9-0.999.
     pf_z: 0.99
@@ -145,7 +152,7 @@ bt_navigator:
     bt_loop_duration: 10
     # Arti: batas tunggu action server (ms). Dampak: terlalu kecil memicu timeout;
     # terlalu besar menunda error. Kisaran praktis: 10-1000 ms.
-    default_server_timeout: 20
+    default_server_timeout: 500
     # Arti: batas tunggu service (ms). Dampak: lebih besar toleran startup lambat;
     # kisaran praktis: 100-5000 ms.
     wait_for_service_timeout: 1000
@@ -213,6 +220,8 @@ controller_server:
     # memberi waktu pulih sebelum abort, tetapi robot dapat diam lebih lama.
     # Kisaran praktis: 0-5 s.
     failure_tolerance: 0.3
+    
+    
     # Arti: nama plugin pemeriksa progres, tujuan, dan controller yang diaktifkan.
     # Dampak: setiap nama harus memiliki blok konfigurasi. Kisaran: plugin tersedia.
     progress_checker_plugins: [progress_checker]
@@ -388,7 +397,7 @@ local_costmap:
           marking: true
           # Arti: jarak maksimum obstacle yang ditandai (m). Dampak: naik melihat
           # lebih jauh dengan CPU lebih tinggi. Kisaran praktis: 3-15 m.
-          obstacle_max_range: 8.0
+          obstacle_max_range: 12.0
           # Arti: jarak minimum obstacle yang ditandai (m). Dampak: naik
           # mengabaikan pantulan dekat. Kisaran praktis: 0.05-0.30 m.
           obstacle_min_range: 0.10
@@ -406,7 +415,7 @@ local_costmap:
         plugin: nav2_costmap_2d::InflationLayer
         # Arti: radius inflasi (m). Dampak: naik menjaga robot lebih jauh namun
         # koridor sempit bisa tidak dilalui. Kisaran praktis: 0.15-1 m.
-        inflation_radius: 0.35
+        inflation_radius: 0.25
         # Arti: laju penurunan biaya terhadap jarak. Dampak: lebih besar biaya
         # turun tajam (robot boleh dekat setelah sedikit jarak); lebih kecil
         # menyebarkan penalti lebih luas. Kisaran praktis: 1-10.

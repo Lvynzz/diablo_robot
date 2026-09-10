@@ -176,6 +176,10 @@ bt_navigator:
       - nav2_recovery_node_bt_node
       - nav2_pipeline_sequence_bt_node
       - nav2_round_robin_node_bt_node
+      # Required by the Humble through-poses tree shipped on the robot.
+      # Without this library the BT fails during activation with
+      # ``Node not recognized: RemovePassedGoals``.
+      - nav2_remove_passed_goals_action_bt_node
       - nav2_navigate_to_pose_action_bt_node
       - nav2_navigate_through_poses_action_bt_node
 

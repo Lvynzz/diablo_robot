@@ -24,6 +24,7 @@
   <depend>std_msgs</depend>
   <depend>std_srvs</depend>
   <depend>tf2_ros</depend>
+  <depend>tf2_msgs</depend>
   <depend>trajectory_msgs</depend>
 
   <exec_depend>nav2_amcl</exec_depend>

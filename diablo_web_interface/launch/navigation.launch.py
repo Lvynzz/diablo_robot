@@ -65,6 +65,7 @@ def generate_launch_description():
     odom_frame = LaunchConfiguration("odom_frame")
     scan_topic = LaunchConfiguration("scan_topic")
     set_initial_pose = LaunchConfiguration("set_initial_pose")
+    autostart_navigation = LaunchConfiguration("autostart_navigation")
 
     def bool_value(value):
         return ParameterValue(value, value_type=bool)
@@ -117,6 +118,14 @@ def generate_launch_description():
             "set_initial_pose",
             default_value="false",
             description="Wait for /initialpose before AMCL publishes map->odom.",
+        ),
+        DeclareLaunchArgument(
+            "autostart_navigation",
+            default_value="false",
+            description=(
+                "Start Nav2 controller/planner/BT immediately. The web HMI "
+                "keeps this false until AMCL publishes map->odom."
+            ),
         ),
         DeclareLaunchArgument("wheel_radius", default_value="0.093"),
         DeclareLaunchArgument("track_width", default_value="0.475"),
@@ -267,7 +276,11 @@ def generate_launch_description():
                 configured_params,
                 {
                     "use_sim_time": bool_value(use_sim_time),
-                    "autostart": True,
+                    # Planner/controller costmaps require map->odom.  The web
+                    # node requests STARTUP after Set Initial Pose so this
+                    # manager cannot block waiting for a transform during
+                    # Navigation launch.
+                    "autostart": bool_value(autostart_navigation),
                     "node_names": [
                         "controller_server",
                         "planner_server",

@@ -77,6 +77,14 @@ def generate_launch_description():
         DeclareLaunchArgument("localization_start_command", default_value=""),
         DeclareLaunchArgument("navigation_start_command", default_value=""),
         DeclareLaunchArgument("mapping_start_command", default_value=""),
+        DeclareLaunchArgument(
+            "autostart_navigation",
+            default_value="false",
+            description=(
+                "Keep Nav2 lifecycle stopped until AMCL has an initial pose "
+                "when the web HMI controls this launch."
+            ),
+        ),
         DeclareLaunchArgument("maps_dir", default_value=""),
         DeclareLaunchArgument(
             "enable_wheel_odom",
@@ -129,6 +137,7 @@ def generate_launch_description():
                 "track_width": LaunchConfiguration("track_width"),
                 "motor_topic": LaunchConfiguration("motor_topic"),
                 "enable_mux": "false",
+                "autostart_navigation": LaunchConfiguration("autostart_navigation"),
             }.items(),
         ),
     ])

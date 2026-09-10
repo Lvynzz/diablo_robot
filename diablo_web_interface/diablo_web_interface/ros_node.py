@@ -14,6 +14,7 @@ from action_msgs.msg import GoalStatus
 from geometry_msgs.msg import PolygonStamped, PoseStamped, PoseWithCovarianceStamped, Twist
 from motion_msgs.msg import LegMotors, MotionCtrl, RobotStatus
 from nav2_msgs.action import NavigateToPose
+from nav2_msgs.srv import ManageLifecycleNodes
 from nav_msgs.msg import OccupancyGrid, Odometry, Path as NavPath
 from rclpy.action import ActionClient
 from rclpy.node import Node
@@ -31,6 +32,7 @@ from std_msgs.msg import String
 from std_srvs.srv import Empty, Trigger
 from trajectory_msgs.msg import JointTrajectory, JointTrajectoryPoint
 from tf2_ros import Buffer, TransformListener
+from tf2_msgs.msg import TFMessage
 
 from .hardware_manager import HardwareManager
 
@@ -237,7 +239,8 @@ class DiabloWebNode(Node):
         self.declare_parameter(
             "navigation_start_command",
             "ros2 launch diablo_web_interface navigation.launch.py "
-            "enable_mux:=false enable_wheel_odom:=false",
+            "enable_mux:=false enable_wheel_odom:=false "
+            "autostart_navigation:=false",
         )
         self.declare_parameter(
             "mapping_start_command",
@@ -373,6 +376,27 @@ class DiabloWebNode(Node):
             "message": "Belum ada initial pose",
             "attempts": 0,
             "age": None,
+        }
+        # Navigation's lifecycle manager is deliberately started only after
+        # AMCL has produced map->odom.  Starting the planner/controller
+        # costmaps before that transform exists makes planner_server block in
+        # on_activate(), which leaves bt_navigator and velocity_smoother
+        # inactive forever.  Keep the state here so the ROS timer can request
+        # the lifecycle transition without blocking the HTTP thread.
+        self._navigation_lifecycle_active = False
+        self._navigation_lifecycle_state = "idle"
+        self._navigation_lifecycle_start_future = None
+        self._navigation_lifecycle_query_future = None
+        self._navigation_lifecycle_last_request = 0.0
+        self._navigation_lifecycle_last_query = 0.0
+        # A direct TF observation complements tf2_ros.TransformListener.
+        # Some robot images use a long-lived DDS participant where the
+        # listener's buffer can miss the first dynamic transform; caching the
+        # two frames needed by Nav2 lets the HMI keep rendering and gating on
+        # the same TF that Nav2 is already receiving.
+        self._dynamic_tf = {
+            "map_odom": None,
+            "odom_base": None,
         }
         self._wheel_trajectory = []
         self._telemetry = {
@@ -518,6 +542,15 @@ class DiabloWebNode(Node):
                 self._global_costmap_callback,
                 transient_qos,
             ),
+            # Keep a small copy of AMCL's dynamic transforms in addition to
+            # tf2_ros' buffer.  The copy is used only as a startup/rendering
+            # fallback; Nav2 remains the sole TF authority.
+            self.create_subscription(
+                TFMessage,
+                "/tf",
+                self._tf_message_callback,
+                reliable_qos,
+            ),
             self.create_subscription(
                 PolygonStamped,
                 "/local_costmap/published_footprint",
@@ -594,8 +627,19 @@ class DiabloWebNode(Node):
         self._tf_timer = self.create_timer(0.1, self._update_tf_pose)
         self._hardware_timer = self.create_timer(0.5, self._update_hardware_status)
         self._initial_pose_timer = self.create_timer(0.5, self._retry_initial_pose)
+        self._navigation_lifecycle_timer = self.create_timer(
+            0.5, self._navigation_lifecycle_tick
+        )
         self._nav_to_pose_client = ActionClient(
             self, NavigateToPose, "/navigate_to_pose"
+        )
+        self._navigation_lifecycle_client = self.create_client(
+            ManageLifecycleNodes,
+            "/lifecycle_manager_navigation/manage_nodes",
+        )
+        self._navigation_lifecycle_active_client = self.create_client(
+            Trigger,
+            "/lifecycle_manager_navigation/is_active",
         )
 
         self.get_logger().info(
@@ -621,6 +665,36 @@ class DiabloWebNode(Node):
             self._global_costmap = self._parse_grid(message)
             self._last_global_costmap_time = time.monotonic()
             self._versions["global_costmap"] += 1
+
+    def _tf_message_callback(self, message: TFMessage):
+        """Cache the dynamic transforms required by AMCL and the costmaps.
+
+        Nav2 publishes ``map -> odom`` from AMCL and the wheel odometry node
+        publishes ``odom -> diablo_base_link``.  Keeping only these two links
+        is enough to reconstruct the robot pose and transform the rolling
+        local costmap when the Python tf2 listener has not populated its
+        buffer yet.
+        """
+        received = time.monotonic()
+        updates = {}
+        for item in message.transforms:
+            parent = str(item.header.frame_id or "").strip().lstrip("/")
+            child = str(item.child_frame_id or "").strip().lstrip("/")
+            if parent == self.map_frame and child == self.odom_frame:
+                key = "map_odom"
+            elif parent == self.odom_frame and child == self.base_frame:
+                key = "odom_base"
+            else:
+                continue
+            updates[key] = {
+                "x": float(item.transform.translation.x),
+                "y": float(item.transform.translation.y),
+                "yaw": _yaw_from_quaternion(item.transform.rotation),
+                "received": received,
+            }
+        if updates:
+            with self._lock:
+                self._dynamic_tf.update(updates)
 
     def _footprint_callback(self, message: PolygonStamped):
         """Keep Nav2's live footprint in map coordinates for the canvas."""
@@ -851,11 +925,24 @@ class DiabloWebNode(Node):
                     self._joint_positions[str(name)] = float(position)
 
     def _update_tf_pose(self):
+        transform = None
         try:
             transform = self._tf_buffer.lookup_transform(
                 self.map_frame, self.base_frame, Time()
             )
         except Exception:
+            transform = self._cached_transform(self.map_frame, self.base_frame)
+            if transform is not None:
+                pose = {
+                    "x": float(transform["x"]),
+                    "y": float(transform["y"]),
+                    "theta": float(transform["yaw"]),
+                    "source": "amcl_tf",
+                }
+                with self._lock:
+                    self._pose = pose
+                    self._last_tf_time = time.monotonic()
+                return
             with self._lock:
                 # Navigation owns the embedded map_server + AMCL launch.  Do
                 # not fall back to odometry while either standalone
@@ -880,14 +967,22 @@ class DiabloWebNode(Node):
                     self._pose = self._odom_pose
             return
 
-        translation = transform.transform.translation
-        rotation = transform.transform.rotation
-        pose = {
-            "x": float(translation.x),
-            "y": float(translation.y),
-            "theta": _yaw_from_quaternion(rotation),
-            "source": self.map_frame,
-        }
+        if isinstance(transform, dict):
+            pose = {
+                "x": float(transform["x"]),
+                "y": float(transform["y"]),
+                "theta": float(transform["yaw"]),
+                "source": "amcl_tf",
+            }
+        else:
+            translation = transform.transform.translation
+            rotation = transform.transform.rotation
+            pose = {
+                "x": float(translation.x),
+                "y": float(translation.y),
+                "theta": _yaw_from_quaternion(rotation),
+                "source": self.map_frame,
+            }
         with self._lock:
             self._pose = pose
             self._last_tf_time = time.monotonic()
@@ -1374,6 +1469,10 @@ class DiabloWebNode(Node):
     def start_navigation(self):
         if self._hardware.process_status("localization")["active"]:
             self.stop_localization()
+        with self._lock:
+            self._navigation_lifecycle_active = False
+            self._navigation_lifecycle_state = "waiting_for_amcl"
+            self._navigation_lifecycle_last_request = 0.0
         result = self._hardware.start_process("navigation", self.navigation_start_command)
         return {**result, "component": "navigation"}
 
@@ -1443,6 +1542,11 @@ class DiabloWebNode(Node):
                 f"Could not stop robot before navigation shutdown: {error}"
             )
         result = self._hardware.stop_process("navigation")
+        with self._lock:
+            self._navigation_lifecycle_active = False
+            self._navigation_lifecycle_state = "idle"
+            self._navigation_lifecycle_start_future = None
+            self._navigation_lifecycle_query_future = None
         return {
             **result,
             "component": "navigation",
@@ -1794,6 +1898,14 @@ class DiabloWebNode(Node):
         map_to_odom = self._tf_available(self.map_frame, self.odom_frame)
         map_to_base = self._tf_available(self.map_frame, self.base_frame)
         action_server = self.nav2_ready()
+        with self._lock:
+            lifecycle_active = bool(self._navigation_lifecycle_active)
+            lifecycle_state = str(self._navigation_lifecycle_state)
+        # AMCL normally publishes /amcl_pose when it initializes and then
+        # updates map->odom on every scan.  A stationary robot may therefore
+        # have a perfectly valid TF while the last pose message is older than
+        # the freshness window; TF is the authoritative readiness signal.
+        amcl_ready = recent(timestamps["amcl"], 5.0) or map_to_odom
         local_ready = bool(
             local_costmap
             and (local_costmap.get("transform_ok") or local_costmap.get("frame_id") == self.map_frame)
@@ -1808,6 +1920,12 @@ class DiabloWebNode(Node):
             "navigation_active": {
                 "ready": bool(navigation_process.get("active")),
                 "label": "Navigation launch",
+                "age": None,
+            },
+            "navigation_lifecycle": {
+                "ready": lifecycle_active,
+                "label": "Nav2 lifecycle (BT/controller/smoother)",
+                "state": lifecycle_state,
                 "age": None,
             },
             "hardware": {
@@ -1831,9 +1949,10 @@ class DiabloWebNode(Node):
                 "age": age(timestamps["odom"]),
             },
             "amcl_pose": {
-                "ready": recent(timestamps["amcl"], 5.0),
+                "ready": amcl_ready,
                 "label": "/amcl_pose",
                 "age": age(timestamps["amcl"]),
+                "via": "TF map→odom" if not recent(timestamps["amcl"], 5.0) and map_to_odom else "topic",
             },
             "tf_map_odom": {
                 "ready": map_to_odom,
@@ -1911,11 +2030,58 @@ class DiabloWebNode(Node):
             return result
 
     def _tf_available(self, target_frame, source_frame):
+        if self._cached_transform(target_frame, source_frame) is not None:
+            return True
         try:
             self._tf_buffer.lookup_transform(target_frame, source_frame, Time())
             return True
         except Exception:
             return False
+
+    def _cached_transform(self, target_frame, source_frame):
+        """Return a recent cached 2-D transform, including simple chains."""
+        target = str(target_frame or "").strip().lstrip("/")
+        source = str(source_frame or "").strip().lstrip("/")
+        if target == source:
+            return {"x": 0.0, "y": 0.0, "yaw": 0.0, "received": time.monotonic()}
+        now = time.monotonic()
+        with self._lock:
+            map_odom = copy.deepcopy(self._dynamic_tf.get("map_odom"))
+            odom_base = copy.deepcopy(self._dynamic_tf.get("odom_base"))
+
+        def recent(value):
+            return value is not None and now - float(value.get("received", 0.0)) <= 3.0
+
+        if target == self.map_frame and source == self.odom_frame:
+            return map_odom if recent(map_odom) else None
+        if target == self.odom_frame and source == self.base_frame:
+            return odom_base if recent(odom_base) else None
+        if target == self.map_frame and source == self.base_frame:
+            if not (recent(map_odom) and recent(odom_base)):
+                return None
+            cosine = math.cos(map_odom["yaw"])
+            sine = math.sin(map_odom["yaw"])
+            return {
+                "x": map_odom["x"] + cosine * odom_base["x"] - sine * odom_base["y"],
+                "y": map_odom["y"] + sine * odom_base["x"] + cosine * odom_base["y"],
+                "yaw": math.atan2(
+                    math.sin(map_odom["yaw"] + odom_base["yaw"]),
+                    math.cos(map_odom["yaw"] + odom_base["yaw"]),
+                ),
+                "received": min(map_odom["received"], odom_base["received"]),
+            }
+        if target == self.odom_frame and source == self.map_frame:
+            if not recent(map_odom):
+                return None
+            cosine = math.cos(map_odom["yaw"])
+            sine = math.sin(map_odom["yaw"])
+            return {
+                "x": -cosine * map_odom["x"] - sine * map_odom["y"],
+                "y": sine * map_odom["x"] - cosine * map_odom["y"],
+                "yaw": math.atan2(-math.sin(map_odom["yaw"]), math.cos(map_odom["yaw"])),
+                "received": map_odom["received"],
+            }
+        return None
 
     def _update_hardware_status(self):
         try:
@@ -1969,6 +2135,135 @@ class DiabloWebNode(Node):
                 "attempts": pending["attempts"],
                 "age": round(elapsed, 2),
             }
+
+    def _navigation_localization_ready(self):
+        """Return true once AMCL's map->odom transform is observable."""
+        if self._tf_available(self.map_frame, self.odom_frame):
+            return True
+        with self._lock:
+            amcl_recent = (
+                self._last_amcl_pose_time > 0.0
+                and time.monotonic() - self._last_amcl_pose_time <= 5.0
+            )
+        return amcl_recent
+
+    def _navigation_lifecycle_tick(self):
+        """Start/query Nav2 lifecycle only after localization is ready.
+
+        The navigation launch intentionally leaves its lifecycle manager in
+        ``autostart:=false`` mode.  This callback is cheap and non-blocking:
+        it sends one service request at a time and lets the ROS executor
+        deliver the result asynchronously.
+        """
+        process = self._hardware.process_status("navigation")
+        if not process.get("active"):
+            with self._lock:
+                self._navigation_lifecycle_active = False
+                if self._navigation_lifecycle_state != "idle":
+                    self._navigation_lifecycle_state = "idle"
+            return
+
+        now = time.monotonic()
+        with self._lock:
+            active = bool(self._navigation_lifecycle_active)
+            state = self._navigation_lifecycle_state
+            start_future = self._navigation_lifecycle_start_future
+            query_future = self._navigation_lifecycle_query_future
+            last_request = self._navigation_lifecycle_last_request
+            last_query = self._navigation_lifecycle_last_query
+
+        if start_future is not None and start_future.done():
+            with self._lock:
+                self._navigation_lifecycle_start_future = None
+            try:
+                response = start_future.result()
+                success = bool(getattr(response, "success", False))
+            except Exception as error:
+                success = False
+                self.get_logger().warning(
+                    f"Nav2 lifecycle startup request failed: {error}"
+                )
+            with self._lock:
+                self._navigation_lifecycle_active = success
+                self._navigation_lifecycle_state = "active" if success else "error"
+            if success:
+                self.get_logger().info(
+                    "Nav2 lifecycle activated after AMCL map→odom became available"
+                )
+            return
+
+        if query_future is not None and query_future.done():
+            with self._lock:
+                self._navigation_lifecycle_query_future = None
+            try:
+                response = query_future.result()
+                is_active = bool(getattr(response, "success", False))
+            except Exception:
+                is_active = False
+            with self._lock:
+                self._navigation_lifecycle_active = is_active
+                if is_active:
+                    self._navigation_lifecycle_state = "active"
+            active = is_active
+
+        # Keep the diagnostic state synchronized when an operator starts or
+        # stops Navigation outside the web process.
+        if not active and now - last_query >= 1.0:
+            try:
+                if self._navigation_lifecycle_active_client.service_is_ready():
+                    future = self._navigation_lifecycle_active_client.call_async(
+                        Trigger.Request()
+                    )
+                    with self._lock:
+                        self._navigation_lifecycle_query_future = future
+                        self._navigation_lifecycle_last_query = now
+            except Exception:
+                pass
+
+        # Do not retry a manager that has already returned a failed STARTUP.
+        # Nav2 lifecycle managers can partially activate earlier nodes before
+        # reporting a later-node error; sending STARTUP again then attempts a
+        # configure transition on active nodes and leaves the stack noisier and
+        # harder to diagnose.  A fresh Navigation launch resets this state and
+        # permits one clean retry.
+        if (
+            not active
+            and state != "error"
+            and start_future is None
+            and now - last_request >= 2.0
+            and self._navigation_localization_ready()
+        ):
+            self._request_navigation_lifecycle_startup(now)
+
+    def _request_navigation_lifecycle_startup(self, now=None):
+        """Request STARTUP on the Navigation lifecycle manager once."""
+        now = time.monotonic() if now is None else now
+        with self._lock:
+            future = self._navigation_lifecycle_start_future
+            last_request = self._navigation_lifecycle_last_request
+        if future is not None and not future.done():
+            return False
+        if now - last_request < 2.0:
+            return False
+        try:
+            if not self._navigation_lifecycle_client.service_is_ready():
+                with self._lock:
+                    self._navigation_lifecycle_state = "waiting_for_manager"
+                return False
+            request = ManageLifecycleNodes.Request()
+            request.command = 0  # ManageLifecycleNodes::STARTUP
+            future = self._navigation_lifecycle_client.call_async(request)
+        except Exception as error:
+            with self._lock:
+                self._navigation_lifecycle_state = "error"
+            self.get_logger().warning(f"Could not request Nav2 lifecycle startup: {error}")
+            return False
+        with self._lock:
+            self._navigation_lifecycle_start_future = future
+            self._navigation_lifecycle_last_request = now
+            self._navigation_lifecycle_state = "starting"
+        self.get_logger().info("Requested Nav2 lifecycle startup after AMCL readiness")
+        return True
 
     def destroy_node(self):
         try:
@@ -2144,6 +2439,20 @@ class DiabloWebNode(Node):
                 "yaw": math.atan2(math.sin(tf_yaw + yaw), math.cos(tf_yaw + yaw)),
             }
         except Exception as error:
+            cached = self._cached_transform(self.map_frame, source_frame)
+            if cached is not None:
+                tf_yaw = float(cached["yaw"])
+                cosine = math.cos(tf_yaw)
+                sine = math.sin(tf_yaw)
+                return {
+                    "frame_id": self.map_frame,
+                    "transform_ok": True,
+                    "x": float(cached["x"]) + cosine * x - sine * y,
+                    "y": float(cached["y"]) + sine * x + cosine * y,
+                    "yaw": math.atan2(
+                        math.sin(tf_yaw + yaw), math.cos(tf_yaw + yaw)
+                    ),
+                }
             now = time.monotonic()
             last_warn = self._last_grid_tf_warn.get(source_frame, 0.0)
             if now - last_warn > 5.0:

@@ -52,15 +52,30 @@ def _default_map_file(bringup_share):
     return str(Path(bringup_share) / "map" / "empty.yaml")
 
 
+def _bringup_asset(bringup_share, *parts):
+    """Resolve a bringup asset from install space or an uninstalled source tree."""
+    installed = Path(bringup_share).joinpath(*parts)
+    candidates = [installed]
+    for workspace_root in Path(bringup_share).parents:
+        candidates.append(workspace_root / "src" / "diablo_bringup" / Path(*parts))
+    for candidate in candidates:
+        try:
+            if candidate.is_file():
+                return str(candidate)
+        except OSError:
+            continue
+    return str(installed)
+
+
 def generate_launch_description():
     share = get_package_share_directory("diablo_web_interface")
     bringup_share = get_package_share_directory("diablo_bringup")
     default_params = os.path.join(bringup_share, "config", "nav2_params.yaml")
     default_map = _default_map_file(bringup_share)
-    default_nav_to_pose_bt = os.path.join(
+    default_nav_to_pose_bt = _bringup_asset(
         bringup_share, "behavior_trees", "navigate_to_pose_no_reverse.xml"
     )
-    default_nav_through_poses_bt = os.path.join(
+    default_nav_through_poses_bt = _bringup_asset(
         bringup_share, "behavior_trees", "navigate_through_poses_no_reverse.xml"
     )
 

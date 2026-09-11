@@ -603,7 +603,8 @@ class DiabloWebNode(Node):
                 qos_profile_sensor_data,
             ),
             # Observe each Nav2 command hop.  The topic names mirror
-            # navigation.launch.py (controller -> smoother -> bridge -> mux).
+            # navigation.launch.py (controller -> smoother -> collision
+            # monitor -> bridge -> mux).
             self.create_subscription(
                 Twist, "/cmd_vel_nav", self._cmd_vel_nav_callback, 10
             ),

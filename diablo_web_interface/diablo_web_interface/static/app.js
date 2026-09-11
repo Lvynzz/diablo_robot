@@ -227,7 +227,8 @@
     $("map-meta").textContent = gridReady ? `${grid.width} × ${grid.height} · ${Number(grid.resolution).toFixed(3)} m · ${state.selectedMap ? "SELECTED MAP" : state.previewMap ? "PREVIEW" : grid.frame_id || "map"}` : "Menunggu /map";
     const sourceStatus = $("map-source-status");
     const lidarLayer = $("layer-lidar");
-    if (sourceStatus) sourceStatus.textContent = `${navigationActive && state.map ? "LIVE NAV2 /MAP" : "/map → OccupancyGrid"} · GLOBAL: ${state.global_costmap ? "LIVE" : "WAITING"} · LOCAL: ${state.local_costmap ? "LIVE" : "WAITING"} · LIDAR: ${lidarLayer?.checked ? (state.scan ? "LIVE" : "WAITING") : "OFF"} · ${state.selectedMap ? `SELECTED: ${state.selectedMap.name || "MAP"}` : state.previewMap ? `PREVIEW: ${state.previewMap.name || "MAP"}` : ""}`;
+    const usingLiveMap = navigationActive && grid === state.map;
+    if (sourceStatus) sourceStatus.textContent = `${usingLiveMap ? "LIVE NAV2 /MAP" : navigationActive ? "SELECTED MAP · WAITING /MAP" : "/map → OccupancyGrid"} · GLOBAL: ${state.global_costmap ? "LIVE" : "WAITING"} · LOCAL: ${state.local_costmap ? "LIVE" : "WAITING"} · LIDAR: ${lidarLayer?.checked ? (state.scan ? "LIVE" : "WAITING") : "OFF"} · ${state.selectedMap ? `SELECTED: ${state.selectedMap.name || "MAP"}` : state.previewMap ? `PREVIEW: ${state.previewMap.name || "MAP"}` : ""}`;
     $("map-select-apply").disabled = !state.previewMap;
     drawMap();
     renderJoints();
@@ -340,9 +341,18 @@
 
   function currentMapGrid() {
     const navigationActive = Boolean(state.processes?.navigation?.active);
-    return navigationActive && state.map
-      ? state.map
-      : state.selectedMap || state.previewMap || state.map;
+    const selected = state.selectedMap || state.previewMap;
+    if (!navigationActive) return selected || state.map;
+    if (!validMapGrid(state.map)) return selected || state.map;
+    // A previous Navigation process may have left a valid but different
+    // /map (commonly the bundled 20x20 empty map) in the browser cache.  Keep
+    // the selected map visible until the newly launched map_server publishes
+    // the same geometry, instead of flashing a blank/tiny canvas.
+    if (selected && validMapGrid(selected)
+        && mapGeometrySignature(state.map) !== mapGeometrySignature(selected)) {
+      return selected;
+    }
+    return state.map;
   }
 
   function validMapGrid(grid) {

@@ -13,6 +13,10 @@ def _default_map_file(bringup_share):
     candidates = [Path(bringup_share) / "map"]
     for workspace_root in Path(bringup_share).parents:
         candidates.append(workspace_root / "src" / "diablo_bringup" / "map")
+    # An installed marker can point at a map that has not been installed yet.
+    # Defer the generic YAML fallback until the source-workspace candidate has
+    # also been checked, otherwise Navigation silently starts on empty.yaml.
+    fallback = None
     for directory in candidates:
         marker = directory / ".selected_localization_map.txt"
         try:
@@ -37,8 +41,10 @@ def _default_map_file(bringup_share):
             yaml_files = sorted(directory.glob("*.yaml"))
         except OSError:
             yaml_files = []
-        if yaml_files:
-            return str(yaml_files[0])
+        if yaml_files and fallback is None:
+            fallback = str(yaml_files[0])
+    if fallback:
+        return fallback
     return str(Path(bringup_share) / "map" / "empty.yaml")
 
 

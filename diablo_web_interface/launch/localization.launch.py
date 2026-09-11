@@ -31,6 +31,10 @@ def _default_map_file(web_share):
     except Exception:
         pass
     candidates.append(Path(web_share) / "maps")
+    # Check every candidate for the selected map before falling back to the
+    # first YAML.  An install-space marker may be stale when a newly saved map
+    # exists only in the source workspace.
+    fallback = None
     for directory in candidates:
         # Match the AMR HMI behavior: the map selected in the web UI is the
         # map consumed by the next localization launch.  Ignore stale markers
@@ -58,8 +62,10 @@ def _default_map_file(web_share):
             yaml_files = sorted(directory.glob("*.yaml"))
         except OSError:
             yaml_files = []
-        if yaml_files:
-            return str(yaml_files[0])
+        if yaml_files and fallback is None:
+            fallback = str(yaml_files[0])
+    if fallback:
+        return fallback
     if bringup_share is not None:
         return str(bringup_share / "map" / "empty.yaml")
     return str(Path(web_share) / "maps" / "empty.yaml")

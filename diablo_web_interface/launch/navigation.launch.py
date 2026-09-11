@@ -16,6 +16,11 @@ def _default_map_file(bringup_share):
     candidates = [Path(bringup_share) / "map"]
     for workspace_root in Path(bringup_share).parents:
         candidates.append(workspace_root / "src" / "diablo_bringup" / "map")
+    # Do not return the first YAML before all candidates have been checked.
+    # The install space can contain a stale selection marker while the actual
+    # selected map is still only present in the source workspace.  Returning
+    # ``empty.yaml`` here made Nav2 replace the HMI preview with a blank map.
+    fallback = None
     for directory in candidates:
         marker = directory / ".selected_localization_map.txt"
         try:
@@ -40,8 +45,10 @@ def _default_map_file(bringup_share):
             yaml_files = sorted(directory.glob("*.yaml"))
         except OSError:
             yaml_files = []
-        if yaml_files:
-            return str(yaml_files[0])
+        if yaml_files and fallback is None:
+            fallback = str(yaml_files[0])
+    if fallback:
+        return fallback
     return str(Path(bringup_share) / "map" / "empty.yaml")
 
 

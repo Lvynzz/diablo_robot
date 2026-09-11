@@ -206,9 +206,19 @@ function MapCanvas({
     if (showGlobalCostmap) drawCostmap(globalCostmap, "global");
     if (showLocalCostmap) drawCostmap(localCostmap, "local");
 
-    if (showPath && path?.poses.length) {
+    if (showPath && path?.poses.length && !(path.transform_ok === false && path.frame_id !== grid.frame_id)) {
       context.beginPath();
-      context.strokeStyle = "#2f78ae";
+      context.lineJoin = "round";
+      context.lineCap = "round";
+      context.strokeStyle = "rgba(255,255,255,.92)";
+      context.lineWidth = 5;
+      path.poses.forEach((point, index) => {
+        const [x, y] = toCanvas(point.x, point.y);
+        if (index === 0) context.moveTo(x, y); else context.lineTo(x, y);
+      });
+      context.stroke();
+      context.beginPath();
+      context.strokeStyle = "#b3339b";
       context.lineWidth = 2.5;
       path.poses.forEach((point, index) => {
         const [x, y] = toCanvas(point.x, point.y);

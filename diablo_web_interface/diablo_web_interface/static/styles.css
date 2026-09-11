@@ -47,3 +47,4 @@ button { cursor:pointer; }
 @media (max-width:800px) { .launch-grid,.joint-sliders { grid-template-columns:1fr; } }
 .nav-readiness { margin-top:7px; padding:7px; border:1px solid #d7bf96; border-radius:4px; color:var(--amber); background:#fbf3e5; }.nav-readiness[data-ready="true"] { border-color:#a9c9ae; color:var(--green); background:#edf7ef; }.nav-readiness b { display:block; font:700 8px var(--mono); }.nav-readiness small { display:block; margin-top:4px; color:var(--muted); font:7px/1.35 var(--mono); }.nav-readiness small:last-child { overflow:hidden; color:var(--blue); text-overflow:ellipsis; white-space:nowrap; }
 .costmap-legend { display:inline-flex; align-items:center; gap:5px; color:var(--muted); white-space:nowrap; }.costmap-legend i { display:inline-block; width:52px; height:7px; border:1px solid rgba(55,91,111,.25); border-radius:3px; background:linear-gradient(90deg,#68c3ec 0%,#f6da53 50%,#db3134 100%); }
+.dot.magenta { background:#b3339b; }

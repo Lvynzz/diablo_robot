@@ -41,6 +41,8 @@ export interface ScanData {
 
 export interface PathData {
   frame_id: string;
+  source_frame_id?: string;
+  transform_ok?: boolean;
   poses: Array<{ x: number; y: number }>;
 }
 

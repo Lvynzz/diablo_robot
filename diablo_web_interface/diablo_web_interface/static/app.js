@@ -16,6 +16,7 @@
     navigation_readiness: null,
     command_pipeline: {},
     footprint: null,
+    path: null,
   };
   const keys = new Set();
   let teleopTimer = null;
@@ -228,7 +229,7 @@
     const sourceStatus = $("map-source-status");
     const lidarLayer = $("layer-lidar");
     const usingLiveMap = navigationActive && grid === state.map;
-    if (sourceStatus) sourceStatus.textContent = `${usingLiveMap ? "LIVE NAV2 /MAP" : navigationActive ? "SELECTED MAP · WAITING /MAP" : "/map → OccupancyGrid"} · GLOBAL: ${state.global_costmap ? "LIVE" : "WAITING"} · LOCAL: ${state.local_costmap ? "LIVE" : "WAITING"} · LIDAR: ${lidarLayer?.checked ? (state.scan ? "LIVE" : "WAITING") : "OFF"} · ${state.selectedMap ? `SELECTED: ${state.selectedMap.name || "MAP"}` : state.previewMap ? `PREVIEW: ${state.previewMap.name || "MAP"}` : ""}`;
+    if (sourceStatus) sourceStatus.textContent = `${usingLiveMap ? "LIVE NAV2 /MAP" : navigationActive ? "SELECTED MAP · WAITING /MAP" : "/map → OccupancyGrid"} · GLOBAL: ${state.global_costmap ? "LIVE" : "WAITING"} · LOCAL: ${state.local_costmap ? "LIVE" : "WAITING"} · PLAN: ${navigationActive && state.path?.poses?.length ? "LIVE" : "WAITING"} · LIDAR: ${lidarLayer?.checked ? (state.scan ? "LIVE" : "WAITING") : "OFF"} · ${state.selectedMap ? `SELECTED: ${state.selectedMap.name || "MAP"}` : state.previewMap ? `PREVIEW: ${state.previewMap.name || "MAP"}` : ""}`;
     $("map-select-apply").disabled = !state.previewMap;
     drawMap();
     renderJoints();
@@ -631,6 +632,40 @@
       ctx.restore();
     };
     if (navigationActive && checked("layer-local-costmap", true)) drawWindow(state.local_costmap);
+    const drawGlobalPlan = (path) => {
+      if (!path || !Array.isArray(path.poses) || path.poses.length < 2) return;
+      // The backend converts non-map plans to the map frame.  If TF was not
+      // available, leave the path hidden instead of drawing it at a wrong
+      // offset on the occupancy grid.
+      if (path.transform_ok === false && path.frame_id !== grid.frame_id) return;
+      const points = path.poses
+        .map((point) => toCanvas(Number(point.x), Number(point.y)))
+        .filter(([x, y]) => Number.isFinite(x) && Number.isFinite(y));
+      if (points.length < 2) return;
+      ctx.save();
+      ctx.lineJoin = "round";
+      ctx.lineCap = "round";
+      // A light outline keeps the planner route visible over both the dark
+      // occupancy map and the costmap gradients.
+      ctx.beginPath();
+      ctx.moveTo(points[0][0], points[0][1]);
+      points.slice(1).forEach(([x, y]) => ctx.lineTo(x, y));
+      ctx.strokeStyle = "rgba(255,255,255,.92)";
+      ctx.lineWidth = 5;
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(points[0][0], points[0][1]);
+      points.slice(1).forEach(([x, y]) => ctx.lineTo(x, y));
+      ctx.strokeStyle = "#b3339b";
+      ctx.lineWidth = 2.5;
+      ctx.stroke();
+      ctx.fillStyle = "#b3339b";
+      ctx.beginPath();
+      ctx.arc(points[points.length - 1][0], points[points.length - 1][1], 3.5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    };
+    if (navigationActive && checked("layer-global-plan", true)) drawGlobalPlan(state.path);
     if (checked("layer-lidar", false) && state.scan && displayPose) {
       ctx.fillStyle = "rgba(36,126,164,.62)";
       const sensorX = Number(state.scan.sensor_x) || 0;
@@ -894,7 +929,7 @@
     });
     $("map-zoom-reset")?.addEventListener("click", resetMapView);
     updateMapZoomLabel();
-    ["layer-robot", "layer-lidar", "layer-local-costmap", "layer-global-costmap"].forEach((id) => $(id)?.addEventListener("change", render));
+    ["layer-robot", "layer-lidar", "layer-local-costmap", "layer-global-costmap", "layer-global-plan"].forEach((id) => $(id)?.addEventListener("change", render));
     $("initial-send").addEventListener("click", () => {
       const pose = poseValues("initial");
       command({ type: "initial_pose", x: pose.x, y: pose.y, theta: pose.theta }, "/api/localization/initialpose").then((accepted) => {

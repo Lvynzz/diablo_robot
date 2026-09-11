@@ -185,6 +185,7 @@ def test_web_ui_has_mapping_teleop_and_topic_echo_panels():
     assert 'data-tab="topics"' in html
     assert 'data-tab="settings"' in html
     assert 'id="map-canvas"' in html
+    assert 'id="layer-global-plan"' in html
     assert 'id="topic-cards"' in html
     assert 'id="launch-localization"' in html
     assert 'id="launch-navigation"' in html
@@ -197,6 +198,8 @@ def test_web_ui_has_mapping_teleop_and_topic_echo_panels():
     assert 'confirm-modal' in javascript
     assert 'joint_position' in javascript
     assert 'type: "subscribe"' in javascript
+    assert "drawGlobalPlan" in javascript
+    assert "state.path" in javascript
     assert "start-hardware" in javascript
     assert "relative_asset.is_absolute()" in web_node
     assert '".." in relative_asset.parts' in web_node

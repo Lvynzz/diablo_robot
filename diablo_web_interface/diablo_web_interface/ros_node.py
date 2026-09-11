@@ -761,16 +761,63 @@ class DiabloWebNode(Node):
                 self._pose = pose
 
     def _path_callback(self, message: NavPath):
-        points = [
-            {
-                "x": round(float(item.pose.position.x), 4),
-                "y": round(float(item.pose.position.y), 4),
-            }
-            for item in message.poses
-        ]
+        """Cache Nav2's global plan in the same frame as the map canvas.
+
+        Nav2 normally publishes ``/plan`` in its configured global frame
+        (``map``), but custom planner configurations may use ``odom``.  The
+        browser only has one world-to-canvas transform, so convert the whole
+        path once here and explicitly mark a path as unavailable when its TF
+        cannot be resolved instead of drawing it at a misleading offset.
+        """
+        source_frame = (message.header.frame_id or self.map_frame).strip().lstrip("/")
+        transform_ok = source_frame == self.map_frame
+        transform = None
+        if not transform_ok:
+            try:
+                transform = self._tf_buffer.lookup_transform(
+                    self.map_frame, source_frame, Time()
+                )
+                transform_ok = True
+            except Exception:
+                transform = self._cached_transform(self.map_frame, source_frame)
+                transform_ok = transform is not None
+
+        if transform_ok and transform is not None:
+            if hasattr(transform, "transform"):
+                translation = transform.transform.translation
+                rotation = transform.transform.rotation
+                transform_x = float(translation.x)
+                transform_y = float(translation.y)
+                transform_yaw = _yaw_from_quaternion(rotation)
+            else:
+                # _cached_transform() returns a small dictionary when the
+                # tf2 listener has not received the latest transform yet.
+                transform_x = float(transform.get("x", 0.0))
+                transform_y = float(transform.get("y", 0.0))
+                transform_yaw = float(transform.get("yaw", 0.0))
+            cosine = math.cos(transform_yaw)
+            sine = math.sin(transform_yaw)
+        else:
+            transform_x = transform_y = transform_yaw = 0.0
+            cosine = 1.0
+            sine = 0.0
+
+        points = []
+        for item in message.poses:
+            source_x = float(item.pose.position.x)
+            source_y = float(item.pose.position.y)
+            if transform_ok:
+                x = transform_x + cosine * source_x - sine * source_y
+                y = transform_y + sine * source_x + cosine * source_y
+            else:
+                x = source_x
+                y = source_y
+            points.append({"x": round(x, 4), "y": round(y, 4)})
         with self._lock:
             self._path = {
-                "frame_id": message.header.frame_id or self.map_frame,
+                "frame_id": self.map_frame if transform_ok else source_frame,
+                "source_frame_id": source_frame,
+                "transform_ok": transform_ok,
                 "poses": points,
             }
             self._versions["path"] += 1

@@ -2456,9 +2456,30 @@ class DiabloWebNode(Node):
             now = time.monotonic()
             last_warn = self._last_grid_tf_warn.get(source_frame, 0.0)
             if now - last_warn > 5.0:
-                self.get_logger().warning(
-                    f"TF {self.map_frame} <- {source_frame} unavailable for costmap: {error}"
+                with self._lock:
+                    lifecycle_state = str(self._navigation_lifecycle_state)
+                    initial_pending = self._pending_initial_pose is not None
+                waiting_for_amcl = (
+                    source_frame == self.odom_frame
+                    and (
+                        initial_pending
+                        or lifecycle_state in {
+                            "idle",
+                            "waiting_for_amcl",
+                            "waiting_for_manager",
+                            "starting",
+                        }
+                    )
                 )
+                if waiting_for_amcl:
+                    self.get_logger().info(
+                        "Menunggu TF map→odom dari AMCL; kirim Set Initial Pose "
+                        f"sebelum menggambar costmap (detail: {error})"
+                    )
+                else:
+                    self.get_logger().warning(
+                        f"TF {self.map_frame} <- {source_frame} unavailable for costmap: {error}"
+                    )
                 self._last_grid_tf_warn[source_frame] = now
             # Keep the source frame in the payload.  The frontend can avoid
             # drawing a misleading overlay until the transform becomes valid.

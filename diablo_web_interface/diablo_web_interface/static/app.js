@@ -24,6 +24,18 @@
   let jointMetaSignature = "";
   let poseTool = null;
   let mapPointerStart = null;
+  let mapPanStart = null;
+  const MAP_MIN_ZOOM = 0.5;
+  const MAP_MAX_ZOOM = 8;
+  // Keep the camera independent from the ROS source.  Navigation replaces a
+  // selected/preview OccupancyGrid with the live /map; refitting on every
+  // packet made the map appear to jump or zoom when Nav2 was enabled.
+  const mapView = {
+    zoom: 1,
+    panX: 0,
+    panY: 0,
+    geometrySignature: "",
+  };
 
   const launchDefinitions = {
     hardware: { label: "HARDWARE", start: { type: "start_hardware" }, stop: { type: "stop_hardware" }, startPath: "/api/hardware/start", stopPath: "/api/hardware/stop" },
@@ -206,12 +218,13 @@
     ["pose-x-source", "pose-y-source"].forEach((id) => { const element = $(id); if (element) element.textContent = mapPose ? "METERS · MAP / AMCL" : "METERS · ODOM"; });
     const thetaSource = $("pose-theta-source");
     if (thetaSource) thetaSource.textContent = mapPose ? "DEGREES · MAP / AMCL" : "DEGREES · ODOM";
-    const navigationActive = Boolean(state.processes?.navigation?.active);
     // While Nav2 is running, draw its live /map. Costmaps are generated from
     // that map; a stale browser preview would make the overlay look misaligned.
-    const grid = navigationActive && state.map ? state.map : state.selectedMap || state.previewMap || state.map;
-    $("map-empty").style.display = grid ? "none" : "flex";
-    $("map-meta").textContent = grid ? `${grid.width} × ${grid.height} · ${Number(grid.resolution).toFixed(3)} m · ${state.selectedMap ? "SELECTED MAP" : state.previewMap ? "PREVIEW" : grid.frame_id || "map"}` : "Menunggu /map";
+    const navigationActive = Boolean(state.processes?.navigation?.active);
+    const grid = currentMapGrid();
+    const gridReady = validMapGrid(grid);
+    $("map-empty").style.display = gridReady ? "none" : "flex";
+    $("map-meta").textContent = gridReady ? `${grid.width} × ${grid.height} · ${Number(grid.resolution).toFixed(3)} m · ${state.selectedMap ? "SELECTED MAP" : state.previewMap ? "PREVIEW" : grid.frame_id || "map"}` : "Menunggu /map";
     const sourceStatus = $("map-source-status");
     const lidarLayer = $("layer-lidar");
     if (sourceStatus) sourceStatus.textContent = `${navigationActive && state.map ? "LIVE NAV2 /MAP" : "/map → OccupancyGrid"} · GLOBAL: ${state.global_costmap ? "LIVE" : "WAITING"} · LOCAL: ${state.local_costmap ? "LIVE" : "WAITING"} · LIDAR: ${lidarLayer?.checked ? (state.scan ? "LIVE" : "WAITING") : "OFF"} · ${state.selectedMap ? `SELECTED: ${state.selectedMap.name || "MAP"}` : state.previewMap ? `PREVIEW: ${state.previewMap.name || "MAP"}` : ""}`;
@@ -325,11 +338,143 @@
     }
   }
 
+  function currentMapGrid() {
+    const navigationActive = Boolean(state.processes?.navigation?.active);
+    return navigationActive && state.map
+      ? state.map
+      : state.selectedMap || state.previewMap || state.map;
+  }
+
+  function validMapGrid(grid) {
+    if (!grid) return false;
+    const width = Number(grid.width);
+    const height = Number(grid.height);
+    const resolution = Number(grid.resolution);
+    return Number.isFinite(width) && width > 0
+      && Number.isFinite(height) && height > 0
+      && Number.isFinite(resolution) && resolution > 0;
+  }
+
+  function mapGeometrySignature(grid) {
+    const origin = grid.origin || {};
+    return [
+      Number(grid.width),
+      Number(grid.height),
+      Number(grid.resolution),
+      Number(origin.x || 0).toFixed(5),
+      Number(origin.y || 0).toFixed(5),
+      Number(origin.yaw || 0).toFixed(5),
+    ].join(":");
+  }
+
+  function prepareMapView(grid) {
+    if (!validMapGrid(grid)) return;
+    const signature = mapGeometrySignature(grid);
+    if (!mapView.geometrySignature) {
+      mapView.geometrySignature = signature;
+    } else if (mapView.geometrySignature !== signature) {
+      // A genuinely different map should start at a useful fit.  A preview
+      // and its live Nav2 /map normally have identical geometry, so switching
+      // between them keeps the user's current pan/zoom unchanged.
+      mapView.zoom = 1;
+      mapView.panX = 0;
+      mapView.panY = 0;
+      mapView.geometrySignature = signature;
+    }
+    mapView.zoom = Math.max(MAP_MIN_ZOOM, Math.min(MAP_MAX_ZOOM, Number(mapView.zoom) || 1));
+  }
+
+  function mapViewport(grid, rect) {
+    prepareMapView(grid);
+    const width = Number(grid.width);
+    const height = Number(grid.height);
+    const fitCell = Math.min(
+      (rect.width - 28) / width,
+      (rect.height - 28) / height,
+    );
+    const cell = Math.max(0.01, fitCell * mapView.zoom);
+    return {
+      width,
+      height,
+      resolution: Number(grid.resolution),
+      origin: grid.origin || { x: 0, y: 0, yaw: 0 },
+      angle: Number(grid.origin?.yaw || 0),
+      cell,
+      ox: (rect.width - width * cell) / 2 + mapView.panX,
+      oy: (rect.height - height * cell) / 2 + mapView.panY,
+    };
+  }
+
+  function worldToCanvas(grid, viewport, x, y) {
+    const origin = viewport.origin;
+    const cosine = Math.cos(viewport.angle);
+    const sine = Math.sin(viewport.angle);
+    const dx = Number(x) - Number(origin.x || 0);
+    const dy = Number(y) - Number(origin.y || 0);
+    const gx = (cosine * dx + sine * dy) / viewport.resolution;
+    const gy = (-sine * dx + cosine * dy) / viewport.resolution;
+    return [
+      viewport.ox + gx * viewport.cell,
+      viewport.oy + (viewport.height - gy) * viewport.cell,
+    ];
+  }
+
+  function canvasToWorld(grid, viewport, x, y) {
+    const gx = (Number(x) - viewport.ox) / viewport.cell;
+    const gy = viewport.height - (Number(y) - viewport.oy) / viewport.cell;
+    const cosine = Math.cos(viewport.angle);
+    const sine = Math.sin(viewport.angle);
+    const localX = (cosine * gx - sine * gy) * viewport.resolution;
+    const localY = (sine * gx + cosine * gy) * viewport.resolution;
+    return {
+      x: Number(viewport.origin.x || 0) + localX,
+      y: Number(viewport.origin.y || 0) + localY,
+    };
+  }
+
+  function updateMapZoomLabel() {
+    const label = $("map-zoom-level");
+    if (label) label.textContent = `${Math.round(mapView.zoom * 100)}%`;
+  }
+
+  function zoomMapAt(factor, clientX, clientY) {
+    const grid = currentMapGrid();
+    const canvas = $("map-canvas");
+    if (!validMapGrid(grid) || !canvas) return;
+    const rect = canvas.getBoundingClientRect();
+    const viewport = mapViewport(grid, rect);
+    const anchorX = Number(clientX) - rect.left;
+    const anchorY = Number(clientY) - rect.top;
+    const anchorWorld = canvasToWorld(grid, viewport, anchorX, anchorY);
+    const nextZoom = Math.max(
+      MAP_MIN_ZOOM,
+      Math.min(MAP_MAX_ZOOM, mapView.zoom * Number(factor)),
+    );
+    if (nextZoom === mapView.zoom) return;
+    mapView.zoom = nextZoom;
+    const nextViewport = mapViewport(grid, rect);
+    const projected = worldToCanvas(grid, nextViewport, anchorWorld.x, anchorWorld.y);
+    // Compensate the pan so the point under the cursor stays under the
+    // cursor, which makes wheel/pinch zoom feel natural.
+    mapView.panX += anchorX - projected[0];
+    mapView.panY += anchorY - projected[1];
+    updateMapZoomLabel();
+    drawMap();
+  }
+
+  function resetMapView() {
+    mapView.zoom = 1;
+    mapView.panX = 0;
+    mapView.panY = 0;
+    updateMapZoomLabel();
+    drawMap();
+  }
+
   function drawMap() {
     const canvas = $("map-canvas");
     const navigationActive = Boolean(state.processes?.navigation?.active);
-    const grid = navigationActive && state.map ? state.map : state.selectedMap || state.previewMap || state.map;
-    if (!canvas || !grid) return;
+    const grid = currentMapGrid();
+    if (!canvas || !validMapGrid(grid)) return;
     const rect = canvas.getBoundingClientRect();
     const ratio = window.devicePixelRatio || 1;
     canvas.width = Math.max(1, Math.floor(rect.width * ratio));
@@ -339,18 +484,11 @@
     ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
     ctx.fillStyle = "#f8fbfd";
     ctx.fillRect(0, 0, rect.width, rect.height);
-    const cell = Math.min((rect.width - 28) / grid.width, (rect.height - 28) / grid.height);
-    const ox = (rect.width - grid.width * cell) / 2;
-    const oy = (rect.height - grid.height * cell) / 2;
-    const origin = grid.origin || { x: 0, y: 0, yaw: 0 };
-    const originAngle = Number(origin.yaw) || 0;
-    const originCos = Math.cos(originAngle), originSin = Math.sin(originAngle);
-    const toCanvas = (x, y) => {
-      const dx = x - Number(origin.x || 0), dy = y - Number(origin.y || 0);
-      const gx = (originCos * dx + originSin * dy) / Number(grid.resolution || 1);
-      const gy = (-originSin * dx + originCos * dy) / Number(grid.resolution || 1);
-      return [ox + gx * cell, oy + (grid.height - gy) * cell];
-    };
+    const viewport = mapViewport(grid, rect);
+    const { cell } = viewport;
+    const origin = viewport.origin;
+    const originAngle = viewport.angle;
+    const toCanvas = (x, y) => worldToCanvas(grid, viewport, x, y);
     const worldFromGrid = (gridOrigin, angle, col, row, resolution) => {
       const cosine = Math.cos(angle), sine = Math.sin(angle);
       return [
@@ -594,24 +732,19 @@
   }
 
   function mapPoint(event) {
-    const navigationActive = Boolean(state.processes?.navigation?.active);
-    const grid = navigationActive && state.map ? state.map : state.selectedMap || state.previewMap || state.map;
+    const grid = currentMapGrid();
     const canvas = $("map-canvas");
-    if (!grid || !canvas) return null;
+    if (!validMapGrid(grid) || !canvas) return null;
     const rect = canvas.getBoundingClientRect();
-    const cell = Math.min((rect.width - 28) / Math.max(1, grid.width), (rect.height - 28) / Math.max(1, grid.height));
-    const ox = (rect.width - grid.width * cell) / 2;
-    const oy = (rect.height - grid.height * cell) / 2;
-    const gx = (event.clientX - rect.left - ox) / cell;
-    const gy = grid.height - (event.clientY - rect.top - oy) / cell;
-    const origin = grid.origin || { x: 0, y: 0, yaw: 0 };
-    const angle = Number(origin.yaw || 0);
-    // Invert the same rotated map-to-canvas transform used by drawMap().
-    // This keeps click coordinates correct even when map.yaml has non-zero
-    // origin yaw; the y inversion happens exactly once here.
-    const localX = (Math.cos(angle) * gx - Math.sin(angle) * gy) * grid.resolution;
-    const localY = (Math.sin(angle) * gx + Math.cos(angle) * gy) * grid.resolution;
-    return { x: origin.x + localX, y: origin.y + localY };
+    const viewport = mapViewport(grid, rect);
+    // Invert exactly the same rotated/panned/zoomed transform used by
+    // drawMap(), so pose clicks remain correct after the user moves the view.
+    return canvasToWorld(
+      grid,
+      viewport,
+      event.clientX - rect.left,
+      event.clientY - rect.top,
+    );
   }
 
   function submitGoal(force = false) {
@@ -682,11 +815,75 @@
         })
         .catch((error) => log(`Map selection gagal: ${error.message}`, "warn"));
     });
-    [["initial", "initial-pick"], ["goal", "goal-pick"]].forEach(([kind, id]) => $(id).addEventListener("click", () => { poseTool = poseTool === kind ? null : kind; $("initial-tool").classList.toggle("active", poseTool === "initial"); $("goal-tool").classList.toggle("active", poseTool === "goal"); $("map-canvas").classList.toggle("map-interactive", Boolean(poseTool)); }));
-    $("map-canvas").addEventListener("pointerdown", (event) => { if (!poseTool) return; event.currentTarget.setPointerCapture(event.pointerId); mapPointerStart = mapPoint(event); if (mapPointerStart) setPoseValues(poseTool, { ...mapPointerStart, theta: 0 }); });
-    $("map-canvas").addEventListener("pointermove", (event) => { if (!poseTool || !mapPointerStart) return; const point = mapPoint(event); if (!point) return; const distance = Math.hypot(point.x - mapPointerStart.x, point.y - mapPointerStart.y); const theta = distance > 0.03 ? Math.atan2(point.y - mapPointerStart.y, point.x - mapPointerStart.x) : 0; setPoseValues(poseTool, { x: mapPointerStart.x, y: mapPointerStart.y, theta }); });
-    $("map-canvas").addEventListener("pointerup", () => { mapPointerStart = null; });
-    $("map-canvas").addEventListener("pointercancel", () => { mapPointerStart = null; });
+    [["initial", "initial-pick"], ["goal", "goal-pick"]].forEach(([kind, id]) => $(id).addEventListener("click", () => {
+      poseTool = poseTool === kind ? null : kind;
+      mapPointerStart = null;
+      mapPanStart = null;
+      $("initial-tool").classList.toggle("active", poseTool === "initial");
+      $("goal-tool").classList.toggle("active", poseTool === "goal");
+      $("map-canvas").classList.toggle("map-interactive", Boolean(poseTool));
+    }));
+    const canvas = $("map-canvas");
+    canvas.addEventListener("pointerdown", (event) => {
+      event.preventDefault();
+      canvas.setPointerCapture(event.pointerId);
+      if (poseTool) {
+        mapPanStart = null;
+        mapPointerStart = mapPoint(event);
+        if (mapPointerStart) setPoseValues(poseTool, { ...mapPointerStart, theta: 0 });
+        return;
+      }
+      mapPointerStart = null;
+      mapPanStart = {
+        pointerId: event.pointerId,
+        x: event.clientX,
+        y: event.clientY,
+        panX: mapView.panX,
+        panY: mapView.panY,
+      };
+      canvas.classList.add("map-panning");
+    });
+    canvas.addEventListener("pointermove", (event) => {
+      if (poseTool && mapPointerStart) {
+        const point = mapPoint(event);
+        if (!point) return;
+        const distance = Math.hypot(point.x - mapPointerStart.x, point.y - mapPointerStart.y);
+        const theta = distance > 0.03
+          ? Math.atan2(point.y - mapPointerStart.y, point.x - mapPointerStart.x)
+          : 0;
+        setPoseValues(poseTool, { x: mapPointerStart.x, y: mapPointerStart.y, theta });
+        return;
+      }
+      if (!mapPanStart || mapPanStart.pointerId !== event.pointerId) return;
+      mapView.panX = mapPanStart.panX + event.clientX - mapPanStart.x;
+      mapView.panY = mapPanStart.panY + event.clientY - mapPanStart.y;
+      drawMap();
+    });
+    const finishPointer = (event) => {
+      if (mapPanStart && (!event || mapPanStart.pointerId === event.pointerId)) {
+        mapPanStart = null;
+        canvas.classList.remove("map-panning");
+      }
+      mapPointerStart = null;
+    };
+    canvas.addEventListener("pointerup", finishPointer);
+    canvas.addEventListener("pointercancel", finishPointer);
+    canvas.addEventListener("lostpointercapture", finishPointer);
+    canvas.addEventListener("wheel", (event) => {
+      if (!validMapGrid(currentMapGrid())) return;
+      event.preventDefault();
+      zoomMapAt(event.deltaY < 0 ? 1.15 : 1 / 1.15, event.clientX, event.clientY);
+    }, { passive: false });
+    $("map-zoom-in")?.addEventListener("click", () => {
+      const rect = canvas.getBoundingClientRect();
+      zoomMapAt(1.25, rect.left + rect.width / 2, rect.top + rect.height / 2);
+    });
+    $("map-zoom-out")?.addEventListener("click", () => {
+      const rect = canvas.getBoundingClientRect();
+      zoomMapAt(1 / 1.25, rect.left + rect.width / 2, rect.top + rect.height / 2);
+    });
+    $("map-zoom-reset")?.addEventListener("click", resetMapView);
+    updateMapZoomLabel();
     ["layer-robot", "layer-lidar", "layer-local-costmap", "layer-global-costmap"].forEach((id) => $(id)?.addEventListener("change", render));
     $("initial-send").addEventListener("click", () => {
       const pose = poseValues("initial");

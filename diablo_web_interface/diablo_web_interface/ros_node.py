@@ -1924,7 +1924,7 @@ class DiabloWebNode(Node):
             },
             "navigation_lifecycle": {
                 "ready": lifecycle_active,
-                "label": "Nav2 lifecycle (BT/controller/smoother)",
+                "label": "Nav2 lifecycle (BT/controller/smoother/collision monitor)",
                 "state": lifecycle_state,
                 "age": None,
             },

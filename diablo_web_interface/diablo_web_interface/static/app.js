@@ -318,7 +318,7 @@
     panel.dataset.ready = ready ? "true" : "false";
     stateLabel.textContent = ready ? "NAV2 CHECK: READY" : "NAV2 CHECK: BLOCKED";
     detail.textContent = ready
-      ? "Hardware, scan, odom, AMCL/TF, costmap dan action server aktif."
+      ? "Hardware, scan, odom, AMCL/TF, costmap, Collision Monitor dan action server aktif."
       : (blockers.join(" · ") || readiness.message || "Prerequisite belum lengkap.");
     if (pipelineLabel) {
       const pipeline = readiness.pipeline || {};

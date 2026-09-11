@@ -30,6 +30,8 @@ def test_diablo_motion_control_uses_native_message_and_topic():
     assert "/diablo/MotionCmd/nav" in mux
     assert "/diablo/MotionCmd" in mux
     assert "MotionCtrl" in web
+    assert "allow_reverse" in bridge
+    assert "not self.allow_reverse" in bridge
     wheel_odom = read_text("diablo_web_interface/wheel_odom.py")
     assert 'declare_parameter("max_wheel_delta", 1.5)' in wheel_odom
     assert "Ignored discontinuous wheel sample" in wheel_odom
@@ -53,6 +55,24 @@ def test_nav2_launch_contains_action_stack_and_safety_bridges():
     assert "DWBLocalPlanner" in params
     assert "local_costmap:" in params
     assert "global_costmap:" in params
+    assert "collision_monitor:" in params
+    assert "nav2_collision_monitor" in launch
+    assert "collision_monitor" in launch
+    bringup_manifest = (PACKAGE_ROOT.parent / "diablo_bringup" / "package.xml").read_text(
+        encoding="utf-8"
+    )
+    assert "collision_monitor" in bringup_manifest
+    assert "min_vel_x: 0.0" in params
+    assert "min_velocity: [0.0, 0.0, -0.60]" in params
+    assert "behavior_plugins: [spin, wait]" in params
+    no_reverse_bt = (
+        PACKAGE_ROOT.parent
+        / "diablo_bringup"
+        / "behavior_trees"
+        / "navigate_to_pose_no_reverse.xml"
+    )
+    assert no_reverse_bt.is_file()
+    assert "<BackUp" not in no_reverse_bt.read_text(encoding="utf-8")
     assert "_transform_grid_origin_to_map" in read_text("diablo_web_interface/ros_node.py")
     assert "transform_ok" in read_text("diablo_web_interface/ros_node.py")
 

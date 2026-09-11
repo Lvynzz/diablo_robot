@@ -57,6 +57,12 @@ def generate_launch_description():
     bringup_share = get_package_share_directory("diablo_bringup")
     default_params = os.path.join(bringup_share, "config", "nav2_params.yaml")
     default_map = _default_map_file(bringup_share)
+    default_nav_to_pose_bt = os.path.join(
+        bringup_share, "behavior_trees", "navigate_to_pose_no_reverse.xml"
+    )
+    default_nav_through_poses_bt = os.path.join(
+        bringup_share, "behavior_trees", "navigate_through_poses_no_reverse.xml"
+    )
 
     params_file = LaunchConfiguration("params_file")
     map_file = LaunchConfiguration("map")
@@ -71,6 +77,9 @@ def generate_launch_description():
     odom_topic = LaunchConfiguration("odom_topic")
     odom_frame = LaunchConfiguration("odom_frame")
     scan_topic = LaunchConfiguration("scan_topic")
+    collision_monitor_input_topic = LaunchConfiguration(
+        "collision_monitor_input_topic"
+    )
     set_initial_pose = LaunchConfiguration("set_initial_pose")
     autostart_navigation = LaunchConfiguration("autostart_navigation")
 
@@ -116,6 +125,9 @@ def generate_launch_description():
             "control_mode_topic", default_value="/diablo/control_mode"
         ),
         DeclareLaunchArgument("nav_cmd_topic", default_value="/cmd_vel_smoothed"),
+        DeclareLaunchArgument(
+            "collision_monitor_input_topic", default_value="/cmd_vel_smoothed_raw"
+        ),
         DeclareLaunchArgument("motor_topic", default_value="/diablo/sensor/Motors"),
         DeclareLaunchArgument("odom_topic", default_value="/diablo/odometry"),
         DeclareLaunchArgument("odom_frame", default_value="odom"),
@@ -166,9 +178,14 @@ def generate_launch_description():
             name="diablo_motion_cmd_bridge",
             output="screen",
             parameters=[{
+                # Collision Monitor publishes the final filtered Twist on
+                # nav_cmd_topic.  The bridge therefore cannot bypass it.
                 "input_topic": nav_cmd_topic,
                 "output_topic": "/diablo/MotionCmd/nav",
                 "use_sim_time": bool_value(use_sim_time),
+                # Defense in depth: no negative linear command reaches the
+                # robot even if a recovery or external publisher misbehaves.
+                "allow_reverse": False,
             }],
         ),
         Node(
@@ -240,7 +257,14 @@ def generate_launch_description():
             executable="bt_navigator",
             name="bt_navigator",
             output="screen",
-            parameters=[configured_params, {"use_sim_time": bool_value(use_sim_time)}],
+            parameters=[
+                configured_params,
+                {
+                    "use_sim_time": bool_value(use_sim_time),
+                    "default_nav_to_pose_bt_xml": default_nav_to_pose_bt,
+                    "default_nav_through_poses_bt_xml": default_nav_through_poses_bt,
+                },
+            ],
         ),
         Node(
             package="nav2_waypoint_follower",
@@ -257,7 +281,23 @@ def generate_launch_description():
             parameters=[configured_params, {"use_sim_time": bool_value(use_sim_time)}],
             remappings=[
                 ("cmd_vel", "/cmd_vel_nav"),
-                ("cmd_vel_smoothed", nav_cmd_topic),
+                ("cmd_vel_smoothed", collision_monitor_input_topic),
+            ],
+        ),
+        Node(
+            package="nav2_collision_monitor",
+            executable="collision_monitor",
+            name="collision_monitor",
+            output="screen",
+            parameters=[
+                configured_params,
+                {
+                    "use_sim_time": bool_value(use_sim_time),
+                    "base_frame_id": base_frame,
+                    "odom_frame_id": odom_frame,
+                    "cmd_vel_in_topic": collision_monitor_input_topic,
+                    "cmd_vel_out_topic": nav_cmd_topic,
+                },
             ],
         ),
         Node(
@@ -295,6 +335,7 @@ def generate_launch_description():
                         "bt_navigator",
                         "waypoint_follower",
                         "velocity_smoother",
+                        "collision_monitor",
                     ],
                 },
             ],

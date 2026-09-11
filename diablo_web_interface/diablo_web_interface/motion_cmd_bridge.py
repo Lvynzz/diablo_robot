@@ -26,6 +26,7 @@ class MotionCmdBridge(Node):
         self.declare_parameter("command_timeout", 0.5)
         self.declare_parameter("max_forward_command", 1.0)
         self.declare_parameter("max_turn_command", 1.0)
+        self.declare_parameter("allow_reverse", False)
         self.declare_parameter("default_up", 1.0)
         self.declare_parameter("publish_frequency", 20.0)
 
@@ -34,6 +35,7 @@ class MotionCmdBridge(Node):
         self.command_timeout = max(0.05, float(self.get_parameter("command_timeout").value))
         self.max_forward = abs(float(self.get_parameter("max_forward_command").value))
         self.max_turn = abs(float(self.get_parameter("max_turn_command").value))
+        self.allow_reverse = bool(self.get_parameter("allow_reverse").value)
         self.default_up = float(self.get_parameter("default_up").value)
         frequency = max(1.0, float(self.get_parameter("publish_frequency").value))
 
@@ -67,6 +69,11 @@ class MotionCmdBridge(Node):
         if age > self.command_timeout:
             twist.linear.x = 0.0
             twist.angular.z = 0.0
+        if not self.allow_reverse:
+            # DWB and the velocity smoother are also configured with a zero
+            # minimum X velocity.  Keep this final bridge guard so a stale or
+            # externally injected negative Twist cannot reach the motor node.
+            twist.linear.x = max(0.0, float(twist.linear.x))
 
         command = MotionCtrl()
         command.mode_mark = False

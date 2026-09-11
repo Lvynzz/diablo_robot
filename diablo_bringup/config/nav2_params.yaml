@@ -172,7 +172,6 @@ bt_navigator:
       - nav2_compute_path_to_pose_action_bt_node
       - nav2_compute_path_through_poses_action_bt_node
       - nav2_follow_path_action_bt_node
-      - nav2_back_up_action_bt_node
       - nav2_spin_action_bt_node
       - nav2_wait_action_bt_node
       - nav2_clear_costmap_service_bt_node
@@ -255,10 +254,10 @@ controller_server:
       # Arti: keluarkan detail setiap trajectory untuk debug. Dampak: true lebih
       # banyak log dan CPU. Kisaran: false/true.
       debug_trajectory_details: false
-      # Arti: batas kecepatan linear maju/mundur (m/s). Dampak: naik mempercepat
-      # robot tetapi menurunkan keselamatan/kestabilan. Kisaran praktis Diablo:
-      # min -0.5..0, max 0.05..0.8.
-      min_vel_x: -0.30
+      # Arti: batas kecepatan linear maju/mundur (m/s). Nilai minimum nol
+      # melarang DWB memilih trajectory mundur. Kisaran praktis Diablo:
+      # min 0..0.3, max 0.05..0.8.
+      min_vel_x: 0.0
       max_vel_x: 0.35
       # Arti: batas kecepatan lateral (m/s). Differential drive harus 0.
       # Kisaran: 0 untuk differential; non-zero hanya robot holonomic.
@@ -540,18 +539,12 @@ behavior_server:
     robot_base_frame: diablo_base_link
     # Arti: toleransi lookup TF (s). Kisaran praktis: 0.1-1 s.
     transform_tolerance: 0.5
-    # Arti: behavior recovery yang dimuat. Dampak: daftar harus cocok dengan
-    # blok plugin. Kisaran: spin, backup, drive_on_heading, wait, atau plugin valid.
-    behavior_plugins: [spin, backup, drive_on_heading, wait]
+    # Arti: behavior recovery yang dimuat. Hanya recovery yang tidak mengirim
+    # command mundur yang tersedia. Kisaran: spin, wait, atau plugin valid.
+    behavior_plugins: [spin, wait]
     spin:
       # Arti: plugin memutar robot di tempat. Kisaran: plugin terinstal.
       plugin: nav2_behaviors/Spin
-    backup:
-      # Arti: plugin mundur saat recovery. Kisaran: plugin terinstal.
-      plugin: nav2_behaviors/BackUp
-    drive_on_heading:
-      # Arti: plugin maju/mundur pada heading tertentu. Kisaran: plugin terinstal.
-      plugin: nav2_behaviors/DriveOnHeading
     wait:
       # Arti: plugin berhenti menunggu. Kisaran: plugin terinstal.
       plugin: nav2_behaviors/Wait
@@ -593,9 +586,10 @@ velocity_smoother:
     # Arti: batas kecepatan maksimum [x,y,theta] (m/s,m/s,rad/s). Dampak: naik
     # lebih cepat namun risiko slip. Kisaran praktis Diablo [0.05-0.8, 0, 0.2-1.5].
     max_velocity: [0.35, 0.0, 0.60]
-    # Arti: batas minimum [x,y,theta] (m/s,m/s,rad/s); x negatif = mundur.
-    # Kisaran praktis [-0.8..0, 0, -1.5..0].
-    min_velocity: [-0.30, 0.0, -0.60]
+    # Arti: batas minimum [x,y,theta] (m/s,m/s,rad/s). x=0 memastikan
+    # command linear negatif dari planner tidak diteruskan; theta tetap
+    # negatif agar robot dapat berputar ke kanan. Kisaran x: 0..max_x.
+    min_velocity: [0.0, 0.0, -0.60]
     # Arti: percepatan maksimum [x,y,theta]. Dampak: naik lebih gesit tetapi
     # dapat slip/overshoot. Kisaran praktis [0.1-1.5, 0, 0.2-3].
     max_accel: [0.40, 0.0, 0.80]
@@ -616,6 +610,69 @@ velocity_smoother:
     # Arti: gunakan TwistStamped (true) atau Twist (false). Dampak: harus sama
     # dengan subscriber /cmd_vel. Kisaran: false/true.
     enable_stamped_cmd_vel: false
+
+collision_monitor:
+  ros__parameters:
+    # Collision Monitor adalah lapisan keselamatan independen dari costmap.
+    # Pada Humble parameter jumlah titik memakai max_points.
+    use_sim_time: false
+    # Arti: frame pusat zona keselamatan. Kisaran: frame badan robot.
+    base_frame_id: diablo_base_link
+    # Arti: frame odometri untuk proyeksi command. Kisaran: odom.
+    odom_frame_id: odom
+    # Launch menimpa topic ini agar Collision Monitor berada setelah smoother.
+    cmd_vel_in_topic: /cmd_vel_smoothed_raw
+    cmd_vel_out_topic: /cmd_vel_smoothed
+    # Arti: toleransi TF dan batas usia data sensor (s). source_timeout terlalu
+    # besar dapat membiarkan data lidar basi; kisaran praktis 0.2-2.0 s.
+    transform_tolerance: 0.5
+    source_timeout: 0.5
+    # Arti: kompensasi pergeseran base saat robot bergerak. Kisaran false/true.
+    base_shift_correction: true
+    # Arti: lama publish command nol setelah stop (s). Kisaran praktis 0.5-2.0.
+    stop_pub_timeout: 1.0
+    # Arti: gunakan geometry_msgs/Twist biasa, sesuai velocity_smoother Diablo.
+    enable_stamped_cmd_vel: false
+    # Stop darurat, perlambatan, dan pendekatan berbasis footprint.
+    polygons: [PolygonStop, PolygonSlow, FootprintApproach]
+    PolygonStop:
+      # Arti: radius zona stop dari pusat base (m). Kisaran praktis 0.35-0.70.
+      type: circle
+      radius: 0.48
+      action_type: stop
+      # Humble: trigger bila jumlah titik di zona melebihi max_points.
+      max_points: 3
+      visualize: true
+      polygon_pub_topic: polygon_stop
+      enabled: true
+    PolygonSlow:
+      # Arti: zona perlambatan yang memanjang ke depan robot (m).
+      type: polygon
+      points: [1.0, 0.30, 1.0, -0.30, -0.20, -0.30, -0.20, 0.30]
+      action_type: slowdown
+      max_points: 3
+      # Arti: proporsi kecepatan saat zona aktif. Kisaran 0.1-1.0.
+      slowdown_ratio: 0.35
+      visualize: true
+      polygon_pub_topic: polygon_slow
+      enabled: true
+    FootprintApproach:
+      # Arti: prediksi waktu menuju collision memakai footprint Nav2.
+      # Kisaran praktis 0.8-2.5 s.
+      type: polygon
+      action_type: approach
+      footprint_topic: /local_costmap/published_footprint
+      time_before_collision: 1.5
+      simulation_time_step: 0.1
+      max_points: 5
+      visualize: false
+      enabled: true
+    observation_sources: [scan]
+    scan:
+      # Arti: sumber LaserScan untuk zona keselamatan.
+      type: scan
+      topic: /scan
+      enabled: true
 
 map_server:
   ros__parameters:
@@ -644,4 +701,4 @@ lifecycle_manager_navigation:
     autostart: true
     # Arti: node yang dikelola saat Nav2 start. Dampak: nama hilang membuat
     # lifecycle manager gagal mengaktifkan stack. Kisaran: node Nav2 yang aktif.
-    node_names: [controller_server, planner_server, behavior_server, bt_navigator, waypoint_follower, velocity_smoother]
+    node_names: [controller_server, planner_server, behavior_server, bt_navigator, waypoint_follower, velocity_smoother, collision_monitor]

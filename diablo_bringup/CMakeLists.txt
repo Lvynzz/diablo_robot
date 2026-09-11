@@ -21,7 +21,7 @@ if(BUILD_TESTING)
   ament_lint_auto_find_test_dependencies()
 endif()
 
-install(DIRECTORY urdf config launch map DESTINATION share/${PROJECT_NAME})
+install(DIRECTORY urdf config launch map behavior_trees DESTINATION share/${PROJECT_NAME})
 install(PROGRAMS scripts/joint2_teleop.py DESTINATION lib/${PROJECT_NAME})
 install(PROGRAMS scripts/joint2_oscillate.py DESTINATION lib/${PROJECT_NAME})
 install(PROGRAMS scripts/joint_position_monitor.py DESTINATION lib/${PROJECT_NAME})

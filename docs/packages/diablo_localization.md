@@ -1,9 +1,10 @@
 # `diablo_localization`
 
-`diablo_localization` menjalankan odometri lokal resettable:
+`diablo_localization` menjalankan satu filter EKF wheel/IMU:
 
 ```text
-/diablo_base_controller/odom -> local_odom -> /diablo/odometry
+/diablo/sensor/Motors -> raw wheel odom -> /diablo_base_controller/odom
+                                      -> EKF -> /odometry/filtered
 ```
 
 Launch full-body mengaktifkan `local_odom` secara default. Untuk reset
@@ -20,12 +21,11 @@ ros2 service call /diablo/reset_odom std_srvs/srv/Trigger "{}"
 ```
 
 Tidak ada reset otomatis ketika node dimulai. `diablo_base_controller` tidak
-menerbitkan TF `odom -> diablo_base_link` ketika `use_local_odom:=true`; TF itu
-diterbitkan oleh `local_odom`. Set `use_local_odom:=false` jika ingin memakai
-odom mentah dan TF controller langsung. EKF hanya aktif bila `use_ekf:=true`
-diberikan secara eksplisit.
+EKF menerbitkan TF `odom -> diablo_base_link` dan `/odometry/filtered`. Jangan
+menjalankan `local_odom` atau odom legacy yang menerbitkan TF pada saat yang
+sama.
 
-Setelah reset, koordinat lokal pada `/diablo/odometry` memakai `x` positif ke
+Setelah reset, koordinat lokal pada `/odometry/filtered` memakai `x` positif ke
 depan robot, `y` positif ke kiri, dan heading `theta` dalam radian positif
 berlawanan arah jarum jam.
 
@@ -35,8 +35,8 @@ Jika odometri kembali ke `(0, 0)` tetapi robot tidak kembali ke tanda fisik
 awal, periksa dulu bahwa hanya ada satu publisher odometri:
 
 ```bash
-ros2 topic info -v /diablo/odometry
-ros2 node list | grep -E 'diablo_local_odom|diablo_wheel_odom|simple_goal_controller'
+ros2 topic info -v /odometry/filtered
+ros2 node list | grep -E 'diablo_ekf_filter|raw_wheel_odom|simple_goal_controller'
 ```
 
 Kalibrasikan gerak lurus terlebih dahulu. Ukur jarak fisik `d_physical` dan

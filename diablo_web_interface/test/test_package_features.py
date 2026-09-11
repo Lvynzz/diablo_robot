@@ -75,6 +75,14 @@ def test_nav2_launch_contains_action_stack_and_safety_bridges():
     assert "<BackUp" not in no_reverse_bt.read_text(encoding="utf-8")
     assert "_transform_grid_origin_to_map" in read_text("diablo_web_interface/ros_node.py")
     assert "transform_ok" in read_text("diablo_web_interface/ros_node.py")
+    assert '"odom_topic", "/odometry/filtered"' in read_text(
+        "diablo_web_interface/ros_node.py"
+    )
+    web_launch_text = (PACKAGE_ROOT / "launch" / "web_interface.launch.py").read_text(
+        encoding="utf-8"
+    )
+    assert "ekf_hardware.launch.py" in web_launch_text
+    assert '"enable_wheel_odom"' in web_launch_text
 
 
 def test_web_ui_has_mapping_teleop_and_topic_echo_panels():
@@ -173,6 +181,13 @@ def test_web_ui_has_mapping_teleop_and_topic_echo_panels():
     assert '"/api/mapping/save"' in web_node
     assert '"/api/mapping/stop"' in web_node
     assert '"/api/hardware/stop"' in web_node
+    localization_launch = (
+        PACKAGE_ROOT.parent / "diablo_localization" / "launch" / "ekf_hardware.launch.py"
+    )
+    assert localization_launch.is_file()
+    assert 'default_value="/odometry/filtered"' in localization_launch.read_text(
+        encoding="utf-8"
+    )
     assert '"/api/navigation/stop-localization"' in web_node
     assert '"/api/navigation/stop"' in web_node
     assert '"/api/joints/{motor_id}/position"' in web_node

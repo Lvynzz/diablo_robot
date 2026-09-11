@@ -1,7 +1,7 @@
 # `diablo_goal_controller`
 
 `simple_goal_controller` subscribes by default to resettable local wheel
-odometry on `/diablo/odometry` and publishes
+odometry on `/odometry/filtered` and publishes
 `/diablo_base_controller/cmd_vel_unstamped` for a single planar `(x, y)` goal.
 It rotates in place when the heading error is large, then drives forward with
 a small heading correction.  When a final heading is enabled, it rotates in
@@ -34,7 +34,7 @@ ros2 topic pub --once -w 1 /diablo/goal_pose geometry_msgs/msg/Pose2D \
   "{x: 1.0, y: 0.5, theta: 1.5708}"
 ```
 
-The pose is interpreted in the `/diablo/odometry` frame: `x` positive is
+The pose is interpreted in the `/odometry/filtered` frame: `x` positive is
 forward from the current local origin, `y` positive is to the robot's left,
 and `theta` is heading in radians, positive counter-clockwise.  After a pose
 reset, the current robot heading is defined as `theta=0`.  The raw source is

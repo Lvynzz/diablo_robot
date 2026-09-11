@@ -191,7 +191,7 @@ class DiabloWebNode(Node):
         self.declare_parameter("manual_cmd_topic", "/diablo/MotionCmd/manual")
         self.declare_parameter("control_mode_topic", "/diablo/control_mode")
         self.declare_parameter("map_topic", "/map")
-        self.declare_parameter("odom_topic", "/diablo/odometry")
+        self.declare_parameter("odom_topic", "/odometry/filtered")
         self.declare_parameter("scan_topic", "/scan")
         self.declare_parameter("base_frame", "diablo_base_link")
         self.declare_parameter("map_frame", "map")
@@ -214,8 +214,8 @@ class DiabloWebNode(Node):
         self.declare_parameter("lidar_stop_service_type", "empty")
         self.declare_parameter(
             "diablo_start_command",
-            "ros2 run diablo_ctrl diablo_ctrl_node "
-            "--ros-args -p controller_port:=/dev/diablo_controller",
+            "ros2 launch diablo_localization ekf_hardware.launch.py "
+            "controller_port:=/dev/diablo_controller",
         )
         self.declare_parameter(
             "lidar_start_command",
@@ -227,7 +227,7 @@ class DiabloWebNode(Node):
             "use_mock_hardware:=false upper_only:=true "
             "enable_arm_hardware:=true enable_hand_hardware:=false enable_base_hardware:=false "
             "arm_port_name:=/dev/u2d2_arm hand_port_name:=/dev/u2d2_hand baud_rate:=1000000 "
-            "start_arm_controllers:=true start_base_controller:=false use_ekf:=false "
+            "start_arm_controllers:=true start_base_controller:=false use_ekf:=true "
             "use_local_odom:=false start_move_group:=false",
         )
         self.declare_parameter("hardware_log_directory", "/tmp")

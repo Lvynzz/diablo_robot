@@ -23,7 +23,7 @@ def generate_launch_description():
         DeclareLaunchArgument("base_frame", default_value="diablo_base_link"),
         DeclareLaunchArgument("map_frame", default_value="map"),
         DeclareLaunchArgument("odom_frame", default_value="odom"),
-        DeclareLaunchArgument("odom_topic", default_value="/diablo/odometry"),
+        DeclareLaunchArgument("odom_topic", default_value="/odometry/filtered"),
         DeclareLaunchArgument("scan_topic", default_value="/scan"),
         DeclareLaunchArgument(
             "reset_encoder_service", default_value="/diablo/reset_encoder"
@@ -35,8 +35,8 @@ def generate_launch_description():
         DeclareLaunchArgument(
             "diablo_start_command",
             default_value=(
-                "ros2 run diablo_ctrl diablo_ctrl_node "
-                "--ros-args -p controller_port:=/dev/diablo_controller"
+            "ros2 launch diablo_localization ekf_hardware.launch.py "
+                "controller_port:=/dev/diablo_controller"
             ),
         ),
         DeclareLaunchArgument(
@@ -54,7 +54,7 @@ def generate_launch_description():
                 "enable_arm_hardware:=true enable_hand_hardware:=false enable_base_hardware:=false "
                 "arm_port_name:=/dev/u2d2_arm hand_port_name:=/dev/u2d2_hand "
                 "baud_rate:=1000000 start_arm_controllers:=true start_base_controller:=false "
-                "use_ekf:=false use_local_odom:=false start_move_group:=false"
+                "use_ekf:=true use_local_odom:=false start_move_group:=false"
             ),
         ),
         DeclareLaunchArgument("hardware_log_directory", default_value="/tmp"),
@@ -80,7 +80,14 @@ def generate_launch_description():
         ),
         DeclareLaunchArgument("maps_dir", default_value=""),
         DeclareLaunchArgument("enable_mux", default_value="true"),
-        DeclareLaunchArgument("enable_wheel_odom", default_value="true"),
+        DeclareLaunchArgument(
+            "enable_wheel_odom",
+            default_value="false",
+            description=(
+                "Legacy standalone wheel odometry; keep false because the "
+                "hardware EKF launch owns the raw wheel source"
+            ),
+        ),
         DeclareLaunchArgument("wheel_radius", default_value="0.093"),
         DeclareLaunchArgument("track_width", default_value="0.475"),
         DeclareLaunchArgument("max_wheel_delta", default_value="1.5"),

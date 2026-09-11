@@ -96,7 +96,7 @@ Topics, dan Settings dapat diperiksa.
 | `motion_cmd_bridge` | `Twist` Nav2 → `MotionCtrl` Diablo |
 | `motion_cmd_mux` | Pemilih manual/auto dengan command watchdog |
 | `wheel_odom` | Estimasi odom encoder legacy untuk launch yang tidak memakai ros2_control |
-| `diablo_localization` | Odom roda lokal resettable pada `/diablo/odometry`; EKF tetap opsional |
+| `diablo_localization` | Satu EKF wheel/IMU pada `/odometry/filtered`; odom roda mentah tetap privat |
 | `navigation.launch.py` | map server, AMCL, costmap, planner, controller dan lifecycle Nav2 |
 | `mapping.launch.py` | SLAM Toolbox + odometri roda opsional |
 | `nav2_web.launch.py` | Launch gabungan web, mux, odom roda lokal dan Nav2 |
@@ -162,7 +162,7 @@ Jangan menjalankan dua mux yang sama-sama mem-publish ke
 Tombol **ON HARDWARE** menjalankan command yang didefinisikan saat launch dan
 memantau tiga feedback ROS nyata:
 
-- Diablo ROS2: `ros2 run diablo_ctrl diablo_ctrl_node --ros-args -p controller_port:=/dev/diablo_controller`.
+- Diablo + EKF: `ros2 launch diablo_localization ekf_hardware.launch.py controller_port:=/dev/diablo_controller`.
 - LiDAR: `ros2 launch sllidar_ros2 sllidar_a2m7_launch.py serial_port:=/dev/rplidar frame_id:=laser`.
 - Dynamixel arm: mode upper-body `full_body_hardware.launch.py` dengan `/dev/u2d2_arm`.
   Bus hand `/dev/u2d2_hand` opsional (`enable_hand_hardware:=false`), sehingga
@@ -172,8 +172,9 @@ memantau tiga feedback ROS nyata:
 Gate mapping aktif setelah `/diablo/sensor/Motors` dan `/scan` diterima;
 Dynamixel dilaporkan terpisah dan tidak lagi memblokir SLAM. Status **ALL
 READY** tetap berarti ketiga feedback, termasuk joint lengan, telah diterima.
-Odometri roda standalone dijalankan oleh web launch sehingga kegagalan U2D2
-tidak menghilangkan `/diablo/odometry`. Log startup disimpan di
+Odometri roda mentah dan EKF dijalankan bersama driver Diablo sehingga hanya
+`/odometry/filtered` yang dipakai Nav2/web. Kegagalan U2D2 opsional tidak
+menghilangkan odom filter. Log startup disimpan di
 `/tmp/diablo_web_interface-{diablo,lidar,dynamixel}.log`.
 Launch yang sama menerbitkan TF statis `diablo_base_link → laser` pada pose
 LiDAR default `(x=0, y=0.08, z=0.17, yaw=π)`, sehingga SLAM tidak menunggu TF
@@ -202,8 +203,8 @@ motor telemetry. SLAM Toolbox membutuhkan:
 
 1. `sensor_msgs/LaserScan` pada `/scan` (atau set `scan_topic:=...`) dan TF
    dari frame laser ke frame robot.
-2. TF `odom → diablo_base_link` dari local wheel odometry. Jalankan full-body
-   dengan `use_ekf:=false use_local_odom:=true`.
+2. TF `odom → diablo_base_link` dari EKF. Jalankan tombol hardware atau
+   `ekf_hardware.launch.py`; jangan jalankan `local_odom` bersamaan.
 3. Frame robot yang konsisten. Konfigurasi default memakai `diablo_base_link`.
    IMU driver memakai `diablo_robot`; static TF IMU hanya diperlukan bila
    EKF eksperimental diaktifkan. Ubah transform jika pemasangan sensor tidak
@@ -217,10 +218,10 @@ dalam radian serta revolution counter dari `LegMotors`. Nilai awalnya
 mengikuti konstanta SDK. Kalibrasikan di tempat sebelum navigasi: bila maju
 menghasilkan odom mundur, ubah `left_feedback_sign`/`right_feedback_sign` pada
 full-body launch; bila jarak tidak sesuai, ubah radius. Dalam mode default,
-gunakan `/diablo/odometry`; odom mentah tetap ada di
-`/diablo_base_controller/odom`. Jangan menjalankan `wheel_odom` bersamaan
-dengan local odom full-body karena keduanya dapat mempublikasikan odometry/TF
-yang bersaing.
+gunakan `/odometry/filtered`; odom mentah tetap ada di
+`/diablo_base_controller/odom` untuk diagnosis. Jangan menjalankan
+`wheel_odom` legacy atau `local_odom` bersamaan dengan EKF karena keduanya
+dapat mempublikasikan odometry/TF yang bersaing.
 
 Standalone `wheel_odom` mengabaikan lonjakan satu sampel di atas 1.5 radian
 (`max_wheel_delta`) dan menjadikannya baseline baru. Filter ini mencegah nilai

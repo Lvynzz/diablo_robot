@@ -146,7 +146,7 @@ bt_navigator:
     robot_base_frame: diablo_base_link
     # Arti: topic odometri yang dibaca navigator (Twist/odom). Dampak: topic
     # salah membuat prediksi gerak tersendat. Kisaran: nama topic ROS.
-    odom_topic: /diablo/odometry
+    odom_topic: /odometry/filtered
     # Arti: periode tick Behavior Tree (ms). Dampak: lebih kecil lebih responsif
     # tetapi CPU naik. Kisaran praktis: 5-100 ms.
     bt_loop_duration: 10
@@ -208,7 +208,7 @@ controller_server:
     controller_frequency: 10.0
     # Arti: topic nav_msgs/Odometry. Dampak: odom salah membuat kontrol tidak
     # stabil. Kisaran: nama topic ROS.
-    odom_topic: /diablo/odometry
+    odom_topic: /odometry/filtered
     # Arti: kecepatan di bawah ambang dianggap nol (m/s, m/s, rad/s). Dampak:
     # menaikkan ambang mengurangi jitter tetapi menghilangkan gerak kecil.
     # Kisaran praktis: 0-0.05.
@@ -597,7 +597,7 @@ velocity_smoother:
     # lebih besar berhenti lebih cepat namun lebih kasar. Kisaran praktis [-1.5..0, 0, -3..0].
     max_decel: [-0.50, 0.0, -0.80]
     # Arti: topic odometri untuk CLOSED_LOOP. Kisaran: nama topic Odometry.
-    odom_topic: /diablo/odometry
+    odom_topic: /odometry/filtered
     # Arti: durasi data odom yang dipakai (s). Dampak: lebih besar tahan update
     # jarang tetapi lebih basi. Kisaran praktis: 0.05-1 s.
     odom_duration: 0.1

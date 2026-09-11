@@ -91,7 +91,7 @@ def generate_launch_description():
         DeclareLaunchArgument("use_sim_time", default_value="false"),
         DeclareLaunchArgument("base_frame", default_value="diablo_base_link"),
         DeclareLaunchArgument("odom_frame", default_value="odom"),
-        DeclareLaunchArgument("odom_topic", default_value="/diablo/odometry"),
+        DeclareLaunchArgument("odom_topic", default_value="/odometry/filtered"),
         DeclareLaunchArgument("scan_topic", default_value="/scan"),
         DeclareLaunchArgument(
             "set_initial_pose",

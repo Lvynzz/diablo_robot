@@ -1,12 +1,12 @@
 # Diablo localization
 
-The default hardware launch uses `local_odom`, a resettable local odometry
-wrapper around `/diablo_base_controller/odom`. It publishes
-`/diablo/odometry` and owns the `odom -> diablo_base_link` transform. The raw
-controller odometry remains available for calibration and diagnostics.
+The web HMI starts `ekf_hardware.launch.py` when DIABLO hardware is enabled.
+That launch starts the SDK driver, a private raw wheel odometry source on
+`/diablo_base_controller/odom`, and one `robot_localization` EKF. The EKF is
+the only publisher of `odom -> diablo_base_link` and publishes
+`/odometry/filtered`, which is the topic used by Nav2 and the web UI.
 
-The local wrapper does not fuse IMU data or alter the raw wheel odometry. Its
-local origin is therefore explicit and resettable:
+The reset helper provides an explicit EKF pose reset:
 
 ```bash
 ros2 topic pub --once -w 1 /diablo/reset_pose std_msgs/msg/Bool "{data: true}"
@@ -20,21 +20,19 @@ ros2 service call /diablo/reset_odom std_srvs/srv/Trigger "{}"
 
 No reset occurs at startup. Without either command, the local node keeps its
 current pose, which is useful when moving the robot to another test location.
-The reset command stores the current raw pose as `(x, y, theta)=(0, 0, 0)`;
-subsequent `x` is forward, `y` is left, and positive `theta` is
-counter-clockwise.
+The reset command sets `(x, y, theta)=(0, 0, 0)`. The web HMI also exposes
+separate `/diablo/reset_position` and `/diablo/reset_orientation` services;
+they preserve the other two pose components. Subsequent `x` is forward, `y`
+is left, and positive `theta` is counter-clockwise.
 
-The EKF launch remains available for experiments with
-`ros2 launch diablo_localization localization.launch.py`, but it is not used
-by `full_body_hardware.launch.py` unless `use_ekf:=true` is explicitly set.
+For a standalone filter (when a raw `/diablo_base_controller/odom` source is
+already running), use `ros2 launch diablo_localization localization.launch.py`.
 
-When enabled, the Diablo profile follows the AMR estimator pattern: it fuses
-wheel forward velocity and yaw rate from
+The Diablo profile fuses wheel x/y pose and forward velocity from
 `/diablo_base_controller/odom`, plus relative yaw from the onboard IMU at
-`/diablo/sensor/Imu`.  It does not fuse absolute wheel pose, acceleration, or
-the IMU gyro separately.  The filtered result is published on
-`/odometry/filtered`; point the goal controller to that topic explicitly when
-testing the EKF.
+`/diablo/sensor/Imu`. It deliberately does not fuse wheel yaw or the IMU gyro,
+so the IMU is the sole orientation source. The filtered result is published
+on `/odometry/filtered`.
 
 The static IMU transform parameters are only used by the optional EKF launch.
 The default local wheel odometry path does not subscribe to IMU data.
@@ -45,17 +43,17 @@ Wheel odometry can return to `(0, 0)` in its estimate while the robot is not
 physically at the marked start point.  Calibrate the geometry before judging
 goal-controller accuracy, especially after tests that include rotation.
 
-First check that there is only one local odometry publisher and one goal
+First check that there is only one filtered odometry publisher and one goal
 controller:
 
 ```bash
-ros2 topic info -v /diablo/odometry
-ros2 node list | grep -E 'diablo_local_odom|diablo_wheel_odom|simple_goal_controller'
+ros2 topic info -v /odometry/filtered
+ros2 node list | grep -E 'diablo_ekf_filter|raw_wheel_odom|simple_goal_controller'
 ```
 
-For a straight-line test, mark the robot's physical start, reset the local
-pose, drive a measured distance, and record both the physical distance
-`d_physical` and `/diablo/odometry` distance `d_odom`.  Update the wheel radius
+For a straight-line test, mark the robot's physical start, reset the EKF pose,
+drive a measured distance, and record both the physical distance
+`d_physical` and `/odometry/filtered` distance `d_odom`. Update the wheel radius
 with:
 
 ```text
@@ -77,7 +75,7 @@ standalone `wheel_odom` launch arguments should use the same values if that
 node is enabled.
 
 After calibration, repeat the two-way test: reset at a marked start, send a
-goal such as `(0.5, 0.5)`, then send `(0.0, 0.0)` without resetting.  Compare
-the final physical position with the mark; wheel odometry alone cannot
-correct wheel slip, so a persistent large residual requires an external
-position reference such as IMU fusion or lidar.
+goal such as `(0.5, 0.5)`, then send `(0.0, 0.0)` without resetting. Compare
+the final physical position with the mark; wheel/IMU EKF alone cannot correct
+wheel slip or absolute position, so a persistent large residual requires AMCL
+or another external position reference.

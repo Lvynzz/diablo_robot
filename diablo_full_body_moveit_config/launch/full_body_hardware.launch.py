@@ -305,18 +305,18 @@ def generate_launch_description():
         ),
         DeclareLaunchArgument(
             "use_ekf",
-            default_value="false",
+            default_value="true",
             description=(
-                "Start the optional wheel/IMU robot_localization estimator "
-                "instead of resettable local wheel odometry"
+                "Start the wheel/IMU robot_localization estimator and publish "
+                "/odometry/filtered"
             ),
         ),
         DeclareLaunchArgument(
             "use_local_odom",
-            default_value="true",
+            default_value="false",
             description=(
-                "Publish resettable local wheel odometry on /diablo/odometry "
-                "and own odom -> diablo_base_link TF"
+                "Legacy resettable local wheel odometry; keep false when EKF "
+                "is enabled"
             ),
         ),
         DeclareLaunchArgument(

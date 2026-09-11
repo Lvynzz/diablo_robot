@@ -81,17 +81,16 @@ ros2 launch diablo_full_body_moveit_config full_body_hardware.launch.py \
   use_mock_hardware:=false \
   arm_port_name:=/dev/u2d2_arm \
   hand_port_name:=/dev/u2d2_hand \
-  use_ekf:=false \
-  use_local_odom:=true \
+  use_ekf:=true \
+  use_local_odom:=false \
   start_move_group:=false
 ```
 
-Dengan konfigurasi default `use_ekf:=false use_local_odom:=true`, launch
-menjalankan node `local_odom`. Node ini membaca odom mentah
-`/diablo_base_controller/odom`, menerbitkan `/diablo/odometry`, dan memiliki
-TF `odom -> diablo_base_link` yang dapat di-reset. Odom mentah tetap tersedia
-untuk diagnosis. EKF tidak diperlukan untuk uji navigasi ringan ini; hanya
-aktif jika `use_ekf:=true` diberikan secara eksplisit.
+Dengan konfigurasi default `use_ekf:=true use_local_odom:=false`, launch
+menjalankan satu EKF yang membaca `/diablo_base_controller/odom` dan
+`/diablo/sensor/Imu`, menerbitkan `/odometry/filtered`, serta memiliki TF
+`odom -> diablo_base_link`. `local_odom` dan `/diablo/odometry` hanya jalur
+legacy dan tidak boleh dijalankan bersamaan dengan EKF.
 
 Pastikan driver resmi sudah berjalan dan frame IMU default
 `diablo_robot` memang sebidang dengan `diablo_base_link`. Jika posisi atau
@@ -115,8 +114,8 @@ ros2 launch diablo_full_body_moveit_config full_body_hardware.launch.py \
   enable_base_hardware:=true \
   start_arm_controllers:=false \
   start_base_controller:=true \
-  use_ekf:=false \
-  use_local_odom:=true \
+  use_ekf:=true \
+  use_local_odom:=false \
   start_move_group:=false
 ```
 
@@ -143,7 +142,7 @@ ros2 service call /diablo/reset_odom std_srvs/srv/Trigger "{}"
 Pantau hasilnya:
 
 ```bash
-ros2 topic echo /diablo/odometry --once
+ros2 topic echo /odometry/filtered --once
 ros2 run tf2_ros tf2_echo odom diablo_base_link
 ```
 
@@ -171,7 +170,7 @@ ros2 topic echo /diablo/sensor/Motors --once
 Dengan tanda terkalibrasi `left_feedback_sign:=1.0` dan
 `right_feedback_sign:=1.0`, kedua velocity encoder mentah positif ketika robot
 bergerak maju. Perintah maju positif harus membuat `x` pada
-`/diablo/odometry` bertambah dan yaw tetap dekat nol. Jika kabel, firmware,
+`/odometry/filtered` bertambah dan yaw tetap dekat nol. Jika kabel, firmware,
 atau konfigurasi controller berubah, ulangi uji ini sebelum mengganti tanda.
 
 ## 4. Jalankan MoveIt dan RViz

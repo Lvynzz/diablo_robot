@@ -144,7 +144,7 @@ def generate_launch_description():
             "collision_monitor_input_topic", default_value="/cmd_vel_smoothed_raw"
         ),
         DeclareLaunchArgument("motor_topic", default_value="/diablo/sensor/Motors"),
-        DeclareLaunchArgument("odom_topic", default_value="/diablo/odometry"),
+        DeclareLaunchArgument("odom_topic", default_value="/odometry/filtered"),
         DeclareLaunchArgument("odom_frame", default_value="odom"),
         DeclareLaunchArgument("base_frame", default_value="diablo_base_link"),
         DeclareLaunchArgument("scan_topic", default_value="/scan"),

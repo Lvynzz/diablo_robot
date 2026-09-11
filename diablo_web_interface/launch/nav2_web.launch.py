@@ -63,7 +63,7 @@ def generate_launch_description():
         DeclareLaunchArgument("host", default_value="0.0.0.0"),
         DeclareLaunchArgument("port", default_value="8000"),
         DeclareLaunchArgument("base_frame", default_value="diablo_base_link"),
-        DeclareLaunchArgument("odom_topic", default_value="/diablo/odometry"),
+        DeclareLaunchArgument("odom_topic", default_value="/odometry/filtered"),
         DeclareLaunchArgument("odom_frame", default_value="odom"),
         DeclareLaunchArgument("scan_topic", default_value="/scan"),
         DeclareLaunchArgument(
@@ -73,7 +73,13 @@ def generate_launch_description():
         DeclareLaunchArgument("lidar_start_service_type", default_value="empty"),
         DeclareLaunchArgument("lidar_stop_service", default_value="/stop_motor"),
         DeclareLaunchArgument("lidar_stop_service_type", default_value="empty"),
-        DeclareLaunchArgument("diablo_start_command", default_value="ros2 run diablo_ctrl diablo_ctrl_node"),
+        DeclareLaunchArgument(
+            "diablo_start_command",
+            default_value=(
+                "ros2 launch diablo_localization ekf_hardware.launch.py "
+                "controller_port:=/dev/diablo_controller"
+            ),
+        ),
         DeclareLaunchArgument("lidar_start_command", default_value=""),
         DeclareLaunchArgument(
             "dynamixel_start_command",
@@ -94,8 +100,11 @@ def generate_launch_description():
         DeclareLaunchArgument("maps_dir", default_value=""),
         DeclareLaunchArgument(
             "enable_wheel_odom",
-            default_value="true",
-            description="Run one standalone wheel odometry node from the web launch",
+            default_value="false",
+            description=(
+                "Run legacy standalone wheel odometry; the hardware EKF "
+                "launch owns the raw wheel source"
+            ),
         ),
         DeclareLaunchArgument("wheel_radius", default_value="0.093"),
         DeclareLaunchArgument("track_width", default_value="0.475"),

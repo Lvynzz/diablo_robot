@@ -102,7 +102,7 @@ Sebelum menjalankan Nav2, pastikan topic dan TF berikut ada:
 
 ```bash
 ros2 topic echo /scan --once
-ros2 topic echo /diablo/odometry --once
+ros2 topic echo /odometry/filtered --once
 ros2 run tf2_ros tf2_echo odom diablo_base_link
 ```
 
@@ -110,7 +110,7 @@ Jalankan base controller dan odometri lokal melalui launch hardware:
 
 ```bash
 ros2 launch diablo_full_body_moveit_config full_body_hardware.launch.py \
-  use_mock_hardware:=false use_ekf:=false use_local_odom:=true
+  use_mock_hardware:=false use_ekf:=true use_local_odom:=false
 ```
 
 Kemudian:
@@ -169,5 +169,5 @@ gerak otomatis memerlukan prosedur keselamatan tambahan.
 | `/start_motor` unavailable | node `sllidar_node` belum berjalan |
 | `/scan` kosong | model, baudrate, serial port, dan permission LiDAR |
 | Drive Control terkunci | belum ada message `/diablo/sensor/Motors` |
-| Odom lokal tidak aktif | cek `ros2 node list`, `/diablo/odometry`, dan `/diablo_base_controller/odom` |
-| Nav2 tidak aktif | cek `/scan`, `/diablo/odometry`, TF, map, dan lifecycle nodes |
+| Odom filter tidak aktif | cek `ros2 node list`, `/odometry/filtered`, `/diablo_base_controller/odom`, dan IMU |
+| Nav2 tidak aktif | cek `/scan`, `/odometry/filtered`, TF, map, dan lifecycle nodes |

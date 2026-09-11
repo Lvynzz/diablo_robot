@@ -217,7 +217,7 @@ ros2 node list
 ros2 topic list
 ros2 topic echo /diablo/sensor/Motors --once
 ros2 topic echo /scan --once
-ros2 topic echo /diablo/odometry --once
+ros2 topic echo /odometry/filtered --once
 ros2 service list | grep -E 'start_motor|reset|controller'
 ls -l /dev/serial/by-id/
 ```

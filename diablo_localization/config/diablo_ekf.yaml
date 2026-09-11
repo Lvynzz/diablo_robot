@@ -1,5 +1,5 @@
 # ============================================================
-# Diablo EKF — wheel odometry + relative IMU heading
+# Diablo EKF — wheel x/y odometry + IMU yaw heading
 # Robot  : Diablo crawl base
 # IMU    : Diablo onboard IMU
 # Distro : ROS 2 Humble
@@ -20,31 +20,35 @@ diablo_ekf_filter:
 
     print_diagnostics: true
 
+    publish_tf: true
+    predict_to_current_time: true
+
     # ============================================================
     # Sumber 1: Odometri roda Diablo
-    # Encoder dipakai untuk posisi x/y dan yaw-rate. Jangan fuse yaw pose encoder
-    # bersamaan dengan yaw AHRS IMU, karena offset referensi kecil saja bisa
-    # membuat /odometry/filtered bolak-balik saat robot diam.
+    # Encoder hanya mengurus posisi x/y dan kecepatan maju. Yaw pose serta yaw
+    # rate roda sengaja tidak difuse; heading tunggal filter berasal dari IMU.
     # [x, y, z, roll, pitch, yaw, vx, vy, vz, vroll, vpitch, vyaw, ax, ay, az]
     # ============================================================
     odom0: /diablo_base_controller/odom
     odom0_config: [
-      false, false, false,
+      true,  true,  false,
       false, false, false,
       true,  false, false,
-      false, false, true,
+      false, false, false,
       false, false, false
     ]
-    odom0_differential: false
+    # Convert encoder x/y samples to increments so a SetPose reset does not
+    # get pulled back to the encoder's old absolute origin.
+    odom0_differential: true
     odom0_relative: false
     odom0_queue_size: 10
     odom0_nodelay: true
 
     # ============================================================
     # Sumber 2: IMU onboard Diablo (/diablo/sensor/Imu)
-    # Pakai yaw quaternion hasil internal IMU sebagai heading relatif.
-    # Gyro Z tidak difuse terpisah agar heading tidak "double counted" dari IMU
-    # yang sama. imu0_relative menjaga heading dapat dimulai dari nol.
+    # Pakai quaternion yaw hasil internal IMU sebagai satu-satunya sumber
+    # orientasi. Gyro Z tidak difuse terpisah agar heading tidak dihitung dua
+    # kali dari IMU yang sama. imu0_relative membuat heading awal menjadi nol.
     # ============================================================
     imu0: /diablo/sensor/Imu
     imu0_config: [

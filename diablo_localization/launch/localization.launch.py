@@ -22,8 +22,17 @@ def generate_launch_description():
         DeclareLaunchArgument("imu_roll", default_value="0.0"),
         DeclareLaunchArgument("imu_pitch", default_value="0.0"),
         DeclareLaunchArgument("imu_yaw", default_value="0.0"),
+        DeclareLaunchArgument(
+            "filtered_odom_topic", default_value="/odometry/filtered"
+        ),
         DeclareLaunchArgument("reset_topic", default_value="/diablo/reset_pose"),
         DeclareLaunchArgument("reset_service", default_value="/diablo/reset_odom"),
+        DeclareLaunchArgument(
+            "reset_position_service", default_value="/diablo/reset_position"
+        ),
+        DeclareLaunchArgument(
+            "reset_orientation_service", default_value="/diablo/reset_orientation"
+        ),
         DeclareLaunchArgument(
             "set_pose_service", default_value="/set_pose"
         ),
@@ -73,6 +82,13 @@ def generate_launch_description():
                 "set_pose_service": LaunchConfiguration("set_pose_service"),
                 "reset_frame": LaunchConfiguration("reset_frame"),
                 "stop_cmd_topic": LaunchConfiguration("stop_cmd_topic"),
+                "filtered_odom_topic": LaunchConfiguration("filtered_odom_topic"),
+                "reset_position_service": LaunchConfiguration(
+                    "reset_position_service"
+                ),
+                "reset_orientation_service": LaunchConfiguration(
+                    "reset_orientation_service"
+                ),
             }],
         ),
     ])

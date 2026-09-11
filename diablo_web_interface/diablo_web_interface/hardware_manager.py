@@ -29,7 +29,7 @@ class HardwareManager:
     # must still be able to stop those known robot drivers, while avoiding a
     # broad kill of unrelated ROS nodes.
     EXTERNAL_PROCESS_MARKERS = {
-        "diablo": ("diablo_ctrl_node",),
+        "diablo": ("diablo_ctrl_node", "ekf_hardware.launch.py"),
         "lidar": ("sllidar_a2m7_launch.py", "sllidar_node"),
         "dynamixel": ("full_body_hardware.launch.py",),
     }
@@ -39,6 +39,9 @@ class HardwareManager:
     STARTUP_PROCESS_MARKERS = {
         "localization": (
             "localization.launch.py",
+            "ekf_hardware.launch.py",
+            "diablo_ekf_filter",
+            "raw_wheel_odom",
             "amcl",
             "map_server",
             "lifecycle_manager_localization",

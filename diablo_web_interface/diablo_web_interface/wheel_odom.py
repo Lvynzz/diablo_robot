@@ -34,6 +34,10 @@ class DiabloWheelOdom(Node):
         self.declare_parameter("right_wheel_direction", 1.0)
         self.declare_parameter("use_encoder_revolutions", True)
         self.declare_parameter("publish_tf", True)
+        self.declare_parameter(
+            "enable_reset_services",
+            True,
+        )
         self.declare_parameter("max_wheel_delta", 1.5)
 
         input_topic = str(self.get_parameter("input_topic").value)
@@ -46,6 +50,9 @@ class DiabloWheelOdom(Node):
         self.right_sign = float(self.get_parameter("right_wheel_direction").value)
         self.use_revolutions = bool(self.get_parameter("use_encoder_revolutions").value)
         self.publish_tf = bool(self.get_parameter("publish_tf").value)
+        self.enable_reset_services = bool(
+            self.get_parameter("enable_reset_services").value
+        )
         self.max_wheel_delta = abs(
             float(self.get_parameter("max_wheel_delta").value)
         )
@@ -66,22 +73,28 @@ class DiabloWheelOdom(Node):
         self._subscription = self.create_subscription(
             LegMotors, input_topic, self._motor_callback, 10
         )
-        self._reset_service = self.create_service(
-            Trigger, "/diablo/reset_odom", self._reset_callback
-        )
-        self._reset_encoder_service = self.create_service(
-            Trigger, "/diablo/reset_encoder", self._reset_encoder_callback
-        )
-        self._reset_position_service = self.create_service(
-            Trigger, "/diablo/reset_position", self._reset_position_callback
-        )
-        self._reset_orientation_service = self.create_service(
-            Trigger, "/diablo/reset_orientation", self._reset_orientation_callback
-        )
+        self._reset_service = None
+        self._reset_encoder_service = None
+        self._reset_position_service = None
+        self._reset_orientation_service = None
+        if self.enable_reset_services:
+            self._reset_service = self.create_service(
+                Trigger, "/diablo/reset_odom", self._reset_callback
+            )
+            self._reset_encoder_service = self.create_service(
+                Trigger, "/diablo/reset_encoder", self._reset_encoder_callback
+            )
+            self._reset_position_service = self.create_service(
+                Trigger, "/diablo/reset_position", self._reset_position_callback
+            )
+            self._reset_orientation_service = self.create_service(
+                Trigger, "/diablo/reset_orientation", self._reset_orientation_callback
+            )
 
         self.get_logger().info(
             f"Wheel odom: {input_topic} -> {odom_topic}, "
-            f"radius={self.wheel_radius:.3f} m, track={self.track_width:.3f} m"
+            f"radius={self.wheel_radius:.3f} m, track={self.track_width:.3f} m, "
+            f"publish_tf={self.publish_tf}, reset_services={self.enable_reset_services}"
         )
 
     def _motor_callback(self, msg: LegMotors):

@@ -8,6 +8,7 @@ from geometry_msgs.msg import Quaternion
 from motion_msgs.msg import LegMotors
 from nav_msgs.msg import Odometry
 from rclpy.node import Node
+from std_srvs.srv import Trigger
 
 
 class RawWheelOdometry(Node):
@@ -30,6 +31,7 @@ class RawWheelOdometry(Node):
         self.declare_parameter("right_wheel_direction", 1.0)
         self.declare_parameter("use_encoder_revolutions", True)
         self.declare_parameter("max_wheel_delta", 1.5)
+        self.declare_parameter("reset_encoder_service", "/diablo/reset_encoder")
 
         input_topic = str(self.get_parameter("input_topic").value).strip()
         odom_topic = str(self.get_parameter("odom_topic").value).strip()
@@ -45,6 +47,9 @@ class RawWheelOdometry(Node):
         self.max_wheel_delta = abs(
             float(self.get_parameter("max_wheel_delta").value)
         )
+        reset_encoder_service = str(
+            self.get_parameter("reset_encoder_service").value
+        ).strip()
         if self.wheel_radius <= 0.0 or self.track_width <= 0.0:
             raise ValueError("wheel_radius and track_width must be positive")
 
@@ -59,11 +64,27 @@ class RawWheelOdometry(Node):
         self._subscription = self.create_subscription(
             LegMotors, input_topic, self._motor_callback, 10
         )
+        self._reset_encoder_service = (
+            self.create_service(
+                Trigger,
+                reset_encoder_service,
+                self._reset_encoder_callback,
+            )
+            if reset_encoder_service
+            else None
+        )
         self.get_logger().info(
             f"Raw wheel odom: {input_topic} -> {odom_topic}; "
             f"radius={self.wheel_radius:.3f} m, track={self.track_width:.3f} m, "
-            "publish_tf=false"
+            f"publish_tf=false, reset_encoder={reset_encoder_service or 'disabled'}"
         )
+
+    def _reset_encoder_callback(self, _request, response):
+        """Re-baseline encoder counters without changing the EKF pose."""
+        self._initialized = False
+        response.success = True
+        response.message = "Raw wheel encoder reference reset"
+        return response
 
     def _motor_callback(self, msg: LegMotors):
         left = self._absolute_wheel_angle(msg.left_wheel_pos, msg.left_wheel_enc_rev)

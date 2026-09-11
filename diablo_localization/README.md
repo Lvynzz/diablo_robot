@@ -18,6 +18,12 @@ The equivalent service is used by the web HMI:
 ros2 service call /diablo/reset_odom std_srvs/srv/Trigger "{}"
 ```
 
+The encoder reference can be re-baselined without changing the filtered pose:
+
+```bash
+ros2 service call /diablo/reset_encoder std_srvs/srv/Trigger "{}"
+```
+
 No reset occurs at startup. Without either command, the local node keeps its
 current pose, which is useful when moving the robot to another test location.
 The reset command sets `(x, y, theta)=(0, 0, 0)`. The web HMI also exposes

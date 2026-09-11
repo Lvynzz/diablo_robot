@@ -57,6 +57,9 @@ def generate_launch_description():
         DeclareLaunchArgument("left_wheel_direction", default_value="1.0"),
         DeclareLaunchArgument("right_wheel_direction", default_value="1.0"),
         DeclareLaunchArgument("use_encoder_revolutions", default_value="true"),
+        DeclareLaunchArgument(
+            "reset_encoder_service", default_value="/diablo/reset_encoder"
+        ),
         DeclareLaunchArgument("params_file", default_value=ekf_params),
         DeclareLaunchArgument("use_sim_time", default_value="false"),
         DeclareLaunchArgument("imu_parent_frame", default_value="diablo_base_link"),
@@ -106,6 +109,9 @@ def generate_launch_description():
                 "right_wheel_direction": right_direction,
                 "use_encoder_revolutions": ParameterValue(
                     use_revolutions, value_type=bool
+                ),
+                "reset_encoder_service": LaunchConfiguration(
+                    "reset_encoder_service"
                 ),
             }],
         ),

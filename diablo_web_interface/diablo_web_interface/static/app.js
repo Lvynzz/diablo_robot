@@ -37,6 +37,26 @@
     panY: 0,
     geometrySignature: "",
   };
+  // Cache the expensive occupancy/costmap layer.  Pose, LiDAR, footprint,
+  // local-window and plan overlays are drawn on top of this image each
+  // update, so a 20 Hz pose stream no longer walks every map cell.
+  const mapRenderCache = {
+    grid: null,
+    globalCostmap: null,
+    localCostmap: null,
+    navigationActive: false,
+    showGlobal: true,
+    showLocal: true,
+    zoom: 1,
+    panX: 0,
+    panY: 0,
+    width: 0,
+    height: 0,
+    logicalWidth: 0,
+    logicalHeight: 0,
+    ratio: 1,
+    image: null,
+  };
 
   const launchDefinitions = {
     hardware: { label: "HARDWARE", start: { type: "start_hardware" }, stop: { type: "stop_hardware" }, startPath: "/api/hardware/start", stopPath: "/api/hardware/stop" },
@@ -68,6 +88,13 @@
   function processActive(name) {
     if (name === "mapping" && state.mapping?.active) return true;
     return Boolean(state.processes?.[name]?.active);
+  }
+
+  function displayRobotPose() {
+    // Do not keep showing a stale map-frame pose after AMCL/Nav2 is stopped;
+    // the filtered odometry stream is the live source in manual/mapping mode.
+    const mapPoseOwned = processActive("navigation") || processActive("localization");
+    return mapPoseOwned ? (state.pose || state.wheel_pose) : (state.wheel_pose || state.pose);
   }
 
   function componentActive(name) {
@@ -211,7 +238,7 @@
     $("teleop-lock").className = teleopReady ? "unlocked" : "";
     // Match the AMR navigation renderer: AMCL/map pose has priority, while
     // wheel odometry keeps the robot visible before AMCL publishes.
-    const pose = state.pose || state.wheel_pose;
+    const pose = displayRobotPose();
     $("pose-x").textContent = pose ? Number(pose.x).toFixed(3) : "—";
     $("pose-y").textContent = pose ? Number(pose.y).toFixed(3) : "—";
     $("pose-theta").textContent = pose ? (Number(pose.theta) * 180 / Math.PI).toFixed(1) : "—";
@@ -488,15 +515,49 @@
     if (!canvas || !validMapGrid(grid)) return;
     const rect = canvas.getBoundingClientRect();
     const ratio = window.devicePixelRatio || 1;
-    canvas.width = Math.max(1, Math.floor(rect.width * ratio));
-    canvas.height = Math.max(1, Math.floor(rect.height * ratio));
+    const pixelWidth = Math.max(1, Math.floor(rect.width * ratio));
+    const pixelHeight = Math.max(1, Math.floor(rect.height * ratio));
+    if (canvas.width !== pixelWidth || canvas.height !== pixelHeight) {
+      canvas.width = pixelWidth;
+      canvas.height = pixelHeight;
+      mapRenderCache.image = null;
+    }
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
-    ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
-    ctx.fillStyle = "#f8fbfd";
-    ctx.fillRect(0, 0, rect.width, rect.height);
     const viewport = mapViewport(grid, rect);
     const { cell } = viewport;
+    const checked = (id, fallback) => {
+      const element = $(id);
+      return element ? element.checked : fallback;
+    };
+    const showGlobal = navigationActive && checked("layer-global-costmap", true);
+    const showLocal = navigationActive && checked("layer-local-costmap", true);
+    const cacheMatches = Boolean(
+      mapRenderCache.image
+      && mapRenderCache.grid === grid
+      && mapRenderCache.globalCostmap === state.global_costmap
+      && mapRenderCache.localCostmap === state.local_costmap
+      && mapRenderCache.navigationActive === navigationActive
+      && mapRenderCache.showGlobal === showGlobal
+      && mapRenderCache.showLocal === showLocal
+      && mapRenderCache.zoom === mapView.zoom
+      && mapRenderCache.panX === mapView.panX
+      && mapRenderCache.panY === mapView.panY
+      && mapRenderCache.width === canvas.width
+      && mapRenderCache.height === canvas.height
+      && mapRenderCache.logicalWidth === rect.width
+      && mapRenderCache.logicalHeight === rect.height
+      && mapRenderCache.ratio === ratio,
+    );
+    if (cacheMatches) {
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.putImageData(mapRenderCache.image, 0, 0);
+      ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+    } else {
+      ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+      ctx.fillStyle = "#f8fbfd";
+      ctx.fillRect(0, 0, rect.width, rect.height);
+    }
     const origin = viewport.origin;
     const originAngle = viewport.angle;
     const toCanvas = (x, y) => worldToCanvas(grid, viewport, x, y);
@@ -527,26 +588,24 @@
       ctx.closePath();
       ctx.fill();
     };
-    const sample = Math.max(1, Math.ceil(Math.sqrt((grid.width * grid.height) / 180000)));
-    for (let row = 0; row < grid.height; row += sample) {
-      for (let col = 0; col < grid.width; col += sample) {
-        const value = grid.data[row * grid.width + col] ?? -1;
-        ctx.fillStyle = value < 0 ? "#dce6ec" : value >= 65 ? "#405765" : "#f8fbfd";
-        drawWorldCell(
-          origin,
-          originAngle,
-          col,
-          row,
-          Math.min(sample, grid.width - col),
-          Math.min(sample, grid.height - row),
-          Number(grid.resolution || 1),
-        );
+    const sample = Math.max(1, Math.ceil(Math.sqrt((grid.width * grid.height) / 90000)));
+    if (!cacheMatches) {
+      for (let row = 0; row < grid.height; row += sample) {
+        for (let col = 0; col < grid.width; col += sample) {
+          const value = grid.data[row * grid.width + col] ?? -1;
+          ctx.fillStyle = value < 0 ? "#dce6ec" : value >= 65 ? "#405765" : "#f8fbfd";
+          drawWorldCell(
+            origin,
+            originAngle,
+            col,
+            row,
+            Math.min(sample, grid.width - col),
+            Math.min(sample, grid.height - row),
+            Number(grid.resolution || 1),
+          );
+        }
       }
     }
-    const checked = (id, fallback) => {
-      const element = $(id);
-      return element ? element.checked : fallback;
-    };
     const costColor = (value, layer) => {
       const numeric = Number(value);
       const normalized = Math.max(0, Math.min(1, numeric > 100 ? numeric / 254 : numeric / 100));
@@ -564,7 +623,7 @@
       // The backend transforms odom-frame local costmaps into map coordinates.
       // Avoid drawing a misleading offset overlay while that TF is unavailable.
       if (costmap.transform_ok === false && costmap.frame_id !== grid.frame_id) return;
-      const overlaySample = Math.max(1, Math.ceil(Math.sqrt((costmap.width * costmap.height) / 65000)));
+      const overlaySample = Math.max(1, Math.ceil(Math.sqrt((costmap.width * costmap.height) / 30000)));
       const costOrigin = costmap.origin || { x: 0, y: 0, yaw: 0 };
       const costAngle = costOrigin.yaw || 0;
       for (let row = 0; row < costmap.height; row += overlaySample) {
@@ -584,9 +643,28 @@
         }
       }
     };
-    if (navigationActive && checked("layer-global-costmap", true)) drawCostmap(state.global_costmap, "global");
-    if (navigationActive && checked("layer-local-costmap", true)) drawCostmap(state.local_costmap, "local");
-    const displayPose = state.pose || state.wheel_pose;
+    if (!cacheMatches) {
+      if (showGlobal) drawCostmap(state.global_costmap, "global");
+      if (showLocal) drawCostmap(state.local_costmap, "local");
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      mapRenderCache.grid = grid;
+      mapRenderCache.globalCostmap = state.global_costmap;
+      mapRenderCache.localCostmap = state.local_costmap;
+      mapRenderCache.navigationActive = navigationActive;
+      mapRenderCache.showGlobal = showGlobal;
+      mapRenderCache.showLocal = showLocal;
+      mapRenderCache.zoom = mapView.zoom;
+      mapRenderCache.panX = mapView.panX;
+      mapRenderCache.panY = mapView.panY;
+      mapRenderCache.width = canvas.width;
+      mapRenderCache.height = canvas.height;
+      mapRenderCache.logicalWidth = rect.width;
+      mapRenderCache.logicalHeight = rect.height;
+      mapRenderCache.ratio = ratio;
+      mapRenderCache.image = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+    }
+    const displayPose = displayRobotPose();
     const drawWindow = (costmap) => {
       let corners;
       let label;

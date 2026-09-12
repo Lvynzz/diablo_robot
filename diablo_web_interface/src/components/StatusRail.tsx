@@ -24,6 +24,10 @@ export function StatusRail({ state, connected, topicConnected, events, onClearEv
   const body = state.telemetry.body_state;
   const imu = state.telemetry.imu;
   const motors = state.telemetry.motors;
+  // AMCL is intentionally optional outside Navigation.  Show the live
+  // filtered odometry in the status rail whenever no map-frame pose exists.
+  const mapPoseOwned = Boolean(state.processes?.navigation?.active || state.processes?.localization?.active);
+  const pose = mapPoseOwned ? state.pose ?? state.wheel_pose : state.wheel_pose ?? state.pose;
   const percentage = battery?.percentage ?? 0;
 
   return (
@@ -46,9 +50,9 @@ export function StatusRail({ state, connected, topicConnected, events, onClearEv
 
       <Panel title="Pose & IMU" eyebrow="STATE ESTIMATION" accent="blue">
         <div className="pose-rail-grid">
-          <StatCard label="X POSITION" value={number(state.pose?.x)} unit="meters" />
-          <StatCard label="Y POSITION" value={number(state.pose?.y)} unit="meters" />
-          <StatCard label="HEADING θ" value={number(state.pose?.theta)} unit="radians" />
+          <StatCard label="X POSITION" value={number(pose?.x)} unit="meters" />
+          <StatCard label="Y POSITION" value={number(pose?.y)} unit="meters" />
+          <StatCard label="HEADING θ" value={number(pose?.theta)} unit="radians" />
           <StatCard label="IMU YAW" value={number(imu?.yaw)} unit="radians" />
         </div>
         <div className="imu-strip"><span>ROLL <b>{number(imu?.roll)}</b></span><span>PITCH <b>{number(imu?.pitch)}</b></span><span>ωZ <b>{number(imu?.angular_velocity.z)} rad/s</b></span></div>

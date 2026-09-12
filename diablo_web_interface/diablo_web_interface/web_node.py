@@ -22,6 +22,11 @@ from .ros_node import DiabloWebNode, ros_value_to_bounded_data
 logger = logging.getLogger("diablo_web_interface.web")
 logging.basicConfig(level=logging.INFO)
 
+# The browser does not need a full ROS snapshot at the 20 Hz sensor rate.
+# Keeping this loop at 10 Hz leaves enough headroom for teleop commands while
+# preventing slow canvas clients from making the state stream accumulate.
+STATE_WS_PERIOD = 0.1
+
 app = FastAPI(
     title="Diablo Mapping Web Interface",
     description="Browser hardware control, SLAM mapping, teleoperation and ROS topic echo for Diablo",
@@ -460,7 +465,7 @@ async def state_websocket(websocket: WebSocket):
         while True:
             try:
                 raw_message = await asyncio.wait_for(
-                    websocket.receive_text(), timeout=0.05
+                    websocket.receive_text(), timeout=STATE_WS_PERIOD
                 )
                 await _handle_ws_command(websocket, raw_message)
             except asyncio.TimeoutError:

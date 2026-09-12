@@ -118,6 +118,19 @@ function MapCanvas({
   onPick,
 }: MapCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const baseCacheRef = useRef<{
+    grid: OccupancyGrid;
+    globalCostmap: OccupancyGrid | null;
+    localCostmap: OccupancyGrid | null;
+    path: DiabloState["path"];
+    showGlobalCostmap: boolean;
+    showLocalCostmap: boolean;
+    showInflationLayer: boolean;
+    showPath: boolean;
+    width: number;
+    height: number;
+    image: ImageData;
+  } | null>(null);
   const [size, setSize] = useState({ width: 1, height: 1 });
   const pointerStart = useRef<{ x: number; y: number } | null>(null);
 
@@ -138,30 +151,59 @@ function MapCanvas({
     const canvas = canvasRef.current;
     if (!canvas || !grid) return;
     const ratio = window.devicePixelRatio || 1;
-    canvas.width = Math.floor(size.width * ratio);
-    canvas.height = Math.floor(size.height * ratio);
+    const pixelWidth = Math.floor(size.width * ratio);
+    const pixelHeight = Math.floor(size.height * ratio);
+    if (canvas.width !== pixelWidth || canvas.height !== pixelHeight) {
+      canvas.width = pixelWidth;
+      canvas.height = pixelHeight;
+      baseCacheRef.current = null;
+    }
     const context = canvas.getContext("2d");
     if (!context) return;
-    context.setTransform(ratio, 0, 0, ratio, 0, 0);
-    context.clearRect(0, 0, size.width, size.height);
-    context.fillStyle = "#f8fbfd";
-    context.fillRect(0, 0, size.width, size.height);
+    const cached = baseCacheRef.current;
+    const cacheMatches = Boolean(
+      cached
+      && cached.grid === grid
+      && cached.globalCostmap === globalCostmap
+      && cached.localCostmap === localCostmap
+      && cached.path === path
+      && cached.showGlobalCostmap === showGlobalCostmap
+      && cached.showLocalCostmap === showLocalCostmap
+      && cached.showInflationLayer === showInflationLayer
+      && cached.showPath === showPath
+      && cached.width === canvas.width
+      && cached.height === canvas.height,
+    );
+    if (cacheMatches && cached) {
+      // Reuse the rendered map/costmap/path pixels.  Navigation pose and
+      // lidar are dynamic overlays and should not force a full cell redraw.
+      context.setTransform(1, 0, 0, 1, 0, 0);
+      context.putImageData(cached.image, 0, 0);
+      context.setTransform(ratio, 0, 0, ratio, 0, 0);
+    } else {
+      context.setTransform(ratio, 0, 0, ratio, 0, 0);
+      context.clearRect(0, 0, size.width, size.height);
+      context.fillStyle = "#f8fbfd";
+      context.fillRect(0, 0, size.width, size.height);
+    }
 
     const cell = Math.min((size.width - 28) / grid.width, (size.height - 28) / grid.height);
     const offsetX = (size.width - grid.width * cell) / 2;
     const offsetY = (size.height - grid.height * cell) / 2;
-    const sample = Math.max(1, Math.ceil(Math.sqrt((grid.width * grid.height) / 150000)));
+    const sample = Math.max(1, Math.ceil(Math.sqrt((grid.width * grid.height) / 90000)));
 
-    for (let row = 0; row < grid.height; row += sample) {
-      for (let column = 0; column < grid.width; column += sample) {
-        const value = grid.data[row * grid.width + column] ?? -1;
-        context.fillStyle = value < 0 ? "#e2e9ee" : value >= 65 ? "#42596a" : "#f8fbfd";
-        context.fillRect(
-          offsetX + column * cell,
-          offsetY + (grid.height - row - sample) * cell,
-          Math.ceil(cell * sample + 0.25),
-          Math.ceil(cell * sample + 0.25),
-        );
+    if (!cacheMatches) {
+      for (let row = 0; row < grid.height; row += sample) {
+        for (let column = 0; column < grid.width; column += sample) {
+          const value = grid.data[row * grid.width + column] ?? -1;
+          context.fillStyle = value < 0 ? "#e2e9ee" : value >= 65 ? "#42596a" : "#f8fbfd";
+          context.fillRect(
+            offsetX + column * cell,
+            offsetY + (grid.height - row - sample) * cell,
+            Math.ceil(cell * sample + 0.25),
+            Math.ceil(cell * sample + 0.25),
+          );
+        }
       }
     }
 
@@ -181,7 +223,7 @@ function MapCanvas({
       // backend transforms their origin into the map frame.  Until that TF is
       // available, do not paint an incorrectly shifted overlay on the PGM.
       if (costmap.transform_ok === false && costmap.frame_id !== grid.frame_id) return;
-      const overlaySample = Math.max(1, Math.ceil(Math.sqrt((costmap.width * costmap.height) / 65000)));
+      const overlaySample = Math.max(1, Math.ceil(Math.sqrt((costmap.width * costmap.height) / 30000)));
       for (let row = 0; row < costmap.height; row += overlaySample) {
         for (let column = 0; column < costmap.width; column += overlaySample) {
           const value = costmap.data[row * costmap.width + column] ?? -1;
@@ -203,28 +245,45 @@ function MapCanvas({
       }
     };
 
-    if (showGlobalCostmap) drawCostmap(globalCostmap, "global");
-    if (showLocalCostmap) drawCostmap(localCostmap, "local");
+    if (!cacheMatches) {
+      if (showGlobalCostmap) drawCostmap(globalCostmap, "global");
+      if (showLocalCostmap) drawCostmap(localCostmap, "local");
 
-    if (showPath && path?.poses.length && !(path.transform_ok === false && path.frame_id !== grid.frame_id)) {
-      context.beginPath();
-      context.lineJoin = "round";
-      context.lineCap = "round";
-      context.strokeStyle = "rgba(255,255,255,.92)";
-      context.lineWidth = 5;
-      path.poses.forEach((point, index) => {
-        const [x, y] = toCanvas(point.x, point.y);
-        if (index === 0) context.moveTo(x, y); else context.lineTo(x, y);
-      });
-      context.stroke();
-      context.beginPath();
-      context.strokeStyle = "#b3339b";
-      context.lineWidth = 2.5;
-      path.poses.forEach((point, index) => {
-        const [x, y] = toCanvas(point.x, point.y);
-        if (index === 0) context.moveTo(x, y); else context.lineTo(x, y);
-      });
-      context.stroke();
+      if (showPath && path?.poses.length && !(path.transform_ok === false && path.frame_id !== grid.frame_id)) {
+        context.beginPath();
+        context.lineJoin = "round";
+        context.lineCap = "round";
+        context.strokeStyle = "rgba(255,255,255,.92)";
+        context.lineWidth = 5;
+        path.poses.forEach((point, index) => {
+          const [x, y] = toCanvas(point.x, point.y);
+          if (index === 0) context.moveTo(x, y); else context.lineTo(x, y);
+        });
+        context.stroke();
+        context.beginPath();
+        context.strokeStyle = "#b3339b";
+        context.lineWidth = 2.5;
+        path.poses.forEach((point, index) => {
+          const [x, y] = toCanvas(point.x, point.y);
+          if (index === 0) context.moveTo(x, y); else context.lineTo(x, y);
+        });
+        context.stroke();
+      }
+      context.setTransform(1, 0, 0, 1, 0, 0);
+      baseCacheRef.current = {
+        grid,
+        globalCostmap,
+        localCostmap,
+        path,
+        showGlobalCostmap,
+        showLocalCostmap,
+        showInflationLayer,
+        showPath,
+        width: canvas.width,
+        height: canvas.height,
+        image: context.getImageData(0, 0, canvas.width, canvas.height),
+      };
+      context.setTransform(ratio, 0, 0, ratio, 0, 0);
     }
 
     if (showLidar && scan && pose) {
@@ -375,7 +434,8 @@ export function NavigationView({ state, hardware, panels, sendCommand, events, o
     : previewMap || state.map || state.global_costmap || state.local_costmap;
   // AMR navigation behavior: prefer corrected AMCL pose and fall back to
   // wheel odometry while localization is starting or unavailable.
-  const displayedPose = state.pose || state.wheel_pose;
+  const mapPoseOwned = Boolean(state.processes?.navigation?.active || state.processes?.localization?.active);
+  const displayedPose = mapPoseOwned ? state.pose || state.wheel_pose : state.wheel_pose || state.pose;
   const goal = poseFromDraft(goalDraft, "nav goal draft");
   const initialPose = poseFromDraft(initialDraft, "initial pose draft");
   const stationPose = poseFromDraft(stationDraft, "station draft");

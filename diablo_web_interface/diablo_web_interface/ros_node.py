@@ -41,6 +41,15 @@ MAX_ECHO_DEPTH = 5
 MAX_ECHO_ITEMS = 80
 MAX_LIDAR_POINTS = 720
 MAX_MAP_CELLS = 250_000
+# Costmaps are visual diagnostics only; Nav2 itself consumes the native ROS
+# grids.  A smaller web representation keeps JSON packets and browser memory
+# bounded without changing navigation behaviour.
+MAX_COSTMAP_CELLS = 30_000
+# Costmaps are refreshed much more frequently than the operator can inspect
+# them.  Do not parse and serialize a rolling grid for every DDS sample.  This
+# also prevents a high-rate local costmap from monopolising the web executor.
+LOCAL_COSTMAP_MIN_PERIOD = 0.20
+GLOBAL_COSTMAP_MIN_PERIOD = 0.50
 MAP_NAME_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$")
 MAP_SELECTION_FILENAME = ".selected_localization_map.txt"
 
@@ -356,6 +365,8 @@ class DiabloWebNode(Node):
         self._last_map_time = 0.0
         self._last_local_costmap_time = 0.0
         self._last_global_costmap_time = 0.0
+        self._last_local_costmap_parse_time = 0.0
+        self._last_global_costmap_parse_time = 0.0
         self._last_odom_time = 0.0
         self._last_scan_time = 0.0
         self._last_tf_time = 0.0
@@ -656,15 +667,36 @@ class DiabloWebNode(Node):
             self._versions["map"] += 1
 
     def _local_costmap_callback(self, message):
+        received = time.monotonic()
         with self._lock:
-            self._local_costmap = self._parse_grid(message)
-            self._last_local_costmap_time = time.monotonic()
+            if (
+                received - self._last_local_costmap_parse_time
+                < LOCAL_COSTMAP_MIN_PERIOD
+            ):
+                return
+            self._last_local_costmap_parse_time = received
+        # Parsing is intentionally outside the state lock.  It can walk tens
+        # of thousands of cells and must not pause pose/teleop snapshots.
+        parsed = self._parse_grid(message, MAX_COSTMAP_CELLS)
+        with self._lock:
+            self._local_costmap = parsed
+            self._last_local_costmap_time = received
             self._versions["local_costmap"] += 1
 
     def _global_costmap_callback(self, message):
+        received = time.monotonic()
         with self._lock:
-            self._global_costmap = self._parse_grid(message)
-            self._last_global_costmap_time = time.monotonic()
+            if (
+                received - self._last_global_costmap_parse_time
+                < GLOBAL_COSTMAP_MIN_PERIOD
+            ):
+                return
+            self._last_global_costmap_parse_time = received
+        # Keep the ROS executor responsive while converting the grid to JSON.
+        parsed = self._parse_grid(message, MAX_COSTMAP_CELLS)
+        with self._lock:
+            self._global_costmap = parsed
+            self._last_global_costmap_time = received
             self._versions["global_costmap"] += 1
 
     def _tf_message_callback(self, message: TFMessage):
@@ -973,6 +1005,25 @@ class DiabloWebNode(Node):
                     self._joint_positions[str(name)] = float(position)
 
     def _update_tf_pose(self):
+        # A tf2 buffer can retain the last map->base transform for a short
+        # time after AMCL/Nav2 exits.  Once localization is no longer owned
+        # by this web node, that transform is stale; prefer the live filtered
+        # odometry immediately so the HMI does not appear frozen or lagging.
+        with self._lock:
+            odom_pose = copy.deepcopy(self._odom_pose)
+            amcl_recent = (
+                self._last_amcl_pose_time > 0.0
+                and time.monotonic() - self._last_amcl_pose_time <= 3.0
+            )
+        localization_running = (
+            self._hardware.process_status("localization")["active"]
+            or self._hardware.process_status("navigation")["active"]
+        )
+        if odom_pose is not None and not localization_running and not amcl_recent:
+            with self._lock:
+                self._pose = odom_pose
+            return
+
         transform = None
         try:
             transform = self._tf_buffer.lookup_transform(
@@ -1575,6 +1626,10 @@ class DiabloWebNode(Node):
                 f"Could not stop robot before localization shutdown: {error}"
             )
         result = self._hardware.stop_process("localization")
+        with self._lock:
+            self._last_amcl_pose_time = 0.0
+            if self._odom_pose is not None:
+                self._pose = copy.deepcopy(self._odom_pose)
         return {
             **result,
             "component": "localization",
@@ -1591,6 +1646,9 @@ class DiabloWebNode(Node):
             )
         result = self._hardware.stop_process("navigation")
         with self._lock:
+            self._last_amcl_pose_time = 0.0
+            if self._odom_pose is not None:
+                self._pose = copy.deepcopy(self._odom_pose)
             self._navigation_lifecycle_active = False
             self._navigation_lifecycle_state = "idle"
             self._navigation_lifecycle_start_future = None
@@ -1920,8 +1978,13 @@ class DiabloWebNode(Node):
             hardware_ready = False
         with self._lock:
             map_value = self._map
-            local_costmap = copy.deepcopy(self._local_costmap)
-            global_costmap = copy.deepcopy(self._global_costmap)
+            # These dictionaries are replaced atomically by the callbacks and
+            # are never mutated after assignment.  A deep copy here used to
+            # duplicate every costmap (often tens of thousands of cells) on
+            # every WebSocket snapshot, even though readiness only needs a
+            # few metadata fields.  Keep references and inspect them below.
+            local_costmap = self._local_costmap
+            global_costmap = self._global_costmap
             timestamps = {
                 "map": self._last_map_time,
                 "scan": self._last_scan_time,
@@ -2401,7 +2464,7 @@ class DiabloWebNode(Node):
         pose.pose.orientation.w = quaternion["w"]
         return pose
 
-    def _parse_grid(self, message):
+    def _parse_grid(self, message, max_cells=MAX_MAP_CELLS):
         """Serialize an OccupancyGrid in the map frame used by the HMI.
 
         Nav2 publishes the global costmap in ``map`` but the rolling local
@@ -2415,7 +2478,8 @@ class DiabloWebNode(Node):
         width = int(message.info.width)
         height = int(message.info.height)
         source = list(message.data)
-        stride = max(1, math.ceil(math.sqrt((width * height) / MAX_MAP_CELLS)))
+        max_cells = max(1, int(max_cells))
+        stride = max(1, math.ceil(math.sqrt((width * height) / max_cells)))
         if stride == 1:
             data = source
             parsed_width = width

@@ -71,6 +71,16 @@ interface OccupancyCanvasProps {
 
 function OccupancyCanvas({ grid, pose, scan, globalCostmap, localCostmap, showRobot, showLidar, showGlobalCostmap, showLocalCostmap, initialPose, goalPose, onPick, interactive }: OccupancyCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const baseCacheRef = useRef<{
+    grid: OccupancyGrid;
+    globalCostmap: OccupancyGrid | null;
+    localCostmap: OccupancyGrid | null;
+    showGlobalCostmap: boolean;
+    showLocalCostmap: boolean;
+    width: number;
+    height: number;
+    image: ImageData;
+  } | null>(null);
   const [size, setSize] = useState({ width: 1, height: 1 });
   const pointerStart = useRef<{ x: number; y: number } | null>(null);
 
@@ -91,14 +101,38 @@ function OccupancyCanvas({ grid, pose, scan, globalCostmap, localCostmap, showRo
     const canvas = canvasRef.current;
     if (!canvas || !grid) return;
     const ratio = window.devicePixelRatio || 1;
-    canvas.width = Math.floor(size.width * ratio);
-    canvas.height = Math.floor(size.height * ratio);
+    const pixelWidth = Math.floor(size.width * ratio);
+    const pixelHeight = Math.floor(size.height * ratio);
+    if (canvas.width !== pixelWidth || canvas.height !== pixelHeight) {
+      canvas.width = pixelWidth;
+      canvas.height = pixelHeight;
+      baseCacheRef.current = null;
+    }
     const context = canvas.getContext("2d");
     if (!context) return;
-    context.setTransform(ratio, 0, 0, ratio, 0, 0);
-    context.clearRect(0, 0, size.width, size.height);
-    context.fillStyle = "#f8fbfd";
-    context.fillRect(0, 0, size.width, size.height);
+    const cached = baseCacheRef.current;
+    const cacheMatches = Boolean(
+      cached
+      && cached.grid === grid
+      && cached.globalCostmap === globalCostmap
+      && cached.localCostmap === localCostmap
+      && cached.showGlobalCostmap === showGlobalCostmap
+      && cached.showLocalCostmap === showLocalCostmap
+      && cached.width === canvas.width
+      && cached.height === canvas.height,
+    );
+    if (cacheMatches && cached) {
+      // Restore the static map/costmap pixels in one operation.  Pose and
+      // lidar updates then redraw only their small dynamic overlays.
+      context.setTransform(1, 0, 0, 1, 0, 0);
+      context.putImageData(cached.image, 0, 0);
+      context.setTransform(ratio, 0, 0, ratio, 0, 0);
+    } else {
+      context.setTransform(ratio, 0, 0, ratio, 0, 0);
+      context.clearRect(0, 0, size.width, size.height);
+      context.fillStyle = "#f8fbfd";
+      context.fillRect(0, 0, size.width, size.height);
+    }
 
     const cell = Math.min(
       (size.width - 28) / Math.max(1, grid.width),
@@ -106,18 +140,23 @@ function OccupancyCanvas({ grid, pose, scan, globalCostmap, localCostmap, showRo
     );
     const offsetX = (size.width - grid.width * cell) / 2;
     const offsetY = (size.height - grid.height * cell) / 2;
-    const sample = Math.max(1, Math.ceil(Math.sqrt((grid.width * grid.height) / 180000)));
+    // Keep redraws cheap enough for live pose updates.  The map remains
+    // legible at this scale while the cached base layer avoids repainting
+    // every cell when only the robot pose changes.
+    const sample = Math.max(1, Math.ceil(Math.sqrt((grid.width * grid.height) / 90000)));
 
-    for (let row = 0; row < grid.height; row += sample) {
-      for (let column = 0; column < grid.width; column += sample) {
-        const value = grid.data[row * grid.width + column] ?? -1;
-        context.fillStyle = value < 0 ? "#dce6ec" : value >= 65 ? "#405765" : "#f8fbfd";
-        context.fillRect(
-          offsetX + column * cell,
-          offsetY + (grid.height - row - sample) * cell,
-          Math.ceil(cell * sample + 0.3),
-          Math.ceil(cell * sample + 0.3),
-        );
+    if (!cacheMatches) {
+      for (let row = 0; row < grid.height; row += sample) {
+        for (let column = 0; column < grid.width; column += sample) {
+          const value = grid.data[row * grid.width + column] ?? -1;
+          context.fillStyle = value < 0 ? "#dce6ec" : value >= 65 ? "#405765" : "#f8fbfd";
+          context.fillRect(
+            offsetX + column * cell,
+            offsetY + (grid.height - row - sample) * cell,
+            Math.ceil(cell * sample + 0.3),
+            Math.ceil(cell * sample + 0.3),
+          );
+        }
       }
     }
 
@@ -134,7 +173,7 @@ function OccupancyCanvas({ grid, pose, scan, globalCostmap, localCostmap, showRo
     const drawCostmap = (costmap: OccupancyGrid | null, layer: "global" | "local") => {
       if (!costmap) return;
       if (costmap.transform_ok === false && costmap.frame_id !== grid.frame_id) return;
-      const overlaySample = Math.max(1, Math.ceil(Math.sqrt((costmap.width * costmap.height) / 65000)));
+      const overlaySample = Math.max(1, Math.ceil(Math.sqrt((costmap.width * costmap.height) / 30000)));
       const costmapOrigin = costmap.origin || { x: 0, y: 0, yaw: 0 };
       const angle = costmapOrigin.yaw || 0;
       for (let row = 0; row < costmap.height; row += overlaySample) {
@@ -154,8 +193,22 @@ function OccupancyCanvas({ grid, pose, scan, globalCostmap, localCostmap, showRo
       }
     };
 
-    if (showGlobalCostmap) drawCostmap(globalCostmap, "global");
-    if (showLocalCostmap) drawCostmap(localCostmap, "local");
+    if (!cacheMatches) {
+      if (showGlobalCostmap) drawCostmap(globalCostmap, "global");
+      if (showLocalCostmap) drawCostmap(localCostmap, "local");
+      context.setTransform(1, 0, 0, 1, 0, 0);
+      baseCacheRef.current = {
+        grid,
+        globalCostmap,
+        localCostmap,
+        showGlobalCostmap,
+        showLocalCostmap,
+        width: canvas.width,
+        height: canvas.height,
+        image: context.getImageData(0, 0, canvas.width, canvas.height),
+      };
+      context.setTransform(ratio, 0, 0, ratio, 0, 0);
+    }
 
     if (showLidar && scan && pose) {
       context.fillStyle = "rgba(36, 126, 164, .62)";
@@ -298,7 +351,8 @@ export function MappingView({ state, hardware, panels, sendCommand, onEvent }: M
   // independent, so the robot can be driven immediately after hardware start.
   const teleopReady = hardware.ready;
   const displayMap = selectedMap || previewMap || state.map;
-  const displayedPose = state.pose || state.wheel_pose;
+  const mapPoseOwned = Boolean(state.processes?.navigation?.active || state.processes?.localization?.active);
+  const displayedPose = mapPoseOwned ? state.pose || state.wheel_pose : state.wheel_pose || state.pose;
   const initialPose = poseFromDraft(initialDraft, "initial pose draft");
   const goalPose = poseFromDraft(goalDraft, "goal pose draft");
 

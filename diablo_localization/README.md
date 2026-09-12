@@ -40,6 +40,10 @@ The Diablo profile fuses wheel x/y pose and forward velocity from
 so the IMU is the sole orientation source. The filtered result is published
 on `/odometry/filtered`.
 
+Konfigurasi geometri default saat ini adalah `wheel_radius=0.187` m dan
+`track_width=0.488` m (`track_width` sama dengan `wheel_separation` pada
+`diff_drive_controller`).
+
 The static IMU transform parameters are only used by the optional EKF launch.
 The default local wheel odometry path does not subscribe to IMU data.
 

@@ -106,8 +106,8 @@ def generate_launch_description():
                 "launch owns the raw wheel source"
             ),
         ),
-        DeclareLaunchArgument("wheel_radius", default_value="0.093"),
-        DeclareLaunchArgument("track_width", default_value="0.475"),
+        DeclareLaunchArgument("wheel_radius", default_value="0.187"),
+        DeclareLaunchArgument("track_width", default_value="0.488"),
         DeclareLaunchArgument("motor_topic", default_value="/diablo/sensor/Motors"),
 
         IncludeLaunchDescription(

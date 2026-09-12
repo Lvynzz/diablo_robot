@@ -88,8 +88,8 @@ def generate_launch_description():
                 "hardware EKF launch owns the raw wheel source"
             ),
         ),
-        DeclareLaunchArgument("wheel_radius", default_value="0.093"),
-        DeclareLaunchArgument("track_width", default_value="0.475"),
+        DeclareLaunchArgument("wheel_radius", default_value="0.187"),
+        DeclareLaunchArgument("track_width", default_value="0.488"),
         DeclareLaunchArgument("max_wheel_delta", default_value="1.5"),
         DeclareLaunchArgument("publish_lidar_tf", default_value="true"),
         DeclareLaunchArgument("lidar_x", default_value="0.0"),

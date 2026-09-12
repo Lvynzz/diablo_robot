@@ -25,8 +25,8 @@ def generate_launch_description():
         DeclareLaunchArgument("odom_topic", default_value="/odometry/filtered"),
         DeclareLaunchArgument("odom_frame", default_value="odom"),
         DeclareLaunchArgument("base_frame", default_value="diablo_base_link"),
-        DeclareLaunchArgument("wheel_radius", default_value="0.093"),
-        DeclareLaunchArgument("track_width", default_value="0.475"),
+        DeclareLaunchArgument("wheel_radius", default_value="0.187"),
+        DeclareLaunchArgument("track_width", default_value="0.488"),
         Node(
             package="diablo_web_interface",
             executable="wheel_odom",

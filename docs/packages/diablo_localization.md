@@ -57,3 +57,6 @@ Gunakan hasil yang sama pada `wheel_radius`/`track_width` hardware dan
 `wheel_radius`/`wheel_separation` `diff_drive_controller`. Wheel odometry
 tidak dapat mengoreksi slip; jika error fisik tetap besar setelah kalibrasi,
 diperlukan referensi eksternal seperti IMU fusion atau lidar.
+
+Nilai geometri default saat ini adalah `wheel_radius=0.187` meter dan
+`wheel_separation=0.488` meter (`track_width=0.488` pada hardware).

@@ -18,23 +18,20 @@ from launch_ros.parameter_descriptions import ParameterValue
 
 
 def _default_map_file(web_share):
-    """Choose a real bringup map when one is installed, else bundled empty map."""
+    """Choose the source-workspace HMI map, never an arbitrary old map."""
     candidates = []
     bringup_share = None
     try:
         bringup_share = Path(get_package_share_directory("diablo_bringup"))
-        candidates.append(bringup_share / "map")
-        # With --symlink-install, maps saved in the source checkout may not yet
-        # be installed.  Look for the sibling source package as a fallback.
         for workspace_root in bringup_share.parents:
-            candidates.append(workspace_root / "src" / "diablo_bringup" / "map")
+            source_map = workspace_root / "src" / "diablo_bringup" / "map"
+            if source_map.is_dir():
+                candidates.append(source_map)
+        candidates.append(bringup_share / "map")
     except Exception:
         pass
     candidates.append(Path(web_share) / "maps")
-    # Check every candidate for the selected map before falling back to the
-    # first YAML.  An install-space marker may be stale when a newly saved map
-    # exists only in the source workspace.
-    fallback = None
+    # Check every candidate for the selected map before using an empty map.
     for directory in candidates:
         # Match the AMR HMI behavior: the map selected in the web UI is the
         # map consumed by the next localization launch.  Ignore stale markers
@@ -58,14 +55,10 @@ def _default_map_file(web_share):
                     return str(selected_path)
             except OSError:
                 pass
-        try:
-            yaml_files = sorted(directory.glob("*.yaml"))
-        except OSError:
-            yaml_files = []
-        if yaml_files and fallback is None:
-            fallback = str(yaml_files[0])
-    if fallback:
-        return fallback
+    for directory in candidates:
+        empty = directory / "empty.yaml"
+        if empty.is_file():
+            return str(empty)
     if bringup_share is not None:
         return str(bringup_share / "map" / "empty.yaml")
     return str(Path(web_share) / "maps" / "empty.yaml")

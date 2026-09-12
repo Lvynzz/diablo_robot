@@ -15,6 +15,7 @@
     mapping: { active: false, state: "idle", message: "" },
     navigation_readiness: null,
     command_pipeline: {},
+    map_status: null,
     footprint: null,
     path: null,
   };
@@ -256,7 +257,8 @@
     const sourceStatus = $("map-source-status");
     const lidarLayer = $("layer-lidar");
     const usingLiveMap = navigationActive && grid === state.map;
-    if (sourceStatus) sourceStatus.textContent = `${usingLiveMap ? "LIVE NAV2 /MAP" : navigationActive ? "SELECTED MAP · WAITING /MAP" : "/map → OccupancyGrid"} · GLOBAL: ${state.global_costmap ? "LIVE" : "WAITING"} · LOCAL: ${state.local_costmap ? "LIVE" : "WAITING"} · PLAN: ${navigationActive && state.path?.poses?.length ? "LIVE" : "WAITING"} · LIDAR: ${lidarLayer?.checked ? (state.scan ? "LIVE" : "WAITING") : "OFF"} · ${state.selectedMap ? `SELECTED: ${state.selectedMap.name || "MAP"}` : state.previewMap ? `PREVIEW: ${state.previewMap.name || "MAP"}` : ""}`;
+    const selectedMapName = state.map_status?.selected_map || state.selectedMap?.name || state.previewMap?.name || "";
+    if (sourceStatus) sourceStatus.textContent = `${usingLiveMap ? "LIVE NAV2 /MAP" : navigationActive ? "SELECTED MAP · WAITING /MAP" : "/map → OccupancyGrid"} · GLOBAL: ${state.global_costmap ? "LIVE" : "WAITING"} · LOCAL: ${state.local_costmap ? "LIVE" : "WAITING"} · PLAN: ${navigationActive && state.path?.poses?.length ? "LIVE" : "WAITING"} · LIDAR: ${lidarLayer?.checked ? (state.scan ? "LIVE" : "WAITING") : "OFF"} · ${selectedMapName ? `SELECTED: ${selectedMapName}` : "NO MAP SELECTED"}`;
     $("map-select-apply").disabled = !state.previewMap;
     drawMap();
     renderJoints();

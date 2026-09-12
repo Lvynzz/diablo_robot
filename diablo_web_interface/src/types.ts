@@ -120,6 +120,19 @@ export interface MappingStatus {
   pid: number | null;
 }
 
+export interface MapStatus {
+  selected_map: string | null;
+  maps_dir: string;
+  live: {
+    frame_id?: string;
+    width: number;
+    height: number;
+    resolution: number;
+    origin: { x: number; y: number; yaw: number };
+  } | null;
+  message: string;
+}
+
 export interface ManagedProcessStatus {
   name: string;
   state: string;
@@ -152,6 +165,7 @@ export interface DiabloState {
   processes: Record<string, ManagedProcessStatus>;
   joints: JointStatus[];
   mapping: MappingStatus;
+  map_status?: MapStatus;
   versions: Record<string, number>;
   map: OccupancyGrid | null;
   local_costmap: OccupancyGrid | null;

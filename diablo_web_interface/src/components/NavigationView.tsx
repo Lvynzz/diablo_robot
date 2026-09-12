@@ -556,7 +556,11 @@ export function NavigationView({ state, hardware, panels, sendCommand, events, o
       });
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(String(payload.detail || "select map gagal"));
-      setMapMessage(`${name} selected · AMCL berikutnya memakai map ini`);
+      setMapMessage(
+        `${name} selected · ${(payload.restart_required as boolean)
+          ? "stop/restart Navigation atau Localization untuk menerapkan"
+          : "AMCL/Nav2 berikutnya memakai map ini"}`,
+      );
       onEvent(String(payload.message || `Map ${name} dipilih untuk localization.`), "success");
     } catch (error) {
       onEvent(`Map selection gagal: ${error instanceof Error ? error.message : "unknown error"}`, "warn");
@@ -572,7 +576,7 @@ export function NavigationView({ state, hardware, panels, sendCommand, events, o
           <div className="map-stage"><MapCanvas grid={mapGrid} pose={displayedPose} initialPose={initialPoseApplied ? null : initialPose} path={state.path} scan={state.scan} goal={goal} globalCostmap={state.global_costmap} localCostmap={state.local_costmap} showLidar={showLidar} showPath={showPath} showGlobalCostmap={showGlobalCostmap} showLocalCostmap={showLocalCostmap} showInflationLayer={showInflationLayer} onPick={pickPoint} /><div className="map-legend"><span><i className="legend-dot green" /> Diablo</span><span><i className="legend-dot cyan" /> Init pose</span><span><i className="legend-dot orange" /> Goal</span><span><i className="legend-line blue" /> Nav2 path</span></div></div>
           <div className="map-readouts"><StatCard label="ROBOT X" value={fmt(displayedPose?.x)} unit={displayedPose?.source === "amcl" || displayedPose?.source === "map" || displayedPose?.source === "amcl_initial" ? "METERS · AMCL / MAP" : "METERS · ODOM"} tone="green" /><StatCard label="ROBOT Y" value={fmt(displayedPose?.y)} unit={displayedPose?.source === "amcl" || displayedPose?.source === "map" || displayedPose?.source === "amcl_initial" ? "METERS · AMCL / MAP" : "METERS · ODOM"} tone="blue" /><StatCard label="HEADING θ" value={fmtDegrees(displayedPose?.theta)} unit={displayedPose?.source === "amcl" || displayedPose?.source === "map" || displayedPose?.source === "amcl_initial" ? "DEGREES · AMCL / MAP" : "DEGREES · ODOM"} tone="orange" /><div className="map-instructions"><Icon name="target" size={17} /><span>Choose a tool below, then click the map to place an initial pose, goal, or station.</span></div></div>
         </div>
-          <div className="map-layer-bar"><label><input type="checkbox" checked={showLidar} onChange={(event) => setShowLidar(event.target.checked)} /> LiDAR</label><label><input type="checkbox" checked={showPath} onChange={(event) => setShowPath(event.target.checked)} /> NAV2 PATH</label><span className="map-source-status">{navigationActive && state.map ? "LIVE NAV2 /MAP" : mapMessage}</span></div>
+          <div className="map-layer-bar"><label><input type="checkbox" checked={showLidar} onChange={(event) => setShowLidar(event.target.checked)} /> LiDAR</label><label><input type="checkbox" checked={showPath} onChange={(event) => setShowPath(event.target.checked)} /> NAV2 PATH</label><span className="map-source-status">{navigationActive && state.map ? `LIVE NAV2 /MAP · SELECTED ${state.map_status?.selected_map || selectedMap || "—"}` : previewMap ? `PREVIEW: ${previewMap.name || selectedMap || "MAP"}` : state.map_status?.message || mapMessage}</span></div>
       </Panel>}
 
       {panels.poses && <Panel title="Pose & Stations" eyebrow="INITIAL LOCALIZATION // GOAL REGISTRY" accent="cyan">

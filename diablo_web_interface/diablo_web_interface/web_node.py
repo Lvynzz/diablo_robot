@@ -182,6 +182,7 @@ async def config():
         "localization_start_command": node.localization_start_command,
         "navigation_start_command": node.navigation_start_command,
         "mapping_start_command": node.mapping_start_command,
+        "selected_map": node.selected_map(),
         "left_arm_trajectory_topic": node.left_arm_trajectory_topic,
         "right_arm_trajectory_topic": node.right_arm_trajectory_topic,
         "maps_dir": str(node.maps_dir),
@@ -210,6 +211,7 @@ async def status():
         "processes": snapshot.get("processes"),
         "joints": snapshot.get("joints"),
         "mapping": snapshot.get("mapping"),
+        "map_status": snapshot.get("map_status"),
         "navigation": node.get_nav_goal_status(),
         "navigation_readiness": snapshot.get("navigation_readiness"),
         "command_pipeline": snapshot.get("command_pipeline"),
@@ -251,6 +253,12 @@ async def select_map(payload: dict):
 async def selected_map():
     """Return the map persisted for the next localization launch."""
     return {"map_name": _require_node().selected_map()}
+
+
+@app.get("/api/maps/status")
+async def map_status():
+    """Return the selected map and the metadata of the live /map grid."""
+    return _require_node().map_status()
 
 
 @app.get("/api/maps/{map_name}")

@@ -12,15 +12,19 @@ from nav2_common.launch import RewrittenYaml
 
 
 def _default_map_file(bringup_share):
-    """Use the web-selected bringup map, then the first available map."""
-    candidates = [Path(bringup_share) / "map"]
+    """Resolve the HMI-selected map from the source workspace first.
+
+    Maps saved by the web UI are written to the source checkout and may not
+    exist in an older install tree yet.  The previous install-first fallback
+    therefore selected the alphabetically first asset (Lab_corridor) even
+    when a newer map was available.
+    """
+    candidates = []
     for workspace_root in Path(bringup_share).parents:
-        candidates.append(workspace_root / "src" / "diablo_bringup" / "map")
-    # Do not return the first YAML before all candidates have been checked.
-    # The install space can contain a stale selection marker while the actual
-    # selected map is still only present in the source workspace.  Returning
-    # ``empty.yaml`` here made Nav2 replace the HMI preview with a blank map.
-    fallback = None
+        source_map = workspace_root / "src" / "diablo_bringup" / "map"
+        if source_map.is_dir():
+            candidates.append(source_map)
+    candidates.append(Path(bringup_share) / "map")
     for directory in candidates:
         marker = directory / ".selected_localization_map.txt"
         try:
@@ -41,14 +45,12 @@ def _default_map_file(bringup_share):
                     return str(selected_path)
             except OSError:
                 pass
-        try:
-            yaml_files = sorted(directory.glob("*.yaml"))
-        except OSError:
-            yaml_files = []
-        if yaml_files and fallback is None:
-            fallback = str(yaml_files[0])
-    if fallback:
-        return fallback
+    # Never guess a user map by filename.  An explicit selection is required;
+    # empty.yaml is a safe deterministic fallback for direct launch commands.
+    for directory in candidates:
+        empty = directory / "empty.yaml"
+        if empty.is_file():
+            return str(empty)
     return str(Path(bringup_share) / "map" / "empty.yaml")
 
 

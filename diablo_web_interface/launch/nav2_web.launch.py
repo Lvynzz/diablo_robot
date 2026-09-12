@@ -9,14 +9,13 @@ from launch.substitutions import LaunchConfiguration
 
 
 def _default_map_file(bringup_share):
-    """Use the map selected by the HMI for the combined Nav2 launch."""
-    candidates = [Path(bringup_share) / "map"]
+    """Use the HMI-selected source map for the combined Nav2 launch."""
+    candidates = []
     for workspace_root in Path(bringup_share).parents:
-        candidates.append(workspace_root / "src" / "diablo_bringup" / "map")
-    # An installed marker can point at a map that has not been installed yet.
-    # Defer the generic YAML fallback until the source-workspace candidate has
-    # also been checked, otherwise Navigation silently starts on empty.yaml.
-    fallback = None
+        source_map = workspace_root / "src" / "diablo_bringup" / "map"
+        if source_map.is_dir():
+            candidates.append(source_map)
+    candidates.append(Path(bringup_share) / "map")
     for directory in candidates:
         marker = directory / ".selected_localization_map.txt"
         try:
@@ -37,14 +36,10 @@ def _default_map_file(bringup_share):
                     return str(selected_path)
             except OSError:
                 pass
-        try:
-            yaml_files = sorted(directory.glob("*.yaml"))
-        except OSError:
-            yaml_files = []
-        if yaml_files and fallback is None:
-            fallback = str(yaml_files[0])
-    if fallback:
-        return fallback
+    for directory in candidates:
+        empty = directory / "empty.yaml"
+        if empty.is_file():
+            return str(empty)
     return str(Path(bringup_share) / "map" / "empty.yaml")
 
 

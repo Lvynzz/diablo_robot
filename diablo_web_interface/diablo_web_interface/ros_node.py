@@ -6,6 +6,7 @@ import copy
 import math
 from pathlib import Path
 import re
+import shlex
 import subprocess
 import threading
 import time
@@ -52,6 +53,16 @@ LOCAL_COSTMAP_MIN_PERIOD = 0.20
 GLOBAL_COSTMAP_MIN_PERIOD = 0.50
 MAP_NAME_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$")
 MAP_SELECTION_FILENAME = ".selected_localization_map.txt"
+
+
+def _map_stem(value):
+    """Return a safe map stem from a user/API value, or ``None``."""
+    requested = str(value or "").strip()
+    for suffix in (".pgm", ".yaml"):
+        if requested.lower().endswith(suffix):
+            requested = requested[: -len(suffix)]
+            break
+    return requested if MAP_NAME_PATTERN.fullmatch(requested) else None
 
 
 def _read_pgm(path):
@@ -1135,6 +1146,7 @@ class DiabloWebNode(Node):
                 "processes": processes,
                 "joints": self.joint_status(),
                 "mapping": self.mapping_status(),
+                "map_status": self.map_status(),
                 "versions": versions,
                 "footprint": copy.deepcopy(self._footprint),
                 "navigation_readiness": self.navigation_readiness(),
@@ -1554,26 +1566,121 @@ class DiabloWebNode(Node):
         result["hardware"] = self._hardware.snapshot()
         return result
 
+    def _map_files(self, name):
+        """Resolve a map YAML and its referenced image inside ``maps_dir``."""
+        stem = _map_stem(name)
+        if stem is None:
+            raise ValueError("Invalid map name")
+        root = self.maps_dir.expanduser().resolve()
+        yaml_path = (root / f"{stem}.yaml").resolve()
+        if root not in yaml_path.parents:
+            raise ValueError("Invalid map path")
+        if not yaml_path.is_file():
+            raise FileNotFoundError(f"Map '{stem}.yaml' was not found")
+
+        metadata = _read_map_yaml(yaml_path)
+        image_value = metadata.get("image", f"{stem}.pgm")
+        image_path = Path(str(image_value)).expanduser()
+        if not image_path.is_absolute():
+            image_path = yaml_path.parent / image_path
+        image_path = image_path.resolve()
+        if root not in image_path.parents or not image_path.is_file():
+            raise FileNotFoundError(
+                f"Map '{yaml_path.name}' references missing image '{image_path.name}'"
+            )
+        return yaml_path, image_path, metadata
+
+    def _selected_map_file(self):
+        """Return the validated map selected by the HMI, if any."""
+        marker = self.maps_dir / MAP_SELECTION_FILENAME
+        try:
+            raw = marker.read_text(encoding="utf-8").strip()
+        except OSError:
+            return None
+        if not raw:
+            return None
+        # The marker may contain an absolute path from an older web version;
+        # only its basename is trusted so the source map directory remains
+        # the single authority and paths cannot escape it.
+        try:
+            yaml_path, _image_path, _metadata = self._map_files(Path(raw).name)
+        except (ValueError, FileNotFoundError, OSError):
+            return None
+        return yaml_path
+
+    @staticmethod
+    def _map_argument(command, argument, map_path):
+        """Inject/replace a ROS launch map argument in a configured command."""
+        command = str(command or "").strip()
+        if not command or map_path is None:
+            return command
+        replacement = f"{argument}:={shlex.quote(str(map_path))}"
+        # The built-in commands are simple ros2 launch invocations.  Replace
+        # an existing argument so a stale map cannot win by appearing twice;
+        # custom commands without the argument simply receive it at the end.
+        pattern = rf"(?<!\S){re.escape(argument)}:=\S+"
+        if re.search(pattern, command):
+            return re.sub(pattern, replacement, command, count=1)
+        return f"{command} {replacement}"
+
     def start_localization(self):
+        map_path = self._selected_map_file()
+        if map_path is None:
+            return {
+                "requested": False,
+                "component": "localization",
+                "message": (
+                    "Localization dibatalkan: pilih map valid (.yaml + image) "
+                    "sebelum menyalakan AMCL"
+                ),
+                "process": self._hardware.process_status("localization"),
+            }
         # The standalone AMCL launch and full Nav2 launch own the same
         # map_server/amcl nodes.  Switch cleanly instead of creating duplicate
         # lifecycle nodes when the operator presses the other button.
         if self._hardware.process_status("navigation")["active"]:
             self.stop_navigation()
-        result = self._hardware.start_process(
-            "localization", self.localization_start_command
+        command = self._map_argument(
+            self.localization_start_command, "map_file", map_path
         )
-        return {**result, "component": "localization"}
+        result = self._hardware.start_process("localization", command)
+        return {**result, "component": "localization", "map_name": map_path.name}
 
     def start_navigation(self):
+        map_path = self._selected_map_file()
+        if map_path is None:
+            return {
+                "requested": False,
+                "component": "navigation",
+                "message": (
+                    "Navigation dibatalkan: pilih map valid (.yaml + image) "
+                    "sebelum menyalakan Nav2"
+                ),
+                "process": self._hardware.process_status("navigation"),
+            }
         if self._hardware.process_status("localization")["active"]:
             self.stop_localization()
         with self._lock:
             self._navigation_lifecycle_active = False
             self._navigation_lifecycle_state = "waiting_for_amcl"
             self._navigation_lifecycle_last_request = 0.0
-        result = self._hardware.start_process("navigation", self.navigation_start_command)
-        return {**result, "component": "navigation"}
+            # Discard visual data from a previous map before the new map
+            # server publishes.  This prevents a stale corridor costmap/path
+            # from being drawn over the newly selected map during startup.
+            self._map = None
+            self._local_costmap = None
+            self._global_costmap = None
+            self._path = None
+            self._versions["map"] += 1
+            self._versions["local_costmap"] += 1
+            self._versions["global_costmap"] += 1
+            self._versions["path"] += 1
+            self._last_map_time = 0.0
+            self._last_local_costmap_time = 0.0
+            self._last_global_costmap_time = 0.0
+        command = self._map_argument(self.navigation_start_command, "map", map_path)
+        result = self._hardware.start_process("navigation", command)
+        return {**result, "component": "navigation", "map_name": map_path.name}
 
     def start_mapping(self):
         if not self.hardware_mapping_ready():
@@ -1761,24 +1868,56 @@ class DiabloWebNode(Node):
                 "saved": False,
                 "message": f"Map saver finished but did not create: {', '.join(missing)}",
             }
+        # A map saved by the mapping workflow is normally the map the operator
+        # wants to localize with next.  Persist that choice immediately so a
+        # later Navigation launch cannot silently fall back to an older map
+        # such as Lab_corridor.  The operator can still choose another map in
+        # the map picker before starting Nav2.
+        try:
+            selected = self.select_map(clean_name)
+            selected_name = selected.get("map_name", output_files[0].name)
+        except (ValueError, FileNotFoundError, RuntimeError) as error:
+            return {
+                "saved": True,
+                "name": clean_name,
+                "files": [path.name for path in output_files],
+                "selected": False,
+                "message": (
+                    f"Map '{clean_name}' tersimpan, tetapi pemilihan map gagal: {error}"
+                ),
+            }
         return {
             "saved": True,
             "name": clean_name,
             "files": [path.name for path in output_files],
-            "message": f"Map '{clean_name}' saved to diablo_bringup/map",
+            "selected": True,
+            "map_name": selected_name,
+            "message": (
+                f"Map '{clean_name}' saved to diablo_bringup/map and selected "
+                "for the next localization/navigation launch"
+            ),
         }
 
     def list_maps(self):
-        """Return PGM map assets by name without exposing filesystem paths."""
+        """Return only complete PGM/YAML map pairs by name."""
         try:
             names = sorted(
-                item.name
+                f"{item.stem}.pgm"
                 for item in self.maps_dir.iterdir()
-                if item.is_file() and item.suffix.lower() == ".pgm"
+                if item.is_file()
+                and item.suffix.lower() == ".yaml"
+                and _map_stem(item.stem) is not None
             )
         except OSError:
             names = []
-        return names
+        complete = []
+        for name in names:
+            try:
+                self._map_files(name)
+            except (ValueError, FileNotFoundError, OSError):
+                continue
+            complete.append(name)
+        return complete
 
     def select_map(self, name):
         """Persist the map that the next AMCL launch should load.
@@ -1788,78 +1927,76 @@ class DiabloWebNode(Node):
         can safely preview it first and the next localization launch consumes
         this marker.
         """
-        requested = str(name or "").strip()
-        for suffix in (".pgm", ".yaml"):
-            if requested.lower().endswith(suffix):
-                requested = requested[: -len(suffix)]
-                break
-        if not MAP_NAME_PATTERN.fullmatch(requested):
+        requested = _map_stem(name)
+        if requested is None:
             raise ValueError("Invalid map name")
+        yaml_path, _image_path, _metadata = self._map_files(requested)
 
         root = self.maps_dir.expanduser().resolve()
-        pgm_path = (root / f"{requested}.pgm").resolve()
-        yaml_path = (root / f"{requested}.yaml").resolve()
-        if root not in pgm_path.parents or root not in yaml_path.parents:
-            raise ValueError("Invalid map path")
-        if not pgm_path.is_file() or not yaml_path.is_file():
-            raise FileNotFoundError(f"Map '{requested}' requires both .pgm and .yaml")
-
         marker = root / MAP_SELECTION_FILENAME
         try:
             root.mkdir(parents=True, exist_ok=True)
             marker.write_text(f"{yaml_path.name}\n", encoding="utf-8")
         except OSError as error:
             raise RuntimeError(f"Could not persist selected map: {error}") from error
+        navigation_active = self._hardware.process_status("navigation")["active"]
+        localization_active = self._hardware.process_status("localization")["active"]
         return {
             "selected": True,
             "map_name": yaml_path.name,
+            "restart_required": bool(navigation_active or localization_active),
             "message": (
-                f"Map '{yaml_path.name}' disimpan untuk launch AMCL berikutnya. "
-                "Restart localization bila AMCL sedang berjalan."
+                f"Map '{yaml_path.name}' disimpan untuk launch berikutnya. "
+                + (
+                    "Stop/restart Navigation atau Localization agar map aktif berganti."
+                    if navigation_active or localization_active
+                    else "Map ini akan dipakai saat Localization/Nav2 berikutnya dimulai."
+                )
             ),
         }
 
     def selected_map(self):
         """Return the persisted map name, if it still exists."""
-        marker = self.maps_dir / MAP_SELECTION_FILENAME
-        try:
-            raw = marker.read_text(encoding="utf-8").strip()
-        except OSError:
-            return None
-        if not raw:
-            return None
-        candidate = Path(raw)
-        if not candidate.is_absolute():
-            candidate = self.maps_dir / candidate.name
-        if candidate.suffix.lower() == ".pgm":
-            candidate = candidate.with_suffix(".yaml")
-        try:
-            candidate = candidate.resolve()
-            root = self.maps_dir.expanduser().resolve()
-            if root not in candidate.parents or not candidate.is_file():
-                return None
-        except OSError:
-            return None
-        return candidate.name
+        candidate = self._selected_map_file()
+        return candidate.name if candidate is not None else None
+
+    def map_status(self):
+        """Expose selected/live map metadata for diagnostics and the HMI."""
+        selected = self.selected_map()
+        with self._lock:
+            live = self._map
+        live_meta = None
+        if live:
+            origin = live.get("origin") or {}
+            live_meta = {
+                "frame_id": live.get("frame_id"),
+                "width": int(live.get("width", 0)),
+                "height": int(live.get("height", 0)),
+                "resolution": float(live.get("resolution", 0.0)),
+                "origin": {
+                    "x": float(origin.get("x", 0.0)),
+                    "y": float(origin.get("y", 0.0)),
+                    "yaw": float(origin.get("yaw", 0.0)),
+                },
+            }
+        return {
+            "selected_map": selected,
+            "maps_dir": str(self.maps_dir),
+            "live": live_meta,
+            "message": (
+                f"Map aktif/terpilih: {selected}"
+                if selected
+                else "Belum ada map terpilih; pilih map sebelum Localization/Nav2"
+            ),
+        }
 
     def load_map(self, name):
         """Load a saved PGM/YAML map into the same JSON shape as /map."""
-        requested = str(name or "").strip()
-        if requested.lower().endswith(".pgm"):
-            requested = requested[:-4]
-        if not MAP_NAME_PATTERN.fullmatch(requested):
+        requested = _map_stem(name)
+        if requested is None:
             raise ValueError("Invalid map name")
-        root = self.maps_dir.expanduser().resolve()
-        pgm_path = (root / f"{requested}.pgm").resolve()
-        yaml_path = (root / f"{requested}.yaml").resolve()
-        if root not in pgm_path.parents:
-            raise ValueError("Invalid map path")
-        if not pgm_path.is_file():
-            raise FileNotFoundError(f"Map '{requested}.pgm' was not found")
+        _yaml_path, pgm_path, metadata = self._map_files(requested)
         width, height, maximum, pixels = _read_pgm(pgm_path)
-        metadata = {}
-        if yaml_path.is_file():
-            metadata = _read_map_yaml(yaml_path)
         resolution = float(metadata.get("resolution", 0.05))
         origin_values = metadata.get("origin", [0.0, 0.0, 0.0])
         if not isinstance(origin_values, list) or len(origin_values) < 3:
@@ -1972,6 +2109,7 @@ class DiabloWebNode(Node):
         """
         now = time.monotonic()
         navigation_process = self._hardware.process_status("navigation")
+        selected_map_name = self.selected_map()
         try:
             hardware_ready = bool(self.hardware_ready())
         except Exception:
@@ -2048,6 +2186,15 @@ class DiabloWebNode(Node):
                 "ready": map_value is not None,
                 "label": "/map",
                 "age": age(timestamps["map"]),
+            },
+            "map_selection": {
+                "ready": selected_map_name is not None,
+                "label": (
+                    f"Selected map ({selected_map_name})"
+                    if selected_map_name
+                    else "Selected map"
+                ),
+                "age": None,
             },
             "scan": {
                 "ready": recent(timestamps["scan"], 3.0),
